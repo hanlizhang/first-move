@@ -1,133 +1,175 @@
 # First Move — MVP Product Requirements
 
-## Summary
+## Product premise
 
-First Move is a cheerful, mobile-first web app for making a gentle start. A user completes a fixed morning toothbrush image check, shapes the day with tasks and habits, uses short focus timers, reflects privately, earns local rewards, and cares for a virtual cat.
+First Move is a gentle, mobile-first web app for a specific moment: the user is trapped in passive scrolling or inactivity and has difficulty switching into an intentional state, even when the current behavior is causing distress.
+
+The app helps the user notice the moment, choose a direction, take one very small action, and reassess without shame. It is inspired by behavioral activation and intentional-use design, but it is not medical treatment. It does not diagnose a condition or claim to stimulate, repair, or otherwise change the prefrontal cortex.
 
 ## Goals
 
-- Make the first useful action of the day obvious and quick.
-- Turn a lightweight daily plan into visible progress and playful rewards.
-- Work fully without an account or AI.
-- Feel complete on phones, tablets, and desktops.
+- Make help reachable while the user is stuck, with minimal reading and decision load.
+- Turn vague intention into one concrete, very small First Move and a bounded session.
+- Treat intentional rest and entertainment as valid choices rather than failures.
+- Provide a useful local experience without an account, network, or AI.
+- Reinforce effort gently through visible progress and virtual-cat rewards.
 
 ## Non-goals
 
-No authentication, server database, payments, native app, system alarms, app/site blocking, social features, or cross-device sync. Toothbrush checking is not dental diagnosis. Daily Reflection is a private journal, not a medical or diagnostic tool; the MVP does not use AI sentiment analysis or provide mental-health diagnosis.
+No authentication, server database, payments, native app, system alarms, app/site blocking, social features, cross-device sync, medical treatment, diagnosis, crisis intervention, or claims about repairing or stimulating the brain. Daily Reflection is private journaling, not clinical assessment; there is no AI sentiment analysis or mental-health diagnosis.
 
-## Primary flow
+## Core loop
 
-1. Open the app and see a gentle return message if one or more calendar days were missed.
-2. Complete the fixed morning toothbrush image check. A successful once-daily check awards points and feeds the cat.
-3. Review editable manual tasks and habits scheduled for today, organized into five categories.
-4. Optionally enter a daily text brain dump and ask AI to propose organized tasks; review before applying, or organize everything manually.
-5. Use a 2, 10, 25, or custom minute focus timer and see completed, rewarded activity in the Today timeline.
-6. Optionally complete Daily Reflection, then spend points on the cat and view active-day milestones.
+1. Notice or declare being stuck.
+2. Choose an intentional direction.
+3. Receive or manually choose one very small First Move.
+4. Complete a bounded 2, 5, 10, or 25 minute session.
+5. Choose whether to continue, rest, use entertainment intentionally, or finish.
+6. Receive gentle progress feedback and cat rewards.
+7. Reflect briefly on what helped.
 
-## MVP requirements
+Stopping, changing direction, or not completing a session never produces punishment. The app offers a smaller next step or a neutral exit.
 
-### Morning toothbrush image check
+## Entry points
 
-- Keep the morning check fixed and non-editable so it cannot be deleted or replaced by a normal task.
-- Support camera capture where available and image-file selection elsewhere, with preview and explicit confirmation that the image shows the user's toothbrush.
-- A successful check can occur once per local calendar day; it awards points, feeds the cat, and creates one Today timeline event without duplicate rewards.
-- Keep processing in the browser and discard the image after confirmation or cancellation. Do not persist it, send it to AI, or claim dental validation.
-- Explain camera/file permissions and provide a clear retry or manual completion fallback when image access is unavailable. Label fallback completion distinctly in the timeline.
+### Morning Start
 
-### Tasks, habits, and categories
+1. Capture or select a toothbrush photo and explicitly verify it.
+2. On the first successful check that day, feed the cat, award points, and record the activity.
+3. Choose an intentional direction and begin a First Move.
 
-- Create, edit, delete, reorder, categorize, and complete manual daily tasks.
-- Create, edit, delete, and complete habits scheduled either every day or on selected weekdays.
-- Use exactly five categories across tasks and habits:
-  - Work & Study
-  - Daily Life
-  - Exercise
-  - Intentional Entertainment
-  - Rest
-- Show only habits scheduled for the current local weekday while retaining their recurrence settings.
-- Award configured points once per task or habit completion per local day and prevent duplicate rewards.
+The toothbrush check is fixed and non-editable. Images are processed locally, discarded after confirmation or cancellation, and never used for dental diagnosis or sent to AI. If camera/file access is unavailable, provide a clearly labeled manual fallback.
 
-### Optional AI daily organization
+### I'm Stuck
 
-- Provide an opt-in text brain dump for the current day and send it only when the user explicitly requests organization.
-- Use GPT-5.6 to propose structured tasks with titles, one of the five categories, order, and optional focus-duration suggestions.
-- Show a review screen and never apply proposed tasks automatically.
-- Manual task creation, editing, categorization, reordering, and timer selection remain a complete fallback when AI is unavailable, rejected, or not configured.
-- Keep API credentials server-side and never include reflections, images, habits, timeline history, cat state, or unrelated local data in the AI request.
+- Keep an “I'm Stuck” action visible and available at any time, without requiring Morning Start or any previous setup.
+- Let the user optionally identify the current state:
+  - scrolling and unable to stop
+  - in bed and unable to get up
+  - knows what to do but cannot start
+  - overwhelmed by a large task
+  - needs intentional rest
+  - unsure what is needed
+- Do not require the user to explain or justify the state. “Unsure” must lead directly to useful choices.
 
-### Focus timer
+## Intentional directions
 
-- Offer 2, 10, and 25 minute presets plus a validated custom duration from 1–120 minutes.
-- Support start, pause, resume, cancel, and completion states.
-- Calculate remaining time from timestamps so background-tab throttling or reload recovery does not corrupt the timer.
-- Use visual completion and optional in-page sound/vibration where supported; do not promise a system alarm or background notification.
+Use exactly five directions across First Moves, tasks, habits, and AI proposals:
 
-### Rewards and Today timeline
+- Work & Study
+- Daily Life
+- Exercise & Movement
+- Intentional Entertainment
+- Rest
 
-- Store points locally and centralize fixed reward values for the morning check, tasks, habits, focus sessions, and any other rewarded action.
-- Show a chronological Today timeline for meaningful daily activity, including the morning result, completed tasks/habits, completed focus sessions, reflection completion, cat interactions, and purchases where useful.
-- Each event records a local timestamp, readable label, event type, and points change when applicable.
-- Derive rewards and timeline entries from idempotent actions so reloads or repeated clicks cannot duplicate them.
+Each direction uses neutral language and can be changed before or after a session.
+
+## First Move system
+
+### Local templates
+
+- Bundle a non-AI library of very small First Move templates indexed by stuck state, direction, and suitable duration.
+- Examples include opening one document, putting both feet on the floor, placing one item away, stretching beside the bed, choosing one video intentionally, or setting up a rest space.
+- Present one suggestion with controls to choose another, make a manual First Move, or shorten the duration.
+- Keep templates editable in wording before starting and fully available offline.
+- Avoid promises of outcomes; templates should describe observable actions that can begin immediately.
+
+### Optional AI adaptation
+
+- Let the user explicitly request “Make It Smaller” or adapt a First Move using only text they choose to submit.
+- Return one concise, concrete proposal with a valid direction and bounded duration; never start or apply it automatically.
+- Local templates and manual entry provide the complete fallback when AI is unavailable or declined.
+
+## Bounded sessions and return choice
+
+- Offer 2, 5, 10, and 25 minute sessions with start, pause, resume, cancel, and finish states.
+- Use timestamp-based timing so tab throttling and reload recovery do not corrupt remaining time.
+- At completion or early stop, present neutral choices: continue, rest, intentional entertainment, or finish.
+- Use an in-page visual completion state and optional sound/vibration where supported; do not promise system alarms.
+
+### Intentional Entertainment
+
+- Intentional Entertainment supports only a bounded 5 or 10 minute session in the MVP.
+- Ask the user to name or choose the intended activity before starting.
+- When time ends, offer the same neutral return choice: continue intentionally, choose another direction, rest, or finish.
+- Using entertainment intentionally is a valid direction and is never labeled as failure, relapse, or lost progress.
+
+## Supporting features
+
+### Manual tasks and habits
+
+- Create, edit, delete, reorder, categorize, and complete manual tasks.
+- Create lightweight habits scheduled daily or on selected weekdays.
+- Allow a task or habit to become the source of a smaller First Move without changing the original item.
+- Award configured points once per eligible completion per local day.
+
+### Optional AI task organization
+
+- Let the user explicitly submit a daily text brain dump for optional GPT-5.6 organization.
+- Propose reviewable tasks with titles, one of the five directions, order, and optional session duration.
+- Never apply proposals automatically. Manual task entry and organization remain complete alternatives.
+- Exclude reflections, toothbrush images, history, habits, cat state, and unrelated local data from AI requests.
+
+### Rewards and activity timeline
+
+- Store a local points ledger with fixed, idempotent rewards for meaningful actions.
+- Show a chronological Today timeline for Morning Start, First Moves, bounded sessions, tasks, habits, reflection, and relevant cat/store activity.
+- Record readable labels, local timestamps, event types, and point changes where applicable.
+- Give feedback for showing up and choosing intentionally, not for maintaining a perfect streak.
+
+### Virtual cat
+
+- Provide a forgiving cat room and store with food, toys, furniture, and simple tricks.
+- Let users spend local points, manage inventory, feed and play with the cat, arrange furniture, and trigger tricks.
+- Morning Start feeds the cat once per day without spending points.
+- Missed days, cancelled sessions, and incomplete actions never harm the cat or remove points, inventory, milestones, or progress.
+- Welcome returning users with gentle, non-judgmental messages.
+- Count total active days rather than consecutive streaks and retain milestones at 21, 50, and 100 active days.
 
 ### Daily Reflection
 
-- Provide a private, optional daily reflection with:
-  - optional mood from 1 to 5
-  - optional energy from 1 to 5
+- Offer a short, optional reflection after a session or from Today:
+  - what helped
   - one thing completed
   - what felt difficult
   - one small next step
-  - optional free text
-- Allow saving, reopening, and editing one reflection per local day.
-- Treat every field as optional and make skipping easy; never score, diagnose, infer sentiment, or provide mental-health conclusions.
-- Keep reflection content on-device and exclude it from AI organization.
+  - optional mood 1–5, energy 1–5, and free text
+- Save at most one editable reflection per local day, with every field optional.
+- Keep reflections on-device and outside all AI requests. Never score, diagnose, infer sentiment, or produce mental-health conclusions.
 
-### Virtual cat, store, return flow, and milestones
+## Navigation and experience
 
-- Provide a forgiving cat room with food, treats, one toy, furniture, and a small set of simple tricks.
-- Let users buy available items with local points, view price and ownership, feed or treat the cat, use the toy, select/place furniture, and trigger learned tricks.
-- The successful daily morning check feeds the cat without charging points.
-- Avoid punishment, irreversible loss, or streak shame. After absent days, welcome the user back with gentle, non-judgmental copy and no penalty.
-- Count total active days, not consecutive streaks. An active day is a local calendar day with at least one meaningful recorded action.
-- Unlock celebratory milestones at 21, 50, and 100 total active days; each milestone is awarded once and remains visible.
-
-## Daily dashboard and navigation
-
-- Keep the current responsive Morning, Today, Focus, and Cat shell.
-- Morning contains the fixed image check and return message.
-- Today contains tasks, scheduled habits, category filters, points, activity timeline, and Daily Reflection.
-- Focus contains presets, custom duration, and active-session controls.
+- Make “I'm Stuck” the most prominent action throughout the responsive app.
+- Morning contains Morning Start and its toothbrush check.
+- Today contains the stuck entry, tasks, scheduled habits, reflection, points, and activity timeline.
+- Focus/session UI presents the current First Move, timer, and neutral return choice.
 - Cat contains status, room, store, inventory, tricks, and milestones.
-- Reset daily state by local calendar date while preserving reflection history, total active days, milestones, inventory, points, and compact timeline history.
-
-## Data and privacy
-
-- Store app state locally with a versioned schema, validation, migrations, recovery defaults, and an explicit reset path.
-- Persist tasks, habits and schedules, daily records, points ledger, timeline, reflections, timer state, inventory, cat state, preferences, and active-day milestones.
-- Do not retain toothbrush images by default or send them to AI.
-- Explain that clearing browser data removes progress; consider JSON export/import only after core acceptance criteria pass.
-
-## UX and accessibility
-
+- Minimize required typing and show one decision at a time during the stuck flow.
 - Use large touch targets, semantic controls, keyboard support, visible focus, reduced-motion support, sufficient contrast, and non-color status cues.
-- Provide clear empty, permission, offline, insufficient-points, validation, and recovery states.
-- Keep language gentle and specific, especially for missed days, incomplete plans, and optional reflection fields.
+
+## Local data and privacy
+
+- Use a versioned, validated local schema with migrations, safe defaults, local-day rollover, and an explicit reset path.
+- Persist tasks, habits, templates/preferences, stuck-flow choices, session state, points, timeline, reflections, cat state, inventory, and milestones.
+- Do not persist toothbrush images or send them to AI.
+- Explain that clearing browser data removes progress; consider export/import only after the core MVP works.
 
 ## Success criteria
 
-- A new user can complete the morning check, feed the cat, earn points, edit a task, complete a scheduled habit, and run a 2-minute timer without AI.
-- The Today timeline accurately records rewarded actions without duplicates across reloads or local-day rollover.
-- A user can save a fully or partially completed reflection privately without analysis or diagnosis.
-- AI unavailability, image-access denial, timer throttling, absent days, and insufficient points all have understandable manual or recovery paths.
-- Total active-day milestones unlock exactly once at 21, 50, and 100 days.
-- The responsive experience passes core accessibility checks at common phone, tablet, and desktop widths.
+- From any screen, a user can declare being stuck and begin a local-template or manual First Move without AI or Morning Start.
+- Each listed stuck state reaches a valid direction, very small action, and bounded session with low decision load.
+- After a session, the user can continue, rest, choose intentional entertainment, or finish without punitive language or lost rewards.
+- Intentional Entertainment runs for 5 or 10 minutes and ends in a neutral return choice.
+- Morning Start verifies a toothbrush image locally, feeds the cat, and awards its daily reward exactly once.
+- Tasks, habits, points, timeline, cat progress, reflection, and active-day milestones survive reload and local-day rollover.
+- AI failure never blocks local templates, manual First Moves, manual tasks, or timing.
+- The experience clearly states its behavioral inspiration and medical limitations.
 
 ## MVP decisions
 
 - Single anonymous local profile with no sync.
-- The toothbrush check is fixed and user-confirmed, not image classification or dental analysis.
-- Five fixed categories are shared by tasks, habits, and AI proposals.
-- Points are a playful local currency with values defined centrally.
-- AI organizes only an explicitly submitted daily brain dump and is never required.
-- Reflection is optional, private, local-only, and excluded from AI.
-- Milestones use total active days rather than consecutive streaks.
+- “I'm Stuck” works independently and is the primary product path; Morning Start is a complementary entry.
+- Five fixed directions organize local templates, tasks, habits, and AI output.
+- Sessions use fixed 2, 5, 10, or 25 minute bounds; Intentional Entertainment uses 5 or 10 minutes.
+- Effort receives gentle feedback, while missed days and failed or cancelled sessions receive no punishment.
+- AI is optional and user-initiated; local templates and manual controls are always available.
