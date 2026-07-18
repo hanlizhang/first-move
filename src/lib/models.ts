@@ -19,6 +19,9 @@ export const STUCK_STATES = [
 
 export type StuckState = (typeof STUCK_STATES)[number];
 
+export const INTENDED_DURATIONS = [2, 5, 10, 25] as const;
+export type IntendedDuration = (typeof INTENDED_DURATIONS)[number];
+
 export const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 
@@ -46,13 +49,25 @@ export interface Habit {
   completedOn: string[];
 }
 
+export interface ActivityIntent {
+  id: string;
+  stuckState: StuckState;
+  direction: Direction;
+  moveText: string;
+  intendedDurationMinutes: IntendedDuration;
+  linkedTaskId?: string;
+  linkedHabitId?: string;
+  createdAt: string;
+  status: "pending";
+}
+
 export type SessionStatus = "planned" | "active" | "paused" | "completed" | "cancelled";
 
 export interface ActivitySession {
   id: string;
   direction: Direction;
   firstMove: string;
-  durationMinutes: 2 | 5 | 10 | 25;
+  durationMinutes: IntendedDuration;
   status: SessionStatus;
   startedAt?: string;
   endedAt?: string;
@@ -98,9 +113,10 @@ export interface UserProgress {
 }
 
 export interface AppState {
-  schemaVersion: 1;
+  schemaVersion: 2;
   tasks: Task[];
   habits: Habit[];
+  activityIntents: ActivityIntent[];
   sessions: ActivitySession[];
   rewardEvents: RewardEvent[];
   journalEntries: JournalEntry[];
@@ -108,13 +124,14 @@ export interface AppState {
   progress: UserProgress;
 }
 
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
 
 export function createEmptyState(): AppState {
   return {
     schemaVersion: SCHEMA_VERSION,
     tasks: [],
     habits: [],
+    activityIntents: [],
     sessions: [],
     rewardEvents: [],
     journalEntries: [],
@@ -125,6 +142,14 @@ export function createEmptyState(): AppState {
 
 export function isDirection(value: unknown): value is Direction {
   return typeof value === "string" && DIRECTIONS.includes(value as Direction);
+}
+
+export function isStuckState(value: unknown): value is StuckState {
+  return typeof value === "string" && STUCK_STATES.includes(value as StuckState);
+}
+
+export function isIntendedDuration(value: unknown): value is IntendedDuration {
+  return typeof value === "number" && INTENDED_DURATIONS.includes(value as IntendedDuration);
 }
 
 export function isWeekday(value: unknown): value is Weekday {

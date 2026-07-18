@@ -21,9 +21,9 @@
 
 ## TASK-02: I'm Stuck flow, intentional direction selection, and bounded sessions
 
-- [ ] Add a prominent “I'm Stuck” entry available without Morning Start.
-- [ ] Build optional stuck-state selection for all six PRD states, followed by one of five intentional directions.
-- [ ] Present one local First Move at a time with choose-another, edit, manual, and shorter-session controls.
+- [x] Add a prominent “I'm Stuck” entry available without Morning Start.
+- [x] Build optional stuck-state selection for all six PRD states, followed by one of five intentional directions.
+- [x] Present one local First Move at a time with choose-another, edit, manual, and shorter-session controls.
 - [ ] Build the session flow around 2, 5, 10, and 25 minute bounds and the post-session choices: continue, rest, intentional entertainment, or finish.
 - [ ] Add neutral cancellation, incomplete-session, and unsure-state paths.
 
@@ -33,6 +33,8 @@
 - “Unsure what is needed” remains actionable with low decision load.
 - The user can change direction, choose a different/local/manual move, shorten the session, or exit at every appropriate step.
 - Completion, early stop, and cancellation use non-punitive language and never remove progress.
+
+**Status:** Intent-building portion complete. A validated pending `ActivityIntent`, optional task/habit linking, Focus handoff, and neutral pre-session cancellation are implemented. Running sessions and post-session outcomes remain in TASK-03.
 
 ## TASK-03: Timer, rewards, activity timeline, and intentional entertainment
 

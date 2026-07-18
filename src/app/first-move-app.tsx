@@ -5,10 +5,13 @@ import { useState } from "react";
 import {
   addHabit,
   addTask,
+  cancelPendingIntent,
+  createPendingIntent,
   deleteHabit,
   deleteTask,
   editHabit,
   editTask,
+  getPendingIntent,
   isHabitScheduled,
   localDateKey,
   moveTask,
@@ -17,18 +20,21 @@ import {
 } from "@/lib/app-state";
 import {
   DIRECTIONS,
+  INTENDED_DURATIONS,
   STUCK_STATES,
   WEEKDAYS,
+  type ActivityIntent,
   type AppState,
   type Direction,
   type Habit,
   type HabitSchedule,
+  type IntendedDuration,
   type StuckState,
   type Task,
   type Weekday,
 } from "@/lib/models";
 import { updateAppState, useAppState } from "@/lib/store";
-import { templatesFor } from "@/lib/templates";
+import { easierTemplateFor, nextShorterDuration, templatesFor } from "@/lib/templates";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -43,6 +49,7 @@ const weekdayLabels: Record<Weekday, string> = {
 export default function FirstMoveApp() {
   const state = useAppState();
   const today = localDateKey();
+  const pendingIntent = getPendingIntent(state);
 
   function update(recipe: (current: AppState) => AppState) {
     updateAppState(recipe);
@@ -58,6 +65,7 @@ export default function FirstMoveApp() {
           <nav aria-label="Page sections" className="hidden sm:block">
             <ul className="flex gap-1 text-sm font-semibold text-stone-600">
               <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#moves">First Moves</a></li>
+              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#focus">Focus</a></li>
               <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#tasks">Tasks</a></li>
               <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#habits">Habits</a></li>
             </ul>
@@ -70,10 +78,10 @@ export default function FirstMoveApp() {
 
       <main id="top" className="mx-auto max-w-6xl px-5 pb-20 pt-10 sm:px-8 sm:pt-14">
         <div className="max-w-3xl">
-          <p className="text-sm font-semibold text-orange-700">Local foundation</p>
+          <p className="text-sm font-semibold text-orange-700">I&apos;m Stuck</p>
           <h1 className="mt-2 text-4xl font-bold tracking-[-0.04em] text-stone-950 sm:text-5xl">One small move is enough to begin.</h1>
           <p className="mt-4 text-base leading-7 text-stone-600 sm:text-lg">
-            Choose an offline suggestion, or shape today with your own tasks and lightweight habits. Everything on this page stays in this browser.
+            Name what is happening, choose a direction, and make one move small enough to begin. Everything here works locally without AI.
           </p>
           <p className="mt-3 text-sm text-stone-500" aria-live="polite">
             Local changes save automatically.
@@ -81,15 +89,23 @@ export default function FirstMoveApp() {
         </div>
 
         <div className="mt-10 grid items-start gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <FirstMovePicker onSaveAsTask={(title, direction) => update((current) => addTask(current, { title, direction }))} />
+          <FirstMovePicker
+            tasks={state.tasks}
+            habits={state.habits}
+            pendingIntent={pendingIntent}
+            update={update}
+            onSaveAsTask={(title, direction) => update((current) => addTask(current, { title, direction }))}
+          />
           <section className="rounded-[1.75rem] border border-orange-200 bg-orange-50 p-6 sm:p-7" aria-labelledby="foundation-heading">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-700">This task only</p>
             <h2 id="foundation-heading" className="mt-3 text-2xl font-bold tracking-tight">A calm local starting point</h2>
             <p className="mt-3 text-sm leading-6 text-orange-950/70">
-              First Move suggestions, tasks, habits, and reward records work without AI. Sessions, Morning verification, the cat store, and reflection arrive in later tasks. The I&apos;m Stuck flow arrives in TASK-02.
+              Choose and persist what you intend to do next. No countdown starts yet: actual tracked time, outcomes, and session rewards belong to TASK-03.
             </p>
           </section>
         </div>
+
+        <FocusPreview pendingIntent={pendingIntent} tasks={state.tasks} habits={state.habits} />
 
         <section id="tasks" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="tasks-heading">
           <div className="max-w-2xl">
@@ -113,13 +129,28 @@ export default function FirstMoveApp() {
   );
 }
 
-function FirstMovePicker({ onSaveAsTask }: { onSaveAsTask: (title: string, direction: Direction) => void }) {
+function FirstMovePicker({
+  tasks,
+  habits,
+  pendingIntent,
+  update,
+  onSaveAsTask,
+}: {
+  tasks: Task[];
+  habits: Habit[];
+  pendingIntent?: ActivityIntent;
+  update: (recipe: (state: AppState) => AppState) => void;
+  onSaveAsTask: (title: string, direction: Direction) => void;
+}) {
   const [stuckState, setStuckState] = useState<StuckState>(STUCK_STATES[0]);
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const initial = templatesFor(stuckState, direction)[0];
+  const [templateId, setTemplateId] = useState<string | undefined>(initial.id);
   const [moveText, setMoveText] = useState(initial.text);
-  const [duration, setDuration] = useState(initial.durationMinutes);
+  const [duration, setDuration] = useState<IntendedDuration>(initial.durationMinutes);
+  const [linkedValue, setLinkedValue] = useState("");
+  const [notice, setNotice] = useState("");
 
   function choose(stateChoice: StuckState, directionChoice: Direction, index = 0) {
     const options = templatesFor(stateChoice, directionChoice);
@@ -127,28 +158,130 @@ function FirstMovePicker({ onSaveAsTask }: { onSaveAsTask: (title: string, direc
     setStuckState(stateChoice);
     setDirection(directionChoice);
     setSuggestionIndex(selectedIndex);
+    setTemplateId(options[selectedIndex].id);
     setMoveText(options[selectedIndex].text);
     setDuration(options[selectedIndex].durationMinutes);
+    setNotice("");
+  }
+
+  function chooseLink(value: string) {
+    setLinkedValue(value);
+    const [kind, id] = value.split(":");
+    const source = kind === "task" ? tasks.find((task) => task.id === id) : habits.find((habit) => habit.id === id);
+    if (source) setDirection(source.direction);
+  }
+
+  function makeEasier() {
+    const easier = easierTemplateFor(stuckState, direction, templateId);
+    setTemplateId(easier.id);
+    setMoveText(easier.text);
+    setDuration(nextShorterDuration(duration));
+    setNotice("Made smaller using the local template library.");
+  }
+
+  function startMove() {
+    if (!moveText.trim()) return;
+    const [kind, id] = linkedValue.split(":");
+    update((state) =>
+      createPendingIntent(state, {
+        stuckState,
+        direction,
+        moveText,
+        intendedDurationMinutes: duration,
+        linkedTaskId: kind === "task" ? id : undefined,
+        linkedHabitId: kind === "habit" ? id : undefined,
+      }),
+    );
+  }
+
+  if (pendingIntent) {
+    const linked = linkedItemLabel(pendingIntent, tasks, habits);
+    return (
+      <section id="moves" className="scroll-mt-24 rounded-[1.75rem] border border-violet-300 bg-violet-50 p-6 shadow-sm sm:p-7" aria-labelledby="intent-heading">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Ready when you are</p>
+        <h2 id="intent-heading" className="mt-3 text-2xl font-bold tracking-tight">Your pending First Move</h2>
+        <div className="mt-5 rounded-2xl border border-violet-200 bg-white p-4">
+          <p className="font-semibold leading-6">{pendingIntent.moveText}</p>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div><dt className="text-stone-500">Direction</dt><dd className="font-semibold">{pendingIntent.direction}</dd></div>
+            <div><dt className="text-stone-500">Intended duration</dt><dd className="font-semibold">{pendingIntent.intendedDurationMinutes} minutes</dd></div>
+            {linked && <div className="sm:col-span-2"><dt className="text-stone-500">Linked item</dt><dd className="font-semibold">{linked}</dd></div>}
+          </dl>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <a href="#focus" className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700">Go to Focus</a>
+          <button type="button" className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-violet-700" onClick={() => update((state) => cancelPendingIntent(state, pendingIntent.id))}>Change move</button>
+          <button type="button" className="rounded-xl px-4 py-2 text-sm font-semibold text-stone-600 hover:bg-white focus-visible:outline-2 focus-visible:outline-stone-700" onClick={() => { update((state) => cancelPendingIntent(state, pendingIntent.id)); setNotice("Cancelled. Nothing was lost."); }}>Cancel</button>
+        </div>
+      </section>
+    );
   }
 
   return (
-    <section id="moves" className="scroll-mt-24 rounded-[1.75rem] border border-violet-200 bg-violet-50 p-6 shadow-sm sm:p-7" aria-labelledby="moves-heading">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">No AI required</p>
-      <h2 id="moves-heading" className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Find a local First Move</h2>
+    <section id="moves" className="scroll-mt-24 rounded-[1.75rem] border-2 border-violet-300 bg-violet-50 p-6 shadow-sm sm:p-7" aria-labelledby="moves-heading">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">I&apos;m Stuck · No AI required</p>
+      <h2 id="moves-heading" className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Choose one First Move</h2>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <SelectField label="Right now, I am…" value={stuckState} options={STUCK_STATES} onChange={(value) => choose(value as StuckState, direction)} />
         <SelectField label="Direction" value={direction} options={DIRECTIONS} onChange={(value) => choose(stuckState, value as Direction)} />
       </div>
+      <label className="mt-4 block text-sm font-semibold">Link to a task or habit <span className="font-normal text-stone-500">(optional)</span>
+        <select className="mt-2 block w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" value={linkedValue} onChange={(event) => chooseLink(event.target.value)}>
+          <option value="">No linked item</option>
+          {tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
+          {habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
+        </select>
+      </label>
       <label className="mt-5 block text-sm font-semibold" htmlFor="first-move-text">Your small move</label>
-      <textarea id="first-move-text" className="mt-2 min-h-24 w-full rounded-2xl border border-violet-200 bg-white p-3 text-sm leading-6 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" value={moveText} maxLength={160} onChange={(event) => setMoveText(event.target.value)} />
-      <p className="mt-2 text-sm text-violet-950/65">Suggested bound: {duration} minutes. Timing is not implemented yet.</p>
+      <textarea id="first-move-text" className="mt-2 min-h-24 w-full rounded-2xl border border-violet-200 bg-white p-3 text-sm leading-6 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" value={moveText} maxLength={160} onChange={(event) => { setMoveText(event.target.value); setTemplateId(undefined); }} />
+      <fieldset className="mt-5">
+        <legend className="text-sm font-semibold">Intended duration</legend>
+        <div className="mt-2 grid grid-cols-4 gap-2">
+          {INTENDED_DURATIONS.map((minutes) => <label key={minutes} className={`cursor-pointer rounded-xl border px-2 py-2.5 text-center text-sm font-semibold ${duration === minutes ? "border-violet-600 bg-violet-700 text-white" : "border-violet-200 bg-white"}`}><input className="sr-only" type="radio" name="duration" value={minutes} checked={duration === minutes} onChange={() => setDuration(minutes)} />{minutes} min</label>)}
+        </div>
+      </fieldset>
+      {notice && <p className="mt-3 text-sm text-violet-800" aria-live="polite">{notice}</p>}
       <div className="mt-5 flex flex-wrap gap-2">
         <button type="button" className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" onClick={() => choose(stuckState, direction, suggestionIndex + 1)}>Another suggestion</button>
-        <button type="button" className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" onClick={() => { setMoveText(""); setDuration(2); }}>Write my own</button>
-        <button type="button" disabled={!moveText.trim()} className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={() => onSaveAsTask(moveText.trim(), direction)}>Save as task</button>
+        <button type="button" className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" onClick={makeEasier}>Make it easier</button>
+        <button type="button" disabled={duration === 2} className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={() => setDuration(nextShorterDuration(duration))}>Make shorter</button>
+        <button type="button" className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" onClick={() => { setMoveText(""); setTemplateId(undefined); setDuration(2); }}>Write my own</button>
+      </div>
+      <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-violet-200 pt-5">
+        <button type="button" disabled={!moveText.trim()} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={startMove}>Start this move</button>
+        <button type="button" disabled={!moveText.trim()} className="rounded-xl px-4 py-2 text-sm font-semibold text-violet-800 hover:bg-white focus-visible:outline-2 focus-visible:outline-violet-700 disabled:opacity-40" onClick={() => onSaveAsTask(moveText.trim(), direction)}>Save as task</button>
       </div>
     </section>
   );
+}
+
+function FocusPreview({ pendingIntent, tasks, habits }: { pendingIntent?: ActivityIntent; tasks: Task[]; habits: Habit[] }) {
+  return (
+    <section id="focus" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-sky-200 bg-sky-50 p-6 shadow-sm sm:p-8" aria-labelledby="focus-heading">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Focus</p>
+      <h2 id="focus-heading" className="mt-2 text-3xl font-bold tracking-tight">Your next move</h2>
+      {pendingIntent ? (
+        <div className="mt-5 rounded-2xl border border-sky-200 bg-white p-5">
+          <p className="text-lg font-bold">{pendingIntent.moveText}</p>
+          <p className="mt-2 text-sm text-stone-600">{pendingIntent.direction} · {pendingIntent.intendedDurationMinutes} minutes intended</p>
+          {linkedItemLabel(pendingIntent, tasks, habits) && <p className="mt-1 text-sm text-stone-500">Linked to {linkedItemLabel(pendingIntent, tasks, habits)}</p>}
+          <p className="mt-4 rounded-xl bg-sky-100 px-3 py-2 text-sm font-medium text-sky-950">The running timer is implemented in TASK-03. Nothing is counting down yet.</p>
+        </div>
+      ) : <p className="mt-4 text-sm text-stone-600">Choose “Start this move” above to create a pending intent. No timer will start yet.</p>}
+    </section>
+  );
+}
+
+function linkedItemLabel(intent: ActivityIntent, tasks: Task[], habits: Habit[]): string | undefined {
+  if (intent.linkedTaskId) {
+    const task = tasks.find((candidate) => candidate.id === intent.linkedTaskId);
+    return task ? `Task: ${task.title}` : undefined;
+  }
+  if (intent.linkedHabitId) {
+    const habit = habits.find((candidate) => candidate.id === intent.linkedHabitId);
+    return habit ? `Habit: ${habit.title}` : undefined;
+  }
+  return undefined;
 }
 
 function TaskEditor({ tasks, today, update }: { tasks: Task[]; today: string; update: (recipe: (state: AppState) => AppState) => void }) {

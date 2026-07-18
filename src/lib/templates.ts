@@ -1,4 +1,4 @@
-import type { Direction, StuckState } from "./models.ts";
+import type { Direction, IntendedDuration, StuckState } from "./models.ts";
 import { DIRECTIONS, STUCK_STATES } from "./models.ts";
 
 export interface FirstMoveTemplate {
@@ -75,6 +75,22 @@ export function templatesFor(stuckState: StuckState, direction: Direction): Firs
   return FIRST_MOVE_TEMPLATES.filter(
     (template) => template.stuckState === stuckState && template.direction === direction,
   );
+}
+
+export function nextShorterDuration(duration: IntendedDuration): IntendedDuration {
+  if (duration === 25) return 10;
+  if (duration === 10) return 5;
+  return 2;
+}
+
+export function easierTemplateFor(
+  stuckState: StuckState,
+  direction: Direction,
+  currentTemplateId?: string,
+): FirstMoveTemplate {
+  const options = templatesFor(stuckState, direction);
+  const different = options.find((template) => template.id !== currentTemplateId);
+  return different ?? options[0];
 }
 
 function slug(value: string): string {

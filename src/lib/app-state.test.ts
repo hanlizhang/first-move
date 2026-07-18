@@ -4,6 +4,9 @@ import test from "node:test";
 import {
   addHabit,
   addTask,
+  cancelPendingIntent,
+  createPendingIntent,
+  getPendingIntent,
   isHabitScheduled,
   normalizeAppState,
   toggleHabit,
@@ -35,10 +38,126 @@ test("malformed and partial old data returns a usable current state", () => {
     progress: { points: "many" },
   });
 
-  assert.equal(recovered.schemaVersion, 1);
+  assert.equal(recovered.schemaVersion, 2);
   assert.equal(recovered.tasks.length, 1);
   assert.equal(recovered.tasks[0].order, 0);
   assert.equal(recovered.progress.points, 0);
+});
+
+test("creates one pending intent and prevents duplicate pending intents", () => {
+  const first = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "knows what to do but cannot start",
+      direction: "Work & Study",
+      moveText: "Open the document",
+      intendedDurationMinutes: 5,
+    },
+    clock,
+    () => "intent-1",
+  );
+  const duplicateAttempt = createPendingIntent(
+    first,
+    {
+      stuckState: "unsure what is needed",
+      direction: "Rest",
+      moveText: "Pause",
+      intendedDurationMinutes: 2,
+    },
+    clock,
+    () => "intent-2",
+  );
+
+  assert.equal(duplicateAttempt.activityIntents.length, 1);
+  assert.equal(getPendingIntent(duplicateAttempt)?.id, "intent-1");
+});
+
+test("inherits a linked item direction unless an editable direction is supplied", () => {
+  const withTask = addTask(
+    createEmptyState(),
+    { title: "Open the notes", direction: "Work & Study" },
+    clock,
+  );
+  const taskId = withTask.tasks[0].id;
+  const inherited = createPendingIntent(
+    withTask,
+    {
+      stuckState: "overwhelmed by a large task",
+      moveText: "Read the first heading",
+      intendedDurationMinutes: 5,
+      linkedTaskId: taskId,
+    },
+    clock,
+    () => "intent-inherited",
+  );
+
+  assert.equal(getPendingIntent(inherited)?.direction, "Work & Study");
+  assert.equal(getPendingIntent(inherited)?.linkedTaskId, taskId);
+
+  const editable = createPendingIntent(
+    cancelPendingIntent(inherited, "intent-inherited"),
+    {
+      stuckState: "overwhelmed by a large task",
+      direction: "Rest",
+      moveText: "Set the notes aside",
+      intendedDurationMinutes: 2,
+      linkedTaskId: taskId,
+    },
+    clock,
+    () => "intent-edited",
+  );
+  assert.equal(getPendingIntent(editable)?.direction, "Rest");
+});
+
+test("cancelling a pending intent removes it without a reward or session", () => {
+  const withIntent = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "needs intentional rest",
+      direction: "Rest",
+      moveText: "Settle into the chair",
+      intendedDurationMinutes: 10,
+    },
+    clock,
+    () => "intent-cancel",
+  );
+  const cancelled = cancelPendingIntent(withIntent, "intent-cancel");
+
+  assert.equal(getPendingIntent(cancelled), undefined);
+  assert.equal(cancelled.sessions.length, 0);
+  assert.equal(cancelled.rewardEvents.length, 0);
+  assert.equal(cancelled.progress.points, 0);
+});
+
+test("persists a valid pending intent and drops malformed stored intents", () => {
+  let stored: string | null = null;
+  const memoryStorage: StorageLike = {
+    getItem: () => stored,
+    setItem: (_key, value) => { stored = value; },
+  };
+  const withIntent = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "scrolling and unable to stop",
+      direction: "Daily Life",
+      moveText: "Place one item away",
+      intendedDurationMinutes: 2,
+    },
+    clock,
+    () => "intent-persisted",
+  );
+
+  assert.equal(saveAppState(memoryStorage, withIntent), true);
+  assert.equal(getPendingIntent(loadAppState(memoryStorage))?.id, "intent-persisted");
+
+  stored = JSON.stringify({
+    ...createEmptyState(),
+    activityIntents: [
+      { id: 42, status: "pending" },
+      { id: "bad-duration", stuckState: "unsure what is needed", direction: "Rest", moveText: "Pause", intendedDurationMinutes: 99, createdAt: clock(), status: "pending" },
+    ],
+  });
+  assert.equal(loadAppState(memoryStorage).activityIntents.length, 0);
 });
 
 test("the repository recovers from invalid JSON and blocked writes", () => {

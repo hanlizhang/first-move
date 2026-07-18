@@ -1,12 +1,17 @@
 import {
   createEmptyState,
   isDirection,
+  isIntendedDuration,
+  isStuckState,
   isWeekday,
+  type ActivityIntent,
   type AppState,
   type Direction,
   type Habit,
   type HabitSchedule,
   type RewardEvent,
+  type IntendedDuration,
+  type StuckState,
   type Task,
   type Weekday,
   WEEKDAYS,
@@ -22,6 +27,9 @@ export function normalizeAppState(input: unknown): AppState {
 
   const tasks = Array.isArray(input.tasks) ? input.tasks.filter(isTask) : [];
   const habits = Array.isArray(input.habits) ? input.habits.filter(isHabit) : [];
+  const activityIntents = Array.isArray(input.activityIntents)
+    ? input.activityIntents.filter(isActivityIntent)
+    : [];
   const rewardEvents = Array.isArray(input.rewardEvents)
     ? input.rewardEvents.filter(isRewardEvent)
     : [];
@@ -32,6 +40,7 @@ export function normalizeAppState(input: unknown): AppState {
     ...createEmptyState(),
     tasks: [...tasks].sort((a, b) => a.order - b.order).map((task, order) => ({ ...task, order })),
     habits,
+    activityIntents: keepOnePendingIntent(activityIntents),
     rewardEvents,
     progress: {
       points:
@@ -46,6 +55,65 @@ export function normalizeAppState(input: unknown): AppState {
         : [],
     },
   };
+}
+
+export interface CreateIntentInput {
+  stuckState: StuckState;
+  direction?: Direction;
+  moveText: string;
+  intendedDurationMinutes: IntendedDuration;
+  linkedTaskId?: string;
+  linkedHabitId?: string;
+}
+
+export function createPendingIntent(
+  state: AppState,
+  input: CreateIntentInput,
+  clock: Clock = now,
+  idFactory: () => string = () => makeId("intent"),
+): AppState {
+  if (state.activityIntents.some((intent) => intent.status === "pending")) return state;
+  if (!isStuckState(input.stuckState) || !isIntendedDuration(input.intendedDurationMinutes)) return state;
+  if (input.linkedTaskId && input.linkedHabitId) return state;
+
+  const linkedTask = input.linkedTaskId
+    ? state.tasks.find((task) => task.id === input.linkedTaskId)
+    : undefined;
+  const linkedHabit = input.linkedHabitId
+    ? state.habits.find((habit) => habit.id === input.linkedHabitId)
+    : undefined;
+  if (input.linkedTaskId && !linkedTask) return state;
+  if (input.linkedHabitId && !linkedHabit) return state;
+
+  const direction = input.direction ?? linkedTask?.direction ?? linkedHabit?.direction;
+  const moveText = cleanTitle(input.moveText);
+  if (!direction || !isDirection(direction) || !moveText) return state;
+
+  const intent: ActivityIntent = {
+    id: idFactory(),
+    stuckState: input.stuckState,
+    direction,
+    moveText,
+    intendedDurationMinutes: input.intendedDurationMinutes,
+    linkedTaskId: linkedTask?.id,
+    linkedHabitId: linkedHabit?.id,
+    createdAt: clock(),
+    status: "pending",
+  };
+  return { ...state, activityIntents: [...state.activityIntents, intent] };
+}
+
+export function cancelPendingIntent(state: AppState, intentId: string): AppState {
+  return {
+    ...state,
+    activityIntents: state.activityIntents.filter(
+      (intent) => !(intent.id === intentId && intent.status === "pending"),
+    ),
+  };
+}
+
+export function getPendingIntent(state: AppState): ActivityIntent | undefined {
+  return state.activityIntents.find((intent) => intent.status === "pending");
 }
 
 export function addTask(
@@ -260,6 +328,30 @@ function isRewardEvent(value: unknown): value is RewardEvent {
     Number.isFinite(value.points) &&
     typeof value.createdAt === "string"
   );
+}
+
+function isActivityIntent(value: unknown): value is ActivityIntent {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    isStuckState(value.stuckState) &&
+    isDirection(value.direction) &&
+    typeof value.moveText === "string" &&
+    value.moveText.trim().length > 0 &&
+    value.moveText.length <= 160 &&
+    isIntendedDuration(value.intendedDurationMinutes) &&
+    (value.linkedTaskId === undefined || typeof value.linkedTaskId === "string") &&
+    (value.linkedHabitId === undefined || typeof value.linkedHabitId === "string") &&
+    !(value.linkedTaskId && value.linkedHabitId) &&
+    typeof value.createdAt === "string" &&
+    value.status === "pending"
+  );
+}
+
+function keepOnePendingIntent(intents: ActivityIntent[]): ActivityIntent[] {
+  const pending = intents.find((intent) => intent.status === "pending");
+  return pending ? [pending] : [];
 }
 
 function isSchedule(value: unknown): value is HabitSchedule {
