@@ -4,11 +4,11 @@
 
 ## TASK-01: Local data foundation, manual tasks, habits, and local First Move templates
 
-- [ ] Define a versioned local schema for daily records, five directions, stuck states, First Moves, tasks, habits, weekday schedules, sessions, and preferences.
-- [ ] Implement validation, migrations, safe defaults, reset handling, local-day rollover, and idempotent writes.
-- [ ] Build editable manual tasks and lightweight daily/selected-weekday habits.
-- [ ] Bundle non-AI First Move templates mapped to stuck state, direction, and 2/5/10/25 minute duration; support manual entry and wording edits.
-- [ ] Unit-test persistence recovery, rollover, weekday visibility, direction validation, and template selection.
+- [x] Define a versioned local schema for daily records, five directions, stuck states, First Moves, tasks, habits, weekday schedules, sessions, and preferences.
+- [x] Implement validation, migrations, safe defaults, reset handling, local-day rollover, and idempotent writes.
+- [x] Build editable manual tasks and lightweight daily/selected-weekday habits.
+- [x] Bundle non-AI First Move templates mapped to stuck state, direction, and 2/5/10/25 minute duration; support manual entry and wording edits.
+- [x] Unit-test persistence recovery, rollover, weekday visibility, direction validation, and template selection.
 
 ### Acceptance criteria
 
@@ -16,6 +16,8 @@
 - Tasks are fully editable; habits appear only on scheduled weekdays; both use exactly the five PRD directions.
 - Every stuck state and direction has a useful local template path, available offline and without AI.
 - A user can replace, edit, or manually enter a First Move before starting.
+
+**Status:** Complete. Verified with project tests, lint, strict type-check, and production build.
 
 ## TASK-02: I'm Stuck flow, intentional direction selection, and bounded sessions
 
