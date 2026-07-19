@@ -51,7 +51,7 @@ import {
 import { getTaskTrackedMs, getTodaySummary, getTodayTimeline } from "@/lib/summaries";
 import { CAT_ITEMS, STORE_CATEGORIES, isCatItemUnlocked, type CatItemId } from "@/lib/cat-items";
 import { inventoryQuantity, purchaseCatItem, useFood as consumeCatFood } from "@/lib/cat-store";
-import { poseForAction, previewPose, scheduleIdleBehavior, scheduleReturnToSitting, type CatPose, type IdleAction } from "@/lib/cat-behavior";
+import { HAPPY_ROLL_DURATION_MS, USER_ACTION_DURATION_MS, createCatActionSequencer, messageForPose, poseForAction, previewPose, scheduleIdleBehavior, type CatPose, type IdleAction } from "@/lib/cat-behavior";
 import { gentleReturnMessage, kittenStage, syncProgress } from "@/lib/progress";
 
 const weekdayLabels: Record<Weekday, string> = {
@@ -640,8 +640,8 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   const [walkingLeft, setWalkingLeft] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [idleReset, setIdleReset] = useState(0);
-  const [notice, setNotice] = useState(returnMessage ?? "Your kitten is nearby. Nothing here needs daily upkeep.");
-  const clearActionTimer = useRef<(() => void) | undefined>(undefined);
+  const [notice, setNotice] = useState(returnMessage ? `${returnMessage} The kitten is sitting calmly now.` : messageForPose("sitting"));
+  const actionSequencer = useRef<ReturnType<typeof createCatActionSequencer> | undefined>(undefined);
   const stage = kittenStage(state.progress.totalActiveDays);
 
   useEffect(() => {
@@ -659,33 +659,48 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
     clearTimer: (timerId) => window.clearTimeout(timerId),
     onAction: (action: IdleAction) => {
       setBlinking(action === "blink");
-      setPose(action === "walk" ? "walking" : action === "sleep" ? "sleeping" : "sitting");
+      const nextPose = action === "walk" ? "walking" : action === "sleep" ? "sleeping" : "sitting";
+      setPose(nextPose);
+      setNotice(messageForPose(nextPose));
       if (action === "walk") setWalkingLeft((value) => !value);
     },
-    onSit: () => { setPose("sitting"); setBlinking(false); },
+    onSit: () => { setPose("sitting"); setBlinking(false); setNotice(messageForPose("sitting")); },
   }), [idleReset, reducedMotion]);
 
-  useEffect(() => () => clearActionTimer.current?.(), []);
+  useEffect(() => () => actionSequencer.current?.cancel(), []);
 
-  function showAction(action: "food" | "toy" | "trick", message: string) {
-    clearActionTimer.current?.();
-    setBlinking(false);
-    setPose(poseForAction(action));
-    setNotice(message);
-    setIdleReset((value) => value + 1);
-    clearActionTimer.current = scheduleReturnToSitting(
+  function getActionSequencer() {
+    actionSequencer.current ??= createCatActionSequencer(
       (callback, delayMs) => window.setTimeout(callback, delayMs),
       (timerId) => window.clearTimeout(timerId),
-      () => { setPose("sitting"); setBlinking(false); },
     );
+    return actionSequencer.current;
+  }
+
+  function applyActionPose(nextPose: CatPose) {
+    setBlinking(false);
+    setPose(nextPose);
+    setNotice(messageForPose(nextPose));
+  }
+
+  function showAction(action: "food" | "toy" | "trick") {
+    const sequencer = getActionSequencer();
+    const started = action === "food"
+      ? sequencer.startFoodSequence(applyActionPose)
+      : sequencer.startTemporary(poseForAction(action), action === "trick" ? HAPPY_ROLL_DURATION_MS : USER_ACTION_DURATION_MS, applyActionPose);
+    if (!started) return false;
+    setIdleReset((value) => value + 1);
+    return true;
   }
 
   function showPreview(nextPose: CatPose) {
-    clearActionTimer.current?.();
+    getActionSequencer().cancel();
     setBlinking(false);
-    setPose(previewPose(nextPose));
     setIdleReset((value) => value + 1);
-    if (nextPose === "walking") setWalkingLeft((value) => !value);
+    const preview = previewPose(nextPose);
+    if (preview === "happy") getActionSequencer().startTemporary("happy", HAPPY_ROLL_DURATION_MS, applyActionPose);
+    else applyActionPose(preview);
+    if (preview === "walking") setWalkingLeft((value) => !value);
   }
 
   function buy(itemId: CatItemId) {
@@ -693,19 +708,20 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
       const result = purchaseCatItem(current, itemId);
       const item = CAT_ITEMS.find((candidate) => candidate.id === itemId)!;
       setNotice(result.outcome === "purchased" ? `${item.name} added to the room.` : result.outcome === "locked" ? `Unlocks at ${item.unlockActiveDays} active days.` : result.outcome === "insufficient" ? "Not enough points yet. Nothing was lost." : result.outcome === "already-owned" ? `${item.name} is already yours.` : "That item is unavailable.");
-      if (result.outcome === "purchased") showAction("trick", `${item.name} added to the room.`);
+      if (result.outcome === "purchased") showAction("trick");
       return result.state;
     });
   }
 
   function feed(itemId: CatItemId) {
+    if (getActionSequencer().isActive()) return;
     update((current) => {
       const next = consumeCatFood(current, itemId);
       if (next === current) {
         setNotice("There is none of that food in the cupboard yet.");
         return current;
       }
-      showAction("food", "The kitten enjoys a small snack.");
+      showAction("food");
       return next;
     });
   }
@@ -731,8 +747,8 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
           <PixelKitten pose={pose} walkingLeft={walkingLeft} blinking={blinking} />
           <p className="mx-auto max-w-md rounded-xl bg-white/80 px-3 py-2 text-sm text-stone-700" aria-live="polite">{notice}</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {ownsToy && <MiniButton onClick={() => showAction("toy", "A quick pounce and a happy tail swish.")}>Play with yarn</MiniButton>}
-            {ownsTrick && <MiniButton onClick={() => showAction("trick", "High five! A very small trick, performed proudly.")}>High five</MiniButton>}
+            {ownsToy && <MiniButton onClick={() => showAction("toy")}>Play with yarn</MiniButton>}
+            {ownsTrick && <MiniButton onClick={() => showAction("trick")}>High five</MiniButton>}
           </div>
           {ownedFood.length > 0 && <div className="mt-4"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Use food</p><div className="mt-2 flex flex-wrap justify-center gap-2">{ownedFood.map((item) => <button key={item.id} type="button" className="rounded-lg bg-white px-3 py-2 text-xs font-semibold shadow-sm focus-visible:outline-2 focus-visible:outline-fuchsia-700" onClick={() => feed(item.id)}>{item.name} × {inventoryQuantity(state, item.id)}</button>)}</div></div>}
           {process.env.NODE_ENV === "development" && <DevelopmentPosePreview onPreview={showPreview} />}
@@ -755,7 +771,7 @@ function PixelKitten({ pose, walkingLeft, blinking }: { pose: CatPose; walkingLe
       <svg className="kitten-sprite h-auto w-full" viewBox="0 0 160 110" shapeRendering="crispEdges" aria-hidden="true">
         <rect x="8" y="94" width="144" height="4" fill="#b08968"/><rect x="18" y="98" width="124" height="3" fill="#ddb892"/>
         <g className={pose === "walking" && walkingLeft ? "kitten-walker kitten-walker-left" : "kitten-walker"}><g className={pose === "walking" && walkingLeft ? "kitten-facing-left" : undefined}>
-          {pose === "sleeping" ? <SleepingKitten /> : pose === "walking" ? <WalkingKitten /> : pose === "eating" ? <EatingKitten /> : pose === "playing" ? <PlayingKitten /> : <SittingKitten happy={pose === "happy"} blinking={blinking} />}
+          {pose === "sleeping" ? <SleepingKitten /> : pose === "walking" ? <WalkingKitten /> : pose === "eating" ? <EatingKitten /> : pose === "playing" ? <PlayingKitten /> : pose === "happy" ? <HappyRollKitten /> : <SittingKitten blinking={blinking} />}
         </g></g>
       </svg>
     </div>
@@ -768,7 +784,7 @@ const furLight = "#e7bd8c";
 const ink = "#3f2d24";
 
 function CatFace({ x, y, happy = false, sleepy = false }: { x: number; y: number; happy?: boolean; sleepy?: boolean }) {
-  return <g><polygon points={`${x},${y + 12} ${x + 5},${y} ${x + 13},${y + 12}`} fill={furDark}/><polygon points={`${x + 27},${y + 12} ${x + 35},${y} ${x + 40},${y + 12}`} fill={furDark}/><polygon points={`${x + 4},${y + 9} ${x + 6},${y + 4} ${x + 10},${y + 10}`} fill="#e8a4a4"/><polygon points={`${x + 30},${y + 10} ${x + 34},${y + 4} ${x + 36},${y + 9}`} fill="#e8a4a4"/><rect x={x + 4} y={y + 9} width="32" height="24" fill={fur}/><rect x={x + 1} y={y + 15} width="38" height="12" fill={fur}/><rect x={x + 10} y={y + 20} width="20" height="13" fill={furLight}/>{sleepy || happy ? <><rect x={x + 9} y={y + 18} width="6" height="2" fill={ink}/><rect x={x + 25} y={y + 18} width="6" height="2" fill={ink}/></> : <><rect x={x + 10} y={y + 17} width="4" height="5" fill={ink}/><rect x={x + 26} y={y + 17} width="4" height="5" fill={ink}/></>}<rect x={x + 18} y={y + 23} width="4" height="3" fill="#9f5f5f"/><rect x={x + 19} y={y + 26} width="2" height="3" fill={ink}/><Whiskers x={x} y={y}/></g>;
+  return <g><polygon points={`${x},${y + 12} ${x + 5},${y} ${x + 13},${y + 12}`} fill={furDark}/><polygon points={`${x + 27},${y + 12} ${x + 35},${y} ${x + 40},${y + 12}`} fill={furDark}/><polygon points={`${x + 4},${y + 9} ${x + 6},${y + 4} ${x + 10},${y + 10}`} fill="#e8a4a4"/><polygon points={`${x + 30},${y + 10} ${x + 34},${y + 4} ${x + 36},${y + 9}`} fill="#e8a4a4"/><rect x={x + 4} y={y + 9} width="32" height="24" fill={fur}/><rect x={x + 1} y={y + 15} width="38" height="12" fill={fur}/><rect x={x + 10} y={y + 20} width="20" height="13" fill={furLight}/>{sleepy || happy ? <><rect x={x + 9} y={y + 18} width="6" height="2" fill={ink}/><rect x={x + 25} y={y + 18} width="6" height="2" fill={ink}/></> : <><rect x={x + 10} y={y + 17} width="4" height="5" fill={ink}/><rect x={x + 26} y={y + 17} width="4" height="5" fill={ink}/></>}<rect x={x + 18} y={y + 23} width="4" height="3" fill={furDark}/><rect x={x + 16} y={y + 27} width="3" height="1" fill={furDark}/><rect x={x + 21} y={y + 27} width="3" height="1" fill={furDark}/><Whiskers x={x} y={y}/></g>;
 }
 
 function Whiskers({ x, y }: { x: number; y: number }) {
@@ -779,8 +795,8 @@ function CurvedTail({ x, y, raised = false }: { x: number; y: number; raised?: b
   return raised ? <g fill={furDark}><rect x={x} y={y} width="7" height="25"/><rect x={x + 5} y={y - 8} width="16" height="7"/><rect x={x + 16} y={y - 3} width="7" height="12"/></g> : <g fill={furDark}><rect x={x} y={y} width="22" height="7"/><rect x={x + 17} y={y - 9} width="7" height="14"/><rect x={x + 20} y={y - 13} width="10" height="6"/></g>;
 }
 
-function SittingKitten({ happy, blinking }: { happy: boolean; blinking: boolean }) {
-  return <g><CurvedTail x={93} y={81} raised={happy}/><rect x="65" y="49" width="34" height="39" fill={fur}/><rect x="71" y="55" width="22" height="33" fill={furLight}/><CatFace x={62} y={17} happy={happy || blinking}/><rect x="64" y="82" width="8" height="12" fill={furDark}/><rect x="74" y="82" width="8" height="12" fill={fur}/><rect x="86" y="82" width="8" height="12" fill={fur}/><rect x="96" y="82" width="8" height="12" fill={furDark}/>{happy && <rect x="80" y="48" width="5" height="6" fill="#d97706"/>}</g>;
+function SittingKitten({ blinking }: { blinking: boolean }) {
+  return <g><CurvedTail x={93} y={81}/><rect x="65" y="49" width="34" height="39" fill={fur}/><rect x="71" y="55" width="22" height="33" fill={furLight}/><CatFace x={62} y={17} happy={blinking}/><rect x="64" y="82" width="8" height="12" fill={furDark}/><rect x="74" y="82" width="8" height="12" fill={fur}/><rect x="86" y="82" width="8" height="12" fill={fur}/><rect x="96" y="82" width="8" height="12" fill={furDark}/></g>;
 }
 
 function WalkingKitten() {
@@ -801,6 +817,16 @@ function EatingKitten() {
 
 function PlayingKitten() {
   return <g><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="74" y="81" width="8" height="13" fill={fur}/><rect x="91" y="78" width="28" height="7" fill={fur}/><rect x="105" y="84" width="8" height="8" fill={furDark}/><circle cx="130" cy="86" r="10" fill="#9c6644"/><path d="M120 87h20M126 78l8 17M122 81l15 11" stroke="#f0d5b5" strokeWidth="2"/></g>;
+}
+
+function HappyRollKitten() {
+  return <g><g className="roll-frame roll-frame-a"><HappyRollFrame frame={0}/></g><g className="roll-frame roll-frame-b"><HappyRollFrame frame={1}/></g><g className="roll-frame roll-frame-c"><HappyRollFrame frame={2}/></g></g>;
+}
+
+function HappyRollFrame({ frame }: { frame: 0 | 1 | 2 }) {
+  if (frame === 1) return <g><CurvedTail x={103} y={73} raised/><rect x="52" y="61" width="59" height="29" fill={fur}/><rect x="64" y="65" width="35" height="21" fill={furLight}/><CatFace x={28} y={54} happy/><rect x="59" y="48" width="9" height="22" fill={furDark}/><rect x="75" y="45" width="9" height="24" fill={fur}/><rect x="88" y="48" width="9" height="22" fill={fur}/><rect x="102" y="53" width="9" height="19" fill={furDark}/></g>;
+  if (frame === 2) return <g><CurvedTail x={38} y={76}/><rect x="49" y="64" width="62" height="27" fill={fur}/><rect x="62" y="67" width="36" height="20" fill={furLight}/><CatFace x={104} y={55} happy/><rect x="56" y="53" width="9" height="20" fill={furDark}/><rect x="70" y="49" width="9" height="22" fill={fur}/><rect x="86" y="50" width="9" height="22" fill={fur}/><rect x="99" y="55" width="9" height="18" fill={furDark}/></g>;
+  return <g><CurvedTail x={99} y={79}/><rect x="48" y="66" width="63" height="25" fill={fur}/><rect x="61" y="68" width="37" height="19" fill={furLight}/><CatFace x={27} y={57} happy/><rect x="58" y="55" width="9" height="18" fill={furDark}/><rect x="72" y="51" width="9" height="21" fill={fur}/><rect x="87" y="52" width="9" height="20" fill={fur}/><rect x="101" y="57" width="9" height="17" fill={furDark}/></g>;
 }
 
 function formatRoomDate(dateKey: string): string {

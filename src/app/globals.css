@@ -23,7 +23,7 @@ body {
 }
 
 .pixel-kitten {
-  width: clamp(120px, 14vw, 150px);
+  width: clamp(190px, 22vw, 230px);
 }
 
 .pixel-kitten svg {
@@ -48,6 +48,23 @@ body {
 
 .walk-frame-b {
   opacity: 0;
+}
+
+.roll-frame-b,
+.roll-frame-c {
+  opacity: 0;
+}
+
+.pixel-kitten-happy .roll-frame-a {
+  animation: kitten-roll-a 4s steps(1, end) 1;
+}
+
+.pixel-kitten-happy .roll-frame-b {
+  animation: kitten-roll-b 4s steps(1, end) 1;
+}
+
+.pixel-kitten-happy .roll-frame-c {
+  animation: kitten-roll-c 4s steps(1, end) 1;
 }
 
 .pixel-kitten-walking .walk-frame-a {
@@ -98,6 +115,22 @@ body {
   50%, 100% { opacity: 1; }
 }
 
+@keyframes kitten-roll-a {
+  0%, 32% { opacity: 1; }
+  33%, 100% { opacity: 0; }
+}
+
+@keyframes kitten-roll-b {
+  0%, 32% { opacity: 0; }
+  33%, 65% { opacity: 1; }
+  66%, 100% { opacity: 0; }
+}
+
+@keyframes kitten-roll-c {
+  0%, 65% { opacity: 0; }
+  66%, 100% { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -115,10 +148,19 @@ body {
   .pixel-kitten .walk-frame-b {
     display: none;
   }
+
+  .pixel-kitten .roll-frame {
+    animation: none;
+  }
+
+  .pixel-kitten .roll-frame-b,
+  .pixel-kitten .roll-frame-c {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
   .pixel-kitten {
-    width: clamp(90px, 28vw, 120px);
+    width: clamp(140px, 48vw, 180px);
   }
 }

@@ -91,6 +91,7 @@
 - [x] Implement a recognizable original pixel kitten with sitting, walking, sleeping, eating, playing, and happy poses plus reduced-motion-safe idle behavior.
 - [x] Refine every pose as a compact full-body SVG composition on one floor line, with a fixed-bowl eating pose and synchronized stepped two-frame walk.
 - [x] Delay idle behavior for five minutes, randomize later actions at 5–10 minute intervals, return reactions to sitting, and expose non-persistent development-only pose controls.
+- [x] Add a guarded food/treat sequence (eat, belly-roll, sit), pose-matched messages, and a reduced-motion-safe three-frame happy roll.
 - [x] Support repeatable consumable food and one-time durable purchases without hunger or upkeep mechanics.
 - [x] Add non-judgmental exploring messages after absent days.
 - [x] Count unique qualifying active days, journey progress, gentle streaks, kitten stages, and persistent milestones at 21, 50, and 100 days.

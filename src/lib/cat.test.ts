@@ -4,9 +4,13 @@ import test from "node:test";
 import { normalizeAppState } from "./app-state.ts";
 import {
   FIRST_IDLE_DELAY_MS,
+  EATING_DURATION_MS,
+  HAPPY_ROLL_DURATION_MS,
   MAX_IDLE_DELAY_MS,
   MIN_IDLE_DELAY_MS,
   USER_ACTION_DURATION_MS,
+  createCatActionSequencer,
+  messageForPose,
   poseForAction,
   previewPose,
   randomIdleDelay,
@@ -114,6 +118,36 @@ test("user actions map only to their relevant poses", () => {
   assert.equal(poseForAction("food"), "eating");
   assert.equal(poseForAction("toy"), "playing");
   assert.equal(poseForAction("trick"), "happy");
+});
+
+test("food and treat feedback runs eat, happy roll, then sitting exactly once", () => {
+  const callbacks = new Map<number, () => void>();
+  const delays: number[] = [];
+  let nextId = 0;
+  const poses: string[] = [];
+  const sequencer = createCatActionSequencer(
+    (callback, delayMs) => { nextId += 1; callbacks.set(nextId, callback); delays.push(delayMs); return nextId; },
+    (timerId) => { callbacks.delete(timerId); },
+  );
+  assert.equal(sequencer.startFoodSequence((pose) => poses.push(pose)), true);
+  assert.equal(sequencer.startFoodSequence((pose) => poses.push(pose)), false);
+  assert.deepEqual(poses, ["eating"]);
+  assert.deepEqual(delays, [EATING_DURATION_MS]);
+  callbacks.get(1)?.();
+  assert.deepEqual(poses, ["eating", "happy"]);
+  assert.deepEqual(delays, [EATING_DURATION_MS, HAPPY_ROLL_DURATION_MS]);
+  callbacks.get(2)?.();
+  assert.deepEqual(poses, ["eating", "happy", "sitting"]);
+  assert.equal(sequencer.isActive(), false);
+});
+
+test("every visible pose has a matching message", () => {
+  assert.match(messageForPose("sitting"), /sitting calmly/);
+  assert.match(messageForPose("walking"), /exploring/);
+  assert.match(messageForPose("sleeping"), /sleeping/);
+  assert.match(messageForPose("eating"), /eating or drinking/);
+  assert.match(messageForPose("playing"), /playing/);
+  assert.match(messageForPose("happy"), /happy and content/);
 });
 
 test("qualifying actions count distinct local active days only once", () => {
