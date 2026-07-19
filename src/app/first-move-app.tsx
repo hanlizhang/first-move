@@ -54,6 +54,7 @@ import { inventoryQuantity, purchaseCatItem, useFood as consumeCatFood } from "@
 import { HAPPY_ROLL_DURATION_MS, USER_ACTION_DURATION_MS, createCatActionSequencer, messageForPose, poseForAction, previewPose, scheduleIdleBehavior, type CatPose, type IdleAction } from "@/lib/cat-behavior";
 import { gentleReturnMessage, kittenStage, syncProgress } from "@/lib/progress";
 import { deleteReflection, hasReflectionContent, saveReflection, type ReflectionInput } from "@/lib/reflections";
+import { getCalendarMonth, getDayDetail, getTrendSummary, HISTORY_CATEGORIES, type TrendSummary } from "@/lib/history";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -514,19 +515,81 @@ function ReflectionField({ id, label, value, onChange }: { id: string; label: st
 }
 
 function TodayOverview({ state, today, update }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void }) {
+  const [tab, setTab] = useState<"today" | "trends" | "calendar">("today");
   const summary = getTodaySummary(state, today);
   const timeline = getTodayTimeline(state, today);
   return (
     <section id="today" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-amber-200 bg-amber-50 p-6 shadow-sm sm:p-8" aria-labelledby="today-heading">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Today</p>
       <h2 id="today-heading" className="mt-2 text-3xl font-bold tracking-tight">Your intentional time</h2>
-      <div className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction}><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
-      <DailyReflection state={state} today={today} update={update} />
-      <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
-      {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{entry.kind === "reflection" ? "Private Mini Journal entry" : <>{entry.direction} · {entry.kind === "session" ? (entry.outcome === "stopped" ? `Stopped intentionally · ${formatDuration(entry.durationMs)}` : `Session · ${formatDuration(entry.durationMs)}`) : entry.kind === "task" ? "Task completed" : "Habit checked in"}</>}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
+      <div className="mt-5 flex gap-1 rounded-xl bg-amber-100 p-1" role="tablist" aria-label="Today views">{(["today", "trends", "calendar"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={tab === value} className={`min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-amber-700 ${tab === value ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:bg-white/60"}`} onClick={() => setTab(value)}>{value}</button>)}</div>
+      {tab === "today" && <div role="tabpanel">
+        <div className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction}><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
+        <DailyReflection state={state} today={today} update={update} />
+        <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
+        {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{entry.kind === "reflection" ? "Private Mini Journal entry" : <>{entry.direction} · {entry.kind === "session" ? (entry.outcome === "stopped" ? `Stopped intentionally · ${formatDuration(entry.durationMs)}` : `Session · ${formatDuration(entry.durationMs)}`) : entry.kind === "task" ? "Task completed" : "Habit checked in"}</>}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
+      </div>}
+      {tab === "trends" && <TrendsPanel state={state} today={today} />}
+      {tab === "calendar" && <CalendarPanel state={state} today={today} onShowToday={() => setTab("today")} />}
     </section>
   );
 }
+
+const chartColors: Record<(typeof HISTORY_CATEGORIES)[number], string> = { "Work & Study": "#2563eb", "Daily Life": "#d97706", "Exercise & Movement": "#059669", "Intentional Entertainment": "#9333ea", Rest: "#0e7490", Uncategorized: "#78716c" };
+
+function TrendsPanel({ state, today }: { state: AppState; today: string }) {
+  const [period, setPeriod] = useState<7 | 30>(7);
+  const trend = getTrendSummary(state, today, period);
+  return <div className="mt-5" role="tabpanel"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-bold">Trends</h3><label className="text-sm font-semibold">Period <select className="ml-2 rounded-lg border border-amber-200 bg-white px-3 py-2 font-normal" value={period} onChange={(event) => setPeriod(Number(event.target.value) as 7 | 30)}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select></label></div>
+    <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Total tracked time" value={formatDuration(trend.totalTrackedMs)} /><Metric label="Active days" value={String(trend.activeDays)} /><Metric label="Completed First Moves" value={String(trend.completedFirstMoves)} /><Metric label="Completed sessions" value={String(trend.completedSessions)} /></dl>
+    {trend.totalTrackedMs === 0 ? <div className="mt-5"><EmptyState>No tracked sessions in this period. Rest, entertainment, and every direction are shown neutrally when recorded.</EmptyState></div> : <div className="mt-5 grid gap-5 lg:grid-cols-[1.35fr_0.65fr]"><LineChart trend={trend} /><CategoryChart trend={trend} /></div>}
+  </div>;
+}
+
+function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-white p-4"><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 text-lg font-bold">{value}</dd></div>; }
+
+function LineChart({ trend }: { trend: TrendSummary }) {
+  const width = 600, height = 180, pad = 20, max = Math.max(...trend.daily.map((day) => day.totalMs), 1);
+  const points = trend.daily.map((day, index) => `${pad + index * ((width - pad * 2) / Math.max(1, trend.daily.length - 1))},${height - pad - (day.totalMs / max) * (height - pad * 2)}`).join(" ");
+  return <figure className="rounded-2xl bg-white p-4"><figcaption className="font-bold">Intentional tracked time by day</figcaption><svg className="mt-3 h-auto w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Daily tracked time across ${trend.daily.length} days`}><line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="#d6d3d1" /><polyline points={points} fill="none" stroke="#b45309" strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" />{trend.daily.map((day, index) => <circle key={day.dateKey} cx={pad + index * ((width - pad * 2) / Math.max(1, trend.daily.length - 1))} cy={height - pad - (day.totalMs / max) * (height - pad * 2)} r="5" fill="#fff" stroke="#b45309"><title>{formatShortDate(day.dateKey)}: {formatDuration(day.totalMs)}</title></circle>)}</svg><p className="mt-2 text-xs text-stone-500">{formatShortDate(trend.daily[0].dateKey)} – {formatShortDate(trend.daily.at(-1)!.dateKey)}. Peak day: {formatDuration(max)}.</p></figure>;
+}
+
+function CategoryChart({ trend }: { trend: TrendSummary }) {
+  const radius = 42, circumference = 2 * Math.PI * radius;
+  const segments = HISTORY_CATEGORIES.map((category, index) => ({
+    category,
+    length: trend.totalTrackedMs ? (trend.byCategory[category] / trend.totalTrackedMs) * circumference : 0,
+    offset: HISTORY_CATEGORIES.slice(0, index).reduce((total, previous) => total + (trend.totalTrackedMs ? (trend.byCategory[previous] / trend.totalTrackedMs) * circumference : 0), 0),
+  }));
+  return <figure className="rounded-2xl bg-white p-4"><figcaption className="font-bold">Time by category</figcaption><svg className="mx-auto mt-3 h-40 w-40 -rotate-90" viewBox="0 0 120 120" role="img" aria-label="Category composition donut chart"><circle cx="60" cy="60" r={radius} fill="none" stroke="#e7e5e4" strokeWidth="20" />{segments.map(({ category, length, offset }) => <circle key={category} cx="60" cy="60" r={radius} fill="none" stroke={chartColors[category]} strokeWidth="20" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset}><title>{category}: {formatDuration(trend.byCategory[category])}</title></circle>)}</svg><ul className="mt-3 space-y-1.5 text-xs">{HISTORY_CATEGORIES.map((category) => <li key={category} className="flex justify-between gap-3"><span><span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: chartColors[category] }} aria-hidden="true" />{category}</span><span className="font-semibold">{formatDuration(trend.byCategory[category])}</span></li>)}</ul></figure>;
+}
+
+function CalendarPanel({ state, today, onShowToday }: { state: AppState; today: string; onShowToday: () => void }) {
+  const todayDate = new Date(`${today}T12:00:00`);
+  const [monthCursor, setMonthCursor] = useState(() => new Date(todayDate.getFullYear(), todayDate.getMonth(), 1, 12));
+  const [selected, setSelected] = useState(today);
+  const days = getCalendarMonth(state, monthCursor.getFullYear(), monthCursor.getMonth(), today);
+  const detail = getDayDetail(state, selected);
+  const maxTracked = Math.max(...days.map((day) => day.trackedMs), 1);
+  function moveMonth(offset: number) { setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1, 12)); }
+  return <div className="mt-5" role="tabpanel"><div className="flex items-center justify-between gap-3"><button type="button" className="rounded-lg border border-amber-200 bg-white px-3 py-2 font-semibold" onClick={() => moveMonth(-1)} aria-label="Previous month">←</button><h3 className="text-xl font-bold">{new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(monthCursor)}</h3><button type="button" className="rounded-lg border border-amber-200 bg-white px-3 py-2 font-semibold" onClick={() => moveMonth(1)} aria-label="Next month">→</button></div>
+    <div className="mt-4 rounded-2xl bg-white p-3"><div className="grid grid-cols-7 text-center text-xs font-semibold text-stone-500">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day} className="py-2">{day}</span>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const intensity = day.trackedMs / maxTracked; return <button key={day.dateKey} type="button" onClick={() => setSelected(day.dateKey)} aria-label={`${formatLongDate(day.dateKey)}${day.isActive ? ", active day" : ""}, ${formatDuration(day.trackedMs)} tracked`} aria-pressed={selected === day.dateKey} className={`relative min-h-11 rounded-lg border text-sm focus-visible:outline-2 focus-visible:outline-amber-700 ${selected === day.dateKey ? "border-stone-900 ring-2 ring-stone-900" : day.isToday ? "border-amber-600" : "border-transparent"} ${day.inMonth ? "text-stone-900" : "text-stone-400"}`} style={{ backgroundColor: day.trackedMs ? `rgba(217, 119, 6, ${0.1 + intensity * 0.35})` : undefined }}><span>{day.dayNumber}</span>{day.isActive && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-stone-700" aria-hidden="true" />}</button>; })}</div><p className="mt-3 text-xs text-stone-500">Dot: active day. Deeper shading: more tracked minutes. Outline: today; dark ring: selected date.</p></div>
+    <DayDetailPanel detail={detail} isToday={selected === today} onShowToday={onShowToday} />
+  </div>;
+}
+
+function DayDetailPanel({ detail, isToday, onShowToday }: { detail: ReturnType<typeof getDayDetail>; isToday: boolean; onShowToday: () => void }) {
+  const hasAnything = detail.totalTrackedMs > 0 || detail.completedTasks.length > 0 || detail.habitCheckIns.length > 0 || detail.journalEntry;
+  return <section className="mt-5 rounded-2xl bg-white p-5" aria-live="polite"><h4 className="text-lg font-bold">{formatLongDate(detail.dateKey)}</h4><p className="mt-1 text-sm text-stone-600">Total tracked: <strong>{formatDuration(detail.totalTrackedMs)}</strong></p>
+    {!hasAnything ? <p className="mt-4 text-sm text-stone-500">No recorded activity for this date.</p> : <><dl className="mt-4 grid gap-2 sm:grid-cols-2">{HISTORY_CATEGORIES.map((category) => detail.byCategory[category] > 0 && <div key={category} className="flex justify-between gap-3 text-sm"><dt>{category}</dt><dd className="font-semibold">{formatDuration(detail.byCategory[category])}</dd></div>)}</dl><DetailList title="Completed tasks" items={detail.completedTasks.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Habit check-ins" items={detail.habitCheckIns.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Sessions" items={detail.sessions.map((session) => `${session.label} · ${session.direction} · ${session.status === "stopped" ? "Stopped intentionally" : "Completed"} · ${formatDuration(session.actualElapsedMs ?? 0)}`)} />{detail.journalEntry && <div className="mt-4"><h5 className="text-sm font-bold">Mini Journal</h5><ul className="mt-1 space-y-1 text-sm text-stone-600">{detail.journalEntry.completed && <li>One thing I did: {detail.journalEntry.completed}</li>}{detail.journalEntry.difficult && <li>What felt hard: {detail.journalEntry.difficult}</li>}{detail.journalEntry.nextStep && <li>My next small step: {detail.journalEntry.nextStep}</li>}{detail.journalEntry.freeText && <li>Anything else: {detail.journalEntry.freeText}</li>}{detail.journalEntry.mood && <li>Mood: {detail.journalEntry.mood}/5</li>}{detail.journalEntry.energy && <li>Energy: {detail.journalEntry.energy}/5</li>}</ul></div>}</>}
+    {isToday && <nav className="mt-5 flex flex-wrap gap-2 text-sm font-semibold" aria-label="Edit today's activity"><a className="rounded-lg border border-stone-200 px-3 py-2" href="#focus">Focus</a><a className="rounded-lg border border-stone-200 px-3 py-2" href="#tasks">Tasks</a><a className="rounded-lg border border-stone-200 px-3 py-2" href="#habits">Habits</a><button type="button" className="rounded-lg border border-stone-200 px-3 py-2" onClick={onShowToday}>Mini Journal</button></nav>}
+  </section>;
+}
+
+function DetailList({ title, items }: { title: string; items: string[] }) { return <div className="mt-4"><h5 className="text-sm font-bold">{title}</h5>{items.length ? <ul className="mt-1 space-y-1 text-sm text-stone-600">{items.map((item, index) => <li key={`${item}:${index}`}>{item}</li>)}</ul> : <p className="mt-1 text-sm text-stone-400">None</p>}</div>; }
+
+function formatShortDate(dateKey: string): string { return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(`${dateKey}T12:00:00`)); }
+function formatLongDate(dateKey: string): string { return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${dateKey}T12:00:00`)); }
 
 function sessionLinkedLabel(session: ActivitySession, state: AppState): string | undefined {
   if (session.linkedTaskId) return state.tasks.find((task) => task.id === session.linkedTaskId)?.title;

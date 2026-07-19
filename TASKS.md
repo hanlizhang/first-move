@@ -70,6 +70,23 @@
 
 **Status:** Complete. TASK-03 remains open for intentional-entertainment outcomes and optional completion feedback controls.
 
+## TASK-03C: Trends and Calendar history
+
+- [x] Add Today, Trends, and Calendar as secondary tabs inside the existing Today area.
+- [x] Aggregate closed-session time into local-date 7-day and 30-day trends, category composition, and neutral summary metrics.
+- [x] Add accessible, dependency-free SVG line and donut charts with textual values and empty states.
+- [x] Add a navigable local monthly calendar with active-day/intensity markers and selectable day history.
+- [x] Show read-only daily sessions, task completions, habit check-ins, category totals, and Mini Journal content, with edit links for today.
+
+### Acceptance criteria
+
+- Trends use actual duration from completed and intentionally stopped sessions; running and paused sessions are excluded.
+- Local date boundaries, period lengths, category totals, month boundaries, empty data, and day details are covered by tests.
+- Rest and Intentional Entertainment are ordinary categories, and the interface does not rank directions or equate more time with success.
+- History reads existing local records without changing rewards, persistence, or stored activity.
+
+**Status:** Complete. TASK-03 remains open for intentional-entertainment outcomes and optional completion feedback controls.
+
 ## TASK-03: Timer, rewards, activity timeline, and intentional entertainment
 
 - [ ] Implement timestamp-based start, pause, resume, cancel, finish, tab-throttling correction, and reload recovery.
