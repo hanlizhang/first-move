@@ -12,6 +12,7 @@ import {
   type HabitSchedule,
   type RewardEvent,
   type IntendedDuration,
+  type JournalEntry,
   type StuckState,
   type Task,
   type Weekday,
@@ -19,6 +20,7 @@ import {
 } from "./models.ts";
 import { catItem, isCatItemId } from "./cat-items.ts";
 import { localDateKey } from "./dates.ts";
+import { isDateKey } from "./dates.ts";
 import { syncProgress } from "./progress.ts";
 import { HABIT_REWARD_POINTS, TASK_REWARD_POINTS } from "./rewards.ts";
 
@@ -39,9 +41,7 @@ export function normalizeAppState(input: unknown): AppState {
   const rewardEvents = Array.isArray(input.rewardEvents)
     ? input.rewardEvents.filter(isRewardEvent)
     : [];
-  const journalEntries = Array.isArray(input.journalEntries)
-    ? input.journalEntries.filter(isJournalEntry)
-    : [];
+  const journalEntries = normalizeJournalEntries(input.journalEntries);
   const inventory = normalizeInventory(input.inventory);
   const progressInput = isRecord(input.progress) ? input.progress : {};
   const derivedPoints = rewardEvents.reduce((total, event) => total + event.points, 0);
@@ -337,7 +337,7 @@ function isRewardEvent(value: unknown): value is RewardEvent {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
-    (value.source === "task" || value.source === "habit" || value.source === "session" || value.source === "morning" || value.source === "store") &&
+    (value.source === "task" || value.source === "habit" || value.source === "session" || value.source === "morning" || value.source === "reflection" || value.source === "store") &&
     typeof value.sourceId === "string" &&
     typeof value.dateKey === "string" &&
     typeof value.points === "number" &&
@@ -346,8 +346,37 @@ function isRewardEvent(value: unknown): value is RewardEvent {
   );
 }
 
-function isJournalEntry(value: unknown): value is AppState["journalEntries"][number] {
-  return isRecord(value) && typeof value.dateKey === "string" && typeof value.updatedAt === "string";
+function normalizeJournalEntries(value: unknown): JournalEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries = new Map<string, JournalEntry>();
+  for (const candidate of value) {
+    if (!isJournalEntry(candidate)) continue;
+    entries.set(candidate.dateKey, candidate);
+  }
+  return [...entries.values()];
+}
+
+function isJournalEntry(value: unknown): value is JournalEntry {
+  return (
+    isRecord(value) &&
+    isDateKey(value.dateKey) &&
+    typeof value.updatedAt === "string" &&
+    optionalText(value.whatHelped) &&
+    optionalText(value.completed) &&
+    optionalText(value.difficult) &&
+    optionalText(value.nextStep) &&
+    optionalText(value.freeText) &&
+    optionalRating(value.mood) &&
+    optionalRating(value.energy)
+  );
+}
+
+function optionalText(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && value.length <= 1000);
+}
+
+function optionalRating(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5);
 }
 
 function normalizeInventory(value: unknown): AppState["inventory"] {

@@ -133,12 +133,12 @@ Each direction uses neutral language and can be changed before or after a sessio
 ### Daily Reflection
 
 - Offer a short, optional reflection after a session or from Today:
-  - what helped
-  - one thing completed
+  - one thing I did today
   - what felt difficult
   - one small next step
   - optional mood 1–5, energy 1–5, and free text
 - Save at most one editable reflection per local day, with every field optional.
+- Award 2 local points on the first save for a date; edits and deletion followed by recreation never award that date again.
 - Keep reflections on-device and outside all AI requests. Never score, diagnose, infer sentiment, or produce mental-health conclusions.
 
 ## Navigation and experience

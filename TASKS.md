@@ -109,10 +109,10 @@
 
 ## TASK-05: Daily Reflection
 
-- [ ] Add one optional, editable local reflection per day with what helped, one thing completed, what felt difficult, one small next step, and optional mood, energy, and free text.
-- [ ] Make reflection available after a session and from Today, with an easy skip path.
-- [ ] Record reflection completion in the Today timeline without analyzing content.
-- [ ] Keep reflection storage and data flow separate from AI requests.
+- [x] Add one optional, editable local reflection per day with one thing completed, what felt difficult, one small next step, and optional mood, energy, and notes.
+- [x] Make reflection available from Today with an easy skip path.
+- [x] Record reflection completion in the Today timeline without analyzing content.
+- [x] Keep reflection storage and data flow separate from AI requests.
 
 ### Acceptance criteria
 
@@ -120,6 +120,8 @@
 - Reflection is described as private and non-diagnostic and performs no scoring, sentiment analysis, or mental-health inference.
 - Reflection text remains on-device and never enters organization or First Move AI requests.
 - Repeated edits do not duplicate the daily timeline completion event.
+
+**Status:** Complete. A stable date-based reward record prevents repeat rewards after edits, deletion, or recreation.
 
 ## TASK-06: Optional AI organization and Make It Smaller
 

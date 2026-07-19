@@ -82,7 +82,7 @@ export interface ActivitySession {
   reviewedAt?: string;
 }
 
-export type RewardSource = "task" | "habit" | "session" | "morning" | "store";
+export type RewardSource = "task" | "habit" | "session" | "morning" | "reflection" | "store";
 
 export interface RewardEvent {
   id: string;

@@ -30,7 +30,7 @@ export function syncProgress(state: AppState, today = localDateKey(), ensureFirs
 export function qualifyingActiveDates(state: AppState): string[] {
   const dates = new Set<string>();
   for (const event of state.rewardEvents) {
-    if ((event.source === "task" || event.source === "habit" || event.source === "morning") && isDateKey(event.dateKey)) {
+    if ((event.source === "task" || event.source === "habit" || event.source === "morning" || event.source === "reflection") && isDateKey(event.dateKey)) {
       dates.add(event.dateKey);
     }
   }

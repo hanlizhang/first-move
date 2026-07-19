@@ -53,6 +53,7 @@ import { CAT_ITEMS, STORE_CATEGORIES, isCatItemUnlocked, type CatItemId } from "
 import { inventoryQuantity, purchaseCatItem, useFood as consumeCatFood } from "@/lib/cat-store";
 import { HAPPY_ROLL_DURATION_MS, USER_ACTION_DURATION_MS, createCatActionSequencer, messageForPose, poseForAction, previewPose, scheduleIdleBehavior, type CatPose, type IdleAction } from "@/lib/cat-behavior";
 import { gentleReturnMessage, kittenStage, syncProgress } from "@/lib/progress";
+import { deleteReflection, hasReflectionContent, saveReflection, type ReflectionInput } from "@/lib/reflections";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -131,7 +132,7 @@ export default function FirstMoveApp() {
 
         <FocusPanel key={pendingIntent?.id ?? "focus"} state={state} update={update} />
 
-        <TodayOverview state={state} today={today} />
+        <TodayOverview state={state} today={today} update={update} />
 
         <section id="tasks" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="tasks-heading">
           <div className="max-w-2xl">
@@ -448,7 +449,71 @@ function SessionReview({ session, state, update }: { session: ActivitySession; s
   );
 }
 
-function TodayOverview({ state, today }: { state: AppState; today: string }) {
+function DailyReflection({ state, today, update }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void }) {
+  const existing = state.journalEntries.find((entry) => entry.dateKey === today);
+  const [mood, setMood] = useState(existing?.mood ? String(existing.mood) : "");
+  const [energy, setEnergy] = useState(existing?.energy ? String(existing.energy) : "");
+  const [completed, setCompleted] = useState(existing?.completed ?? "");
+  const [difficult, setDifficult] = useState(existing?.difficult ?? "");
+  const [nextStep, setNextStep] = useState(existing?.nextStep ?? "");
+  const [freeText, setFreeText] = useState(existing?.freeText ?? "");
+  const [notice, setNotice] = useState("");
+
+  const input: ReflectionInput = {
+    mood: mood ? Number(mood) as 1 | 2 | 3 | 4 | 5 : undefined,
+    energy: energy ? Number(energy) as 1 | 2 | 3 | 4 | 5 : undefined,
+    completed,
+    difficult,
+    nextStep,
+    freeText,
+  };
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!hasReflectionContent(input)) return;
+    update((current) => saveReflection(current, today, input));
+    setNotice(existing ? "Mini Journal updated." : "Mini Journal saved privately in this browser.");
+  }
+
+  function remove() {
+    update((current) => deleteReflection(current, today));
+    setMood(""); setEnergy(""); setCompleted(""); setDifficult(""); setNextStep(""); setFreeText("");
+    setNotice("Mini Journal entry removed. There is no penalty.");
+  }
+
+  return (
+    <section className="mt-7 rounded-2xl border border-amber-200 bg-white p-5" aria-labelledby="reflection-heading">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h3 id="reflection-heading" className="text-xl font-bold">Mini Journal</h3><p className="mt-1 text-sm text-stone-600">A few optional notes about today. Save any subset that feels useful.</p></div>
+        {existing && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Saved today</span>}
+      </div>
+      <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+        <RatingField label="Mood" value={mood} onChange={setMood} />
+        <RatingField label="Energy" value={energy} onChange={setEnergy} />
+        <ReflectionField id="reflection-completed" label="One thing I did" value={completed} onChange={setCompleted} />
+        <ReflectionField id="reflection-difficult" label="What felt hard" value={difficult} onChange={setDifficult} />
+        <ReflectionField id="reflection-next" label="My next small step" value={nextStep} onChange={setNextStep} />
+        <ReflectionField id="reflection-notes" label="Anything else" value={freeText} onChange={setFreeText} />
+        <div className="flex flex-wrap gap-2 sm:col-span-2">
+          <button disabled={!hasReflectionContent(input)} className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900">{existing ? "Update journal" : "Save journal"}</button>
+          {existing && <SecondaryButton onClick={remove}>Delete today&apos;s entry</SecondaryButton>}
+        </div>
+      </form>
+      <p className="mt-4 text-xs text-stone-500">Private: entries remain in this browser and are not analyzed or sent to AI.</p>
+      {notice && <p className="mt-2 text-sm font-semibold text-emerald-700" role="status">{notice}</p>}
+    </section>
+  );
+}
+
+function RatingField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><select className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)}><option value="">Not selected</option>{[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}</option>)}</select></label>;
+}
+
+function ReflectionField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+  return <label htmlFor={id} className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><textarea id={id} rows={2} maxLength={1000} className="mt-2 block w-full resize-y rounded-xl border border-stone-200 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function TodayOverview({ state, today, update }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void }) {
   const summary = getTodaySummary(state, today);
   const timeline = getTodayTimeline(state, today);
   return (
@@ -456,8 +521,9 @@ function TodayOverview({ state, today }: { state: AppState; today: string }) {
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Today</p>
       <h2 id="today-heading" className="mt-2 text-3xl font-bold tracking-tight">Your intentional time</h2>
       <div className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction}><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
+      <DailyReflection state={state} today={today} update={update} />
       <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
-      {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, or habit check-in will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{entry.direction} · {entry.kind === "session" ? (entry.outcome === "stopped" ? `Stopped intentionally · ${formatDuration(entry.durationMs)}` : `Session · ${formatDuration(entry.durationMs)}`) : entry.kind === "task" ? "Task completed" : "Habit checked in"}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
+      {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{entry.kind === "reflection" ? "Private Mini Journal entry" : <>{entry.direction} · {entry.kind === "session" ? (entry.outcome === "stopped" ? `Stopped intentionally · ${formatDuration(entry.durationMs)}` : `Session · ${formatDuration(entry.durationMs)}`) : entry.kind === "task" ? "Task completed" : "Habit checked in"}</>}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
     </section>
   );
 }
