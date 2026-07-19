@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   addHabit,
@@ -24,6 +24,7 @@ import {
   STUCK_STATES,
   WEEKDAYS,
   type ActivityIntent,
+  type ActivitySession,
   type AppState,
   type Direction,
   type Habit,
@@ -35,6 +36,19 @@ import {
 } from "@/lib/models";
 import { updateAppState, useAppState } from "@/lib/store";
 import { easierTemplateFor, nextShorterDuration, templatesFor } from "@/lib/templates";
+import {
+  completeSession,
+  elapsedMs,
+  getOpenSession,
+  pauseSession,
+  remainingMs,
+  resumeSession,
+  reviewSession,
+  startCountdown,
+  startStopwatch,
+  stopSession,
+} from "@/lib/sessions";
+import { getTaskTrackedMs, getTodaySummary, getTodayTimeline } from "@/lib/summaries";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -51,9 +65,9 @@ export default function FirstMoveApp() {
   const today = localDateKey();
   const pendingIntent = getPendingIntent(state);
 
-  function update(recipe: (current: AppState) => AppState) {
+  const update = useCallback((recipe: (current: AppState) => AppState) => {
     updateAppState(recipe);
-  }
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-stone-900">
@@ -66,12 +80,13 @@ export default function FirstMoveApp() {
             <ul className="flex gap-1 text-sm font-semibold text-stone-600">
               <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#moves">First Moves</a></li>
               <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#focus">Focus</a></li>
+              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#today">Today</a></li>
               <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#tasks">Tasks</a></li>
               <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#habits">Habits</a></li>
             </ul>
           </nav>
           <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
-            <span aria-hidden="true">✦</span> {state.progress.points} points
+            <span aria-hidden="true">✦</span> {formatPoints(state.progress.points)} points
           </div>
         </div>
       </header>
@@ -100,12 +115,14 @@ export default function FirstMoveApp() {
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-700">This task only</p>
             <h2 id="foundation-heading" className="mt-3 text-2xl font-bold tracking-tight">A calm local starting point</h2>
             <p className="mt-3 text-sm leading-6 text-orange-950/70">
-              Choose and persist what you intend to do next. No countdown starts yet: actual tracked time, outcomes, and session rewards belong to TASK-03.
+              Choose a small move, track the time you spend, and keep the outcome neutral. Your activity stays on this device.
             </p>
           </section>
         </div>
 
-        <FocusPreview pendingIntent={pendingIntent} tasks={state.tasks} habits={state.habits} />
+        <FocusPanel key={pendingIntent?.id ?? "focus"} state={state} update={update} />
+
+        <TodayOverview state={state} today={today} />
 
         <section id="tasks" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="tasks-heading">
           <div className="max-w-2xl">
@@ -113,7 +130,7 @@ export default function FirstMoveApp() {
             <h2 id="tasks-heading" className="mt-2 text-3xl font-bold tracking-tight">Tasks</h2>
             <p className="mt-2 text-sm leading-6 text-stone-600">Completing a task earns 5 points once per local day, even if it is unchecked and completed again.</p>
           </div>
-          <TaskEditor tasks={state.tasks} today={today} update={update} />
+          <TaskEditor state={state} today={today} update={update} />
         </section>
 
         <section id="habits" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="habits-heading">
@@ -255,21 +272,212 @@ function FirstMovePicker({
   );
 }
 
-function FocusPreview({ pendingIntent, tasks, habits }: { pendingIntent?: ActivityIntent; tasks: Task[]; habits: Habit[] }) {
+function FocusPanel({ state, update }: { state: AppState; update: (recipe: (state: AppState) => AppState) => void }) {
+  const pendingIntent = getPendingIntent(state);
+  const openSession = getOpenSession(state);
+  const lastClosedSession = [...state.sessions].reverse().find((session) => session.status === "completed" || session.status === "stopped");
+  const [countdownDuration, setCountdownDuration] = useState<number>(pendingIntent?.intendedDurationMinutes ?? 25);
+  const [customDuration, setCustomDuration] = useState("");
+  const [stopwatchLink, setStopwatchLink] = useState("");
+  const [stopwatchDirection, setStopwatchDirection] = useState<Direction>(DIRECTIONS[0]);
+  const [stopwatchLabel, setStopwatchLabel] = useState("");
+  const [nowMs, setNowMs] = useState(0);
+
+  useEffect(() => {
+    if (!openSession) return;
+    const tick = window.setInterval(() => {
+      const current = Date.now();
+      setNowMs(current);
+      if (
+        openSession.status === "running" &&
+        openSession.mode === "countdown" &&
+        remainingMs(openSession, current) === 0
+      ) {
+        update((currentState) => completeSession(currentState, openSession.id, current));
+      }
+    }, 500);
+    return () => window.clearInterval(tick);
+  }, [openSession, update]);
+
+  function chooseStopwatchLink(value: string) {
+    setStopwatchLink(value);
+    const [kind, id] = value.split(":");
+    const source =
+      kind === "task"
+        ? state.tasks.find((task) => task.id === id)
+        : kind === "habit"
+          ? state.habits.find((habit) => habit.id === id)
+          : state.activityIntents.find((intent) => intent.id === id);
+    if (source) {
+      setStopwatchDirection(source.direction);
+      setStopwatchLabel("title" in source ? source.title : source.moveText);
+    }
+  }
+
+  function beginStopwatch() {
+    const [kind, id] = stopwatchLink.split(":");
+    update((current) =>
+      startStopwatch(current, {
+        direction: stopwatchDirection,
+        label: stopwatchLabel || undefined,
+        linkedTaskId: kind === "task" ? id : undefined,
+        linkedHabitId: kind === "habit" ? id : undefined,
+        linkedIntentId: kind === "intent" ? id : undefined,
+      }),
+    );
+  }
+
+  const displayMs = openSession
+    ? openSession.mode === "countdown"
+      ? remainingMs(openSession, nowMs) ?? 0
+      : elapsedMs(openSession, nowMs)
+    : 0;
+
   return (
     <section id="focus" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-sky-200 bg-sky-50 p-6 shadow-sm sm:p-8" aria-labelledby="focus-heading">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Focus</p>
-      <h2 id="focus-heading" className="mt-2 text-3xl font-bold tracking-tight">Your next move</h2>
-      {pendingIntent ? (
-        <div className="mt-5 rounded-2xl border border-sky-200 bg-white p-5">
-          <p className="text-lg font-bold">{pendingIntent.moveText}</p>
-          <p className="mt-2 text-sm text-stone-600">{pendingIntent.direction} · {pendingIntent.intendedDurationMinutes} minutes intended</p>
-          {linkedItemLabel(pendingIntent, tasks, habits) && <p className="mt-1 text-sm text-stone-500">Linked to {linkedItemLabel(pendingIntent, tasks, habits)}</p>}
-          <p className="mt-4 rounded-xl bg-sky-100 px-3 py-2 text-sm font-medium text-sky-950">The running timer is implemented in TASK-03. Nothing is counting down yet.</p>
+      <h2 id="focus-heading" className="mt-2 text-3xl font-bold tracking-tight">Track this time</h2>
+
+      {openSession ? (
+        <div className="mt-6 rounded-2xl border border-sky-300 bg-white p-5 text-center">
+          <p className="text-sm font-semibold text-sky-700">{openSession.mode === "countdown" ? "Countdown" : "Stopwatch"} · {openSession.status}</p>
+          <p className="mt-3 font-mono text-5xl font-bold tabular-nums" aria-live="polite">{formatDuration(displayMs)}</p>
+          <p className="mt-3 font-semibold">{openSession.label}</p>
+          <p className="mt-1 text-sm text-stone-500">{openSession.direction}{sessionLinkedLabel(openSession, state) ? ` · ${sessionLinkedLabel(openSession, state)}` : ""}</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {openSession.status === "running" ? (
+              <SecondaryButton onClick={() => update((current) => pauseSession(current, openSession.id))}>Pause</SecondaryButton>
+            ) : (
+              <SecondaryButton onClick={() => update((current) => resumeSession(current, openSession.id))}>Resume</SecondaryButton>
+            )}
+            <button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" onClick={() => update((current) => completeSession(current, openSession.id))}>Complete</button>
+            <button type="button" className="rounded-xl px-4 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700" onClick={() => update((current) => stopSession(current, openSession.id))}>Stop early</button>
+          </div>
         </div>
-      ) : <p className="mt-4 text-sm text-stone-600">Choose “Start this move” above to create a pending intent. No timer will start yet.</p>}
+      ) : (
+        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+          <div className="rounded-2xl border border-sky-200 bg-white p-5">
+            <h3 className="text-xl font-bold">Countdown</h3>
+            {pendingIntent ? (
+              <>
+                <p className="mt-2 font-semibold">{pendingIntent.moveText}</p>
+                <p className="mt-1 text-sm text-stone-500">{pendingIntent.direction}</p>
+                <fieldset className="mt-5">
+                  <legend className="text-sm font-semibold">Duration</legend>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[2, 5, 10, 25, 50].map((minutes) => (
+                      <label key={minutes} className={`cursor-pointer rounded-xl border px-3 py-2 text-sm font-semibold ${countdownDuration === minutes && !customDuration ? "border-sky-700 bg-sky-700 text-white" : "border-sky-200"}`}>
+                        <input className="sr-only" type="radio" name="countdown-duration" checked={countdownDuration === minutes && !customDuration} onChange={() => { setCountdownDuration(minutes); setCustomDuration(""); }} />{minutes} min
+                      </label>
+                    ))}
+                  </div>
+                  <label className="mt-3 block text-sm font-semibold">Custom minutes
+                    <input className="mt-2 block w-32 rounded-xl border border-sky-200 px-3 py-2 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="number" min="1" max="720" value={customDuration} onChange={(event) => setCustomDuration(event.target.value)} />
+                  </label>
+                </fieldset>
+                <button type="button" disabled={!validUiDuration(customDuration ? Number(customDuration) : countdownDuration)} className="mt-5 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={() => update((current) => startCountdown(current, { linkedIntentId: pendingIntent.id, direction: pendingIntent.direction, durationMinutes: customDuration ? Number(customDuration) : countdownDuration }))}>Start countdown</button>
+              </>
+            ) : <p className="mt-3 text-sm leading-6 text-stone-600">Choose “Start this move” in the I&apos;m Stuck area first. A countdown always begins from a pending ActivityIntent.</p>}
+          </div>
+
+          <div className="rounded-2xl border border-sky-200 bg-white p-5">
+            <h3 className="text-xl font-bold">Stopwatch</h3>
+            <p className="mt-2 text-sm leading-6 text-stone-600">Track open-ended time with or without a linked item.</p>
+            <label className="mt-4 block text-sm font-semibold">Link <span className="font-normal text-stone-500">(optional)</span>
+              <select className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={stopwatchLink} onChange={(event) => chooseStopwatchLink(event.target.value)}>
+                <option value="">No linked item</option>
+                {pendingIntent && <option value={`intent:${pendingIntent.id}`}>Intent: {pendingIntent.moveText}</option>}
+                {state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
+                {state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
+              </select>
+            </label>
+            <label className="mt-4 block text-sm font-semibold">Label <span className="font-normal text-stone-500">(optional)</span>
+              <input className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" maxLength={160} placeholder="Tracked time" value={stopwatchLabel} onChange={(event) => setStopwatchLabel(event.target.value)} />
+            </label>
+            <div className="mt-4"><SelectField label="Direction" value={stopwatchDirection} options={DIRECTIONS} onChange={(value) => setStopwatchDirection(value as Direction)} /></div>
+            <button type="button" className="mt-5 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900" onClick={beginStopwatch}>Start tracking</button>
+          </div>
+        </div>
+      )}
+
+      {!openSession && lastClosedSession && <SessionReview session={lastClosedSession} state={state} update={update} />}
     </section>
   );
+}
+
+function SessionReview({ session, state, update }: { session: ActivitySession; state: AppState; update: (recipe: (state: AppState) => AppState) => void }) {
+  const [editing, setEditing] = useState(!session.reviewedAt);
+  const [label, setLabel] = useState(session.label);
+  const [direction, setDirection] = useState<Direction>(session.direction);
+  const [linkedTaskId, setLinkedTaskId] = useState(session.linkedTaskId ?? "");
+  const points = state.rewardEvents.find((event) => event.source === "session" && event.sourceId === session.id)?.points ?? 0;
+
+  function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (!label.trim()) return;
+    update((current) => reviewSession(current, session.id, { label, direction, linkedTaskId: linkedTaskId || undefined }));
+    setEditing(false);
+  }
+
+  return (
+    <div className={`mt-5 rounded-2xl border p-5 ${session.status === "stopped" ? "border-stone-200 bg-stone-50" : "border-emerald-200 bg-emerald-50"}`} aria-live="polite">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-sm font-bold">{session.status === "stopped" ? "Time saved — stopped when you chose" : "Session complete"}</p><p className="mt-1 text-sm text-stone-600">Actual time: {formatDuration(session.actualElapsedMs ?? 0)}{points ? ` · +${formatPoints(points)} points` : " · No time reward"}</p></div>
+        {!editing && <MiniButton onClick={() => setEditing(true)}>Edit review</MiniButton>}
+      </div>
+      {editing ? (
+        <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={save}>
+          <TextField id={`session-title-${session.id}`} label="Activity title" value={label} onChange={setLabel} placeholder="What did you do?" />
+          <SelectField label="Category" value={direction} options={DIRECTIONS} onChange={(value) => setDirection(value as Direction)} />
+          <label className="block text-sm font-semibold sm:col-span-2">Linked Task <span className="font-normal text-stone-500">(optional)</span><select className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={linkedTaskId} onChange={(event) => setLinkedTaskId(event.target.value)}><option value="">Standalone — no Task</option>{state.tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>
+          <div className="flex gap-2 sm:col-span-2"><PrimaryButton>Save session</PrimaryButton>{session.reviewedAt && <SecondaryButton onClick={() => setEditing(false)}>Cancel</SecondaryButton>}</div>
+        </form>
+      ) : <p className="mt-3 font-semibold">{session.label} <span className="font-normal text-stone-500">· {session.direction}{session.linkedTaskId ? ` · ${state.tasks.find((task) => task.id === session.linkedTaskId)?.title ?? "Linked Task"}` : " · Standalone"}</span></p>}
+    </div>
+  );
+}
+
+function TodayOverview({ state, today }: { state: AppState; today: string }) {
+  const summary = getTodaySummary(state, today);
+  const timeline = getTodayTimeline(state, today);
+  return (
+    <section id="today" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-amber-200 bg-amber-50 p-6 shadow-sm sm:p-8" aria-labelledby="today-heading">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Today</p>
+      <h2 id="today-heading" className="mt-2 text-3xl font-bold tracking-tight">Your intentional time</h2>
+      <div className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction}><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
+      <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
+      {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, or habit check-in will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{entry.direction} · {entry.kind === "session" ? (entry.outcome === "stopped" ? `Stopped intentionally · ${formatDuration(entry.durationMs)}` : `Session · ${formatDuration(entry.durationMs)}`) : entry.kind === "task" ? "Task completed" : "Habit checked in"}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
+    </section>
+  );
+}
+
+function sessionLinkedLabel(session: ActivitySession, state: AppState): string | undefined {
+  if (session.linkedTaskId) return state.tasks.find((task) => task.id === session.linkedTaskId)?.title;
+  if (session.linkedHabitId) return state.habits.find((habit) => habit.id === session.linkedHabitId)?.title;
+  if (session.linkedIntentId) return state.activityIntents.find((intent) => intent.id === session.linkedIntentId)?.moveText;
+  return undefined;
+}
+
+function formatDuration(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatTimelineTime(timestamp: string): string {
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
+}
+
+function formatPoints(points: number): string {
+  return points.toFixed(1);
+}
+
+function validUiDuration(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 720;
 }
 
 function linkedItemLabel(intent: ActivityIntent, tasks: Task[], habits: Habit[]): string | undefined {
@@ -284,7 +492,8 @@ function linkedItemLabel(intent: ActivityIntent, tasks: Task[], habits: Habit[])
   return undefined;
 }
 
-function TaskEditor({ tasks, today, update }: { tasks: Task[]; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
+function TaskEditor({ state, today, update }: { state: AppState; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
+  const tasks = state.tasks;
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
@@ -319,7 +528,7 @@ function TaskEditor({ tasks, today, update }: { tasks: Task[]; today: string; up
                     <input className="mt-1 size-5 accent-emerald-700" type="checkbox" checked={complete} aria-label={`Complete ${task.title}`} onChange={() => update((state) => toggleTask(state, task.id, today))} />
                     <div className="min-w-0 flex-1">
                       <p className={`font-semibold ${complete ? "text-stone-400 line-through" : ""}`}>{task.title}</p>
-                      <p className="mt-1 text-xs text-stone-500">{task.direction}</p>
+                      <p className="mt-1 text-xs text-stone-500">{task.direction} · Tracked {formatDuration(getTaskTrackedMs(state, task.id))}</p>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 pl-8">

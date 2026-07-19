@@ -113,6 +113,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 ### Rewards and activity timeline
 
 - Store a local points ledger with fixed, idempotent rewards for meaningful actions.
+- Award completed sessions 0.1 point per actual tracked minute and intentionally stopped sessions 30% of that rate. Sessions under 60 seconds earn no points; round session rewards to one decimal place.
 - Show a chronological Today timeline for Morning Start, First Moves, bounded sessions, tasks, habits, reflection, and relevant cat/store activity.
 - Record readable labels, local timestamps, event types, and point changes where applicable.
 - Give feedback for showing up and choosing intentionally, not for maintaining a perfect streak.

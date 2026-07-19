@@ -61,16 +61,25 @@ export interface ActivityIntent {
   status: "pending";
 }
 
-export type SessionStatus = "planned" | "active" | "paused" | "completed" | "cancelled";
+export type SessionStatus = "running" | "paused" | "completed" | "stopped";
+export type SessionMode = "countdown" | "stopwatch";
 
 export interface ActivitySession {
   id: string;
+  mode: SessionMode;
   direction: Direction;
-  firstMove: string;
-  durationMinutes: IntendedDuration;
+  label: string;
+  targetDurationMinutes?: number;
+  linkedTaskId?: string;
+  linkedHabitId?: string;
+  linkedIntentId?: string;
   status: SessionStatus;
-  startedAt?: string;
+  startedAt: string;
+  lastResumedAt?: string;
+  accumulatedElapsedMs: number;
   endedAt?: string;
+  actualElapsedMs?: number;
+  reviewedAt?: string;
 }
 
 export type RewardSource = "task" | "habit" | "session" | "morning";
@@ -113,7 +122,7 @@ export interface UserProgress {
 }
 
 export interface AppState {
-  schemaVersion: 2;
+  schemaVersion: 4;
   tasks: Task[];
   habits: Habit[];
   activityIntents: ActivityIntent[];
@@ -124,7 +133,7 @@ export interface AppState {
   progress: UserProgress;
 }
 
-export const SCHEMA_VERSION = 2 as const;
+export const SCHEMA_VERSION = 4 as const;
 
 export function createEmptyState(): AppState {
   return {

@@ -5,6 +5,7 @@ import {
   isStuckState,
   isWeekday,
   type ActivityIntent,
+  type ActivitySession,
   type AppState,
   type Direction,
   type Habit,
@@ -16,9 +17,9 @@ import {
   type Weekday,
   WEEKDAYS,
 } from "./models.ts";
+import { HABIT_REWARD_POINTS, TASK_REWARD_POINTS } from "./rewards.ts";
 
-export const TASK_REWARD_POINTS = 5;
-export const HABIT_REWARD_POINTS = 3;
+export { HABIT_REWARD_POINTS, TASK_REWARD_POINTS } from "./rewards.ts";
 
 type Clock = () => string;
 
@@ -30,6 +31,7 @@ export function normalizeAppState(input: unknown): AppState {
   const activityIntents = Array.isArray(input.activityIntents)
     ? input.activityIntents.filter(isActivityIntent)
     : [];
+  const sessions = Array.isArray(input.sessions) ? input.sessions.filter(isActivitySession) : [];
   const rewardEvents = Array.isArray(input.rewardEvents)
     ? input.rewardEvents.filter(isRewardEvent)
     : [];
@@ -41,6 +43,7 @@ export function normalizeAppState(input: unknown): AppState {
     tasks: [...tasks].sort((a, b) => a.order - b.order).map((task, order) => ({ ...task, order })),
     habits,
     activityIntents: keepOnePendingIntent(activityIntents),
+    sessions: keepOneOpenSession(sessions),
     rewardEvents,
     progress: {
       points:
@@ -349,9 +352,59 @@ function isActivityIntent(value: unknown): value is ActivityIntent {
   );
 }
 
+function isActivitySession(value: unknown): value is ActivitySession {
+  const open = valueStatus(value) === "running" || valueStatus(value) === "paused";
+  const closed = valueStatus(value) === "completed" || valueStatus(value) === "stopped";
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    (value.mode === "countdown" || value.mode === "stopwatch") &&
+    isDirection(value.direction) &&
+    typeof value.label === "string" &&
+    value.label.trim().length > 0 &&
+    (value.targetDurationMinutes === undefined || isValidSessionDuration(value.targetDurationMinutes)) &&
+    (value.mode !== "countdown" || isValidSessionDuration(value.targetDurationMinutes)) &&
+    (value.linkedTaskId === undefined || typeof value.linkedTaskId === "string") &&
+    (value.linkedHabitId === undefined || typeof value.linkedHabitId === "string") &&
+    (value.linkedIntentId === undefined || typeof value.linkedIntentId === "string") &&
+    [value.linkedTaskId, value.linkedHabitId, value.linkedIntentId].filter(Boolean).length <= 1 &&
+    (open || closed) &&
+    typeof value.startedAt === "string" &&
+    (value.lastResumedAt === undefined || typeof value.lastResumedAt === "string") &&
+    typeof value.accumulatedElapsedMs === "number" &&
+    Number.isFinite(value.accumulatedElapsedMs) &&
+    value.accumulatedElapsedMs >= 0 &&
+    (value.endedAt === undefined || typeof value.endedAt === "string") &&
+    (value.actualElapsedMs === undefined ||
+      (typeof value.actualElapsedMs === "number" && Number.isFinite(value.actualElapsedMs) && value.actualElapsedMs >= 0)) &&
+    (value.reviewedAt === undefined || typeof value.reviewedAt === "string") &&
+    (!closed || (typeof value.endedAt === "string" && typeof value.actualElapsedMs === "number")) &&
+    (value.status !== "running" || typeof value.lastResumedAt === "string")
+  );
+}
+
 function keepOnePendingIntent(intents: ActivityIntent[]): ActivityIntent[] {
   const pending = intents.find((intent) => intent.status === "pending");
   return pending ? [pending] : [];
+}
+
+function keepOneOpenSession(sessions: ActivitySession[]): ActivitySession[] {
+  let keptOpen = false;
+  return sessions.filter((session) => {
+    if (session.status === "completed" || session.status === "stopped") return true;
+    if (keptOpen) return false;
+    keptOpen = true;
+    return true;
+  });
+}
+
+function valueStatus(value: unknown): unknown {
+  return isRecord(value) ? value.status : undefined;
+}
+
+function isValidSessionDuration(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 720;
 }
 
 function isSchedule(value: unknown): value is HabitSchedule {

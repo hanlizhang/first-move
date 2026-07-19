@@ -36,6 +36,40 @@
 
 **Status:** Intent-building portion complete. A validated pending `ActivityIntent`, optional task/habit linking, Focus handoff, and neutral pre-session cancellation are implemented. Running sessions and post-session outcomes remain in TASK-03.
 
+## TASK-03A: Countdown timers, stopwatch tracking, and persisted ActivitySessions
+
+- [x] Start a timestamp-based countdown from a pending intent with 2/5/10/25/50-minute presets and a validated custom duration.
+- [x] Add an independent stopwatch with optional Task, Habit, or ActivityIntent linking and editable inherited direction.
+- [x] Persist running and paused ActivitySessions with refresh-safe elapsed-time recovery.
+- [x] Support pause, resume, stop early, and idempotent completion while saving actual elapsed time.
+- [x] Add neutral unfinished feedback plus tests for recovery, inheritance, malformed data, and duplicate prevention.
+
+### Acceptance criteria
+
+- Refreshing cannot reset a running timer because elapsed time is derived from persisted timestamps.
+- A session may link to one Task, Habit, or ActivityIntent, or remain unlinked; direction inherits when available and can be edited before start.
+- Completing or starting repeatedly cannot create duplicate completed or simultaneously open sessions.
+- Early stop saves elapsed time without a failure, penalty, reward, chart, or statistic.
+
+**Status:** Complete. TASK-03 remains open for rewards, timeline, intentional-entertainment outcomes, and completion feedback beyond basic elapsed-time saving.
+
+## TASK-03B: Post-session review, Today timeline, rewards, and daily summaries
+
+- [x] Add a compact review for completed and intentionally stopped sessions with editable title, category, and optional Task link.
+- [x] Keep sessions standalone by default and support linking, relinking, or removing a Task link without creating Tasks.
+- [x] Add duplicate-safe session rewards at 0.1 point per completed minute and 30% of that rate when intentionally stopped; sessions under one minute receive no time reward.
+- [x] Show Today tracked-time totals, five-category totals, and a chronological timeline of sessions, task completions, and habit check-ins.
+- [x] Show total tracked time per Task while retaining every linked Session as a separate record.
+
+### Acceptance criteria
+
+- A closed Session can be reviewed and saved without a Task, including a neutral stopped-early outcome and actual duration.
+- Today totals derive from persisted closed Sessions; timeline entries remain distinct and have clear empty states.
+- Each Session creates at most one reward rounded to one decimal; less than 60 seconds earns zero time points.
+- Linking changes only Session metadata and never creates, completes, or merges Tasks.
+
+**Status:** Complete. TASK-03 remains open for intentional-entertainment outcomes and optional completion feedback controls.
+
 ## TASK-03: Timer, rewards, activity timeline, and intentional entertainment
 
 - [ ] Implement timestamp-based start, pause, resume, cancel, finish, tab-throttling correction, and reload recovery.
