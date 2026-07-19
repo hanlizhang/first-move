@@ -87,11 +87,13 @@
 
 ## TASK-04: Cat room, store, return flow, and milestones
 
-- [ ] Build persistent cat status, inventory, and a store with food, toys, furniture, prices, and balance checks.
-- [ ] Implement feeding, play, furniture selection/placement, and simple tricks with reduced-motion-safe reactions.
-- [ ] Connect gentle session progress and Morning Start rewards to cat feedback without punishment mechanics.
-- [ ] Add non-judgmental return messages after absent days.
-- [ ] Count unique active days and unlock persistent milestones once at 21, 50, and 100 days.
+- [x] Build persistent cat progress, inventory, and a compact four-category reward shelf with centralized prices, active-day unlocks, and balance checks.
+- [x] Implement a recognizable original pixel kitten with sitting, walking, sleeping, eating, playing, and happy poses plus reduced-motion-safe idle behavior.
+- [x] Refine every pose as a compact full-body SVG composition on one floor line, with a fixed-bowl eating pose and synchronized stepped two-frame walk.
+- [x] Delay idle behavior for five minutes, randomize later actions at 5–10 minute intervals, return reactions to sitting, and expose non-persistent development-only pose controls.
+- [x] Support repeatable consumable food and one-time durable purchases without hunger or upkeep mechanics.
+- [x] Add non-judgmental exploring messages after absent days.
+- [x] Count unique qualifying active days, journey progress, gentle streaks, kitten stages, and persistent milestones at 21, 50, and 100 days.
 
 ### Acceptance criteria
 
@@ -99,6 +101,10 @@
 - Food, toys, furniture, and tricks are keyboard accessible and do not depend on motion.
 - Missed days and failed/cancelled sessions never harm the cat or remove points, items, milestones, or progress.
 - Each day counts at most once, and every milestone unlocks once and remains visible.
+- Store items unlock at their configured active-day boundaries; hidden legacy furniture inventory remains loadable but is not part of the current Cat Room UI.
+- Idle and action timers clean up on unmount; reduced motion disables automatic idle changes and walking translation.
+
+**Status:** Complete and visually refined. Morning Check and Daily Reflection will automatically qualify through their reserved local records when those later tasks are implemented.
 
 ## TASK-05: Daily Reflection
 

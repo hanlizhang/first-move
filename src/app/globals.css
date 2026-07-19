@@ -22,8 +22,103 @@ body {
     sans-serif;
 }
 
+.pixel-kitten {
+  width: clamp(120px, 14vw, 150px);
+}
+
+.pixel-kitten svg {
+  image-rendering: pixelated;
+}
+
+.pixel-kitten-sleeping .kitten-walker {
+  animation: kitten-breathe 1800ms steps(2, end) infinite;
+}
+
+.pixel-kitten-walking .kitten-walker {
+  animation: kitten-walk 6.5s steps(10, end) 1;
+}
+
+.pixel-kitten-walking .kitten-walker-left {
+  animation-name: kitten-walk-left;
+}
+
+.kitten-facing-left {
+  transform: translateX(160px) scaleX(-1);
+}
+
+.walk-frame-b {
+  opacity: 0;
+}
+
+.pixel-kitten-walking .walk-frame-a {
+  animation: kitten-step-a 650ms steps(1, end) 10;
+}
+
+.pixel-kitten-walking .walk-frame-b {
+  animation: kitten-step-b 650ms steps(1, end) 10;
+}
+
+@keyframes kitten-breathe {
+  50% { transform: scale(0.98); }
+}
+
+@keyframes kitten-walk {
+  0% { transform: translate(0, 0); }
+  10% { transform: translate(3px, -1px); }
+  20% { transform: translate(6px, 0); }
+  30% { transform: translate(9px, -1px); }
+  40% { transform: translate(12px, 0); }
+  50% { transform: translate(15px, -1px); }
+  60% { transform: translate(18px, 0); }
+  70% { transform: translate(21px, -1px); }
+  80% { transform: translate(24px, 0); }
+  90%, 100% { transform: translate(27px, 0); }
+}
+
+@keyframes kitten-walk-left {
+  0% { transform: translate(0, 0); }
+  10% { transform: translate(-3px, -1px); }
+  20% { transform: translate(-6px, 0); }
+  30% { transform: translate(-9px, -1px); }
+  40% { transform: translate(-12px, 0); }
+  50% { transform: translate(-15px, -1px); }
+  60% { transform: translate(-18px, 0); }
+  70% { transform: translate(-21px, -1px); }
+  80% { transform: translate(-24px, 0); }
+  90%, 100% { transform: translate(-27px, 0); }
+}
+
+@keyframes kitten-step-a {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes kitten-step-b {
+  0%, 49% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  .pixel-kitten {
+    animation: none;
+  }
+
+  .pixel-kitten .kitten-walker,
+  .pixel-kitten .walk-frame {
+    animation: none;
+  }
+
+  .pixel-kitten .walk-frame-b {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .pixel-kitten {
+    width: clamp(90px, 28vw, 120px);
   }
 }

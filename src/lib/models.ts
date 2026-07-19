@@ -82,7 +82,7 @@ export interface ActivitySession {
   reviewedAt?: string;
 }
 
-export type RewardSource = "task" | "habit" | "session" | "morning";
+export type RewardSource = "task" | "habit" | "session" | "morning" | "store";
 
 export interface RewardEvent {
   id: string;
@@ -119,10 +119,15 @@ export interface UserProgress {
   points: number;
   activeDateKeys: string[];
   unlockedMilestones: Array<21 | 50 | 100>;
+  firstUseDate?: string;
+  lastActiveDate?: string;
+  journeyDay: number;
+  totalActiveDays: number;
+  gentleStreak: number;
 }
 
 export interface AppState {
-  schemaVersion: 4;
+  schemaVersion: 5;
   tasks: Task[];
   habits: Habit[];
   activityIntents: ActivityIntent[];
@@ -133,7 +138,7 @@ export interface AppState {
   progress: UserProgress;
 }
 
-export const SCHEMA_VERSION = 4 as const;
+export const SCHEMA_VERSION = 5 as const;
 
 export function createEmptyState(): AppState {
   return {
@@ -145,7 +150,14 @@ export function createEmptyState(): AppState {
     rewardEvents: [],
     journalEntries: [],
     inventory: { items: [] },
-    progress: { points: 0, activeDateKeys: [], unlockedMilestones: [] },
+    progress: {
+      points: 0,
+      activeDateKeys: [],
+      unlockedMilestones: [],
+      journeyDay: 0,
+      totalActiveDays: 0,
+      gentleStreak: 0,
+    },
   };
 }
 

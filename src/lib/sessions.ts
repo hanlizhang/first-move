@@ -5,6 +5,8 @@ import {
   type Direction,
 } from "./models.ts";
 import { calculateSessionReward, roundPoints } from "./rewards.ts";
+import { localDateKey } from "./dates.ts";
+import { syncProgress } from "./progress.ts";
 
 type IdFactory = () => string;
 
@@ -203,10 +205,12 @@ function addSessionReward(
 ): AppState {
   const id = `session:${sessionId}:time`;
   const points = calculateSessionReward(actualElapsedMs, outcome);
-  if (points === 0 || state.rewardEvents.some((event) => event.id === id)) return state;
   const date = new Date(createdAt);
   const dateKey = localDateKey(date);
-  return {
+  if (points === 0 || state.rewardEvents.some((event) => event.id === id)) {
+    return syncProgress(state, dateKey, true);
+  }
+  return syncProgress({
     ...state,
     rewardEvents: [...state.rewardEvents, { id, source: "session", sourceId: sessionId, dateKey, points, createdAt }],
     progress: {
@@ -214,14 +218,7 @@ function addSessionReward(
       points: roundPoints(state.progress.points + points),
       activeDateKeys: [...new Set([...state.progress.activeDateKeys, dateKey])],
     },
-  };
-}
-
-function localDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  }, dateKey, true);
 }
 
 function updateOpenSession(

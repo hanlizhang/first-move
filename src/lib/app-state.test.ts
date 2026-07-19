@@ -53,7 +53,7 @@ test("malformed and partial old data returns a usable current state", () => {
     progress: { points: "many" },
   });
 
-  assert.equal(recovered.schemaVersion, 4);
+  assert.equal(recovered.schemaVersion, 5);
   assert.equal(recovered.tasks.length, 1);
   assert.equal(recovered.tasks[0].order, 0);
   assert.equal(recovered.progress.points, 0);

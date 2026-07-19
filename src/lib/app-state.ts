@@ -17,9 +17,13 @@ import {
   type Weekday,
   WEEKDAYS,
 } from "./models.ts";
+import { catItem, isCatItemId } from "./cat-items.ts";
+import { localDateKey } from "./dates.ts";
+import { syncProgress } from "./progress.ts";
 import { HABIT_REWARD_POINTS, TASK_REWARD_POINTS } from "./rewards.ts";
 
 export { HABIT_REWARD_POINTS, TASK_REWARD_POINTS } from "./rewards.ts";
+export { localDateKey } from "./dates.ts";
 
 type Clock = () => string;
 
@@ -35,19 +39,29 @@ export function normalizeAppState(input: unknown): AppState {
   const rewardEvents = Array.isArray(input.rewardEvents)
     ? input.rewardEvents.filter(isRewardEvent)
     : [];
+  const journalEntries = Array.isArray(input.journalEntries)
+    ? input.journalEntries.filter(isJournalEntry)
+    : [];
+  const inventory = normalizeInventory(input.inventory);
   const progressInput = isRecord(input.progress) ? input.progress : {};
   const derivedPoints = rewardEvents.reduce((total, event) => total + event.points, 0);
 
-  return {
+  const state: AppState = {
     ...createEmptyState(),
     tasks: [...tasks].sort((a, b) => a.order - b.order).map((task, order) => ({ ...task, order })),
     habits,
     activityIntents: keepOnePendingIntent(activityIntents),
     sessions: keepOneOpenSession(sessions),
     rewardEvents,
+    journalEntries,
+    inventory,
     progress: {
       points:
-        typeof progressInput.points === "number" && Number.isFinite(progressInput.points)
+        rewardEvents.some((event) => event.source === "store")
+          ? typeof progressInput.points === "number" && Number.isFinite(progressInput.points)
+            ? Math.max(0, progressInput.points)
+            : Math.max(0, derivedPoints)
+          : typeof progressInput.points === "number" && Number.isFinite(progressInput.points)
           ? Math.max(progressInput.points, derivedPoints)
           : Math.max(0, derivedPoints),
       activeDateKeys: stringArray(progressInput.activeDateKeys),
@@ -56,8 +70,14 @@ export function normalizeAppState(input: unknown): AppState {
             (value): value is 21 | 50 | 100 => value === 21 || value === 50 || value === 100,
           )
         : [],
+      firstUseDate: typeof progressInput.firstUseDate === "string" ? progressInput.firstUseDate : undefined,
+      lastActiveDate: typeof progressInput.lastActiveDate === "string" ? progressInput.lastActiveDate : undefined,
+      journeyDay: finiteNonnegativeInteger(progressInput.journeyDay),
+      totalActiveDays: finiteNonnegativeInteger(progressInput.totalActiveDays),
+      gentleStreak: finiteNonnegativeInteger(progressInput.gentleStreak),
     },
   };
+  return syncProgress(state, localDateKey(), false);
 }
 
 export interface CreateIntentInput {
@@ -260,13 +280,6 @@ export function isHabitScheduled(habit: Habit, dateKey: string): boolean {
   return habit.schedule.weekdays.includes(WEEKDAYS[date.getDay()]);
 }
 
-export function localDateKey(date = new Date()): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function addReward(
   state: AppState,
   source: "task" | "habit",
@@ -278,7 +291,7 @@ function addReward(
   const id = `${source}:${sourceId}:${dateKey}`;
   if (state.rewardEvents.some((event) => event.id === id)) return state;
   const event: RewardEvent = { id, source, sourceId, dateKey, points, createdAt: clock() };
-  return {
+  return syncProgress({
     ...state,
     rewardEvents: [...state.rewardEvents, event],
     progress: {
@@ -286,7 +299,7 @@ function addReward(
       points: state.progress.points + points,
       activeDateKeys: unique([...state.progress.activeDateKeys, dateKey]),
     },
-  };
+  }, dateKey, true);
 }
 
 function isTask(value: unknown): value is Task {
@@ -324,13 +337,36 @@ function isRewardEvent(value: unknown): value is RewardEvent {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
-    (value.source === "task" || value.source === "habit" || value.source === "session" || value.source === "morning") &&
+    (value.source === "task" || value.source === "habit" || value.source === "session" || value.source === "morning" || value.source === "store") &&
     typeof value.sourceId === "string" &&
     typeof value.dateKey === "string" &&
     typeof value.points === "number" &&
     Number.isFinite(value.points) &&
     typeof value.createdAt === "string"
   );
+}
+
+function isJournalEntry(value: unknown): value is AppState["journalEntries"][number] {
+  return isRecord(value) && typeof value.dateKey === "string" && typeof value.updatedAt === "string";
+}
+
+function normalizeInventory(value: unknown): AppState["inventory"] {
+  if (!isRecord(value)) return { items: [] };
+  const quantities = new Map<string, number>();
+  if (Array.isArray(value.items)) {
+    for (const entry of value.items) {
+      if (!isRecord(entry) || !isCatItemId(entry.itemId) || !Number.isInteger(entry.quantity) || (entry.quantity as number) < 1) continue;
+      const item = catItem(entry.itemId);
+      const next = (quantities.get(entry.itemId) ?? 0) + (entry.quantity as number);
+      quantities.set(entry.itemId, item?.kind === "food" ? Math.min(next, 999) : 1);
+    }
+  }
+  const items = [...quantities].map(([itemId, quantity]) => ({ itemId, quantity }));
+  const selectedFurnitureId = isCatItemId(value.selectedFurnitureId) &&
+    catItem(value.selectedFurnitureId)?.kind === "furniture" && quantities.has(value.selectedFurnitureId)
+    ? value.selectedFurnitureId
+    : undefined;
+  return { items, selectedFurnitureId };
 }
 
 function isActivityIntent(value: unknown): value is ActivityIntent {
@@ -425,6 +461,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? unique(value.filter((item): item is string => typeof item === "string")) : [];
+}
+
+function finiteNonnegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
 function unique<T>(values: T[]): T[] {
