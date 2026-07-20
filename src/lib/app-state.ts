@@ -20,7 +20,7 @@ import {
   type Weekday,
   WEEKDAYS,
 } from "./models.ts";
-import { catItem, isCatItemId } from "./cat-items.ts";
+import { LEGACY_ITEM_ALIASES, catItem, isCatItemId } from "./cat-items.ts";
 import { localDateKey } from "./dates.ts";
 import { isDateKey } from "./dates.ts";
 import { syncProgress } from "./progress.ts";
@@ -75,6 +75,9 @@ export function normalizeAppState(input: unknown): AppState {
         ? progressInput.unlockedMilestones.filter(
             (value): value is 21 | 50 | 100 => value === 21 || value === 50 || value === 100,
           )
+        : [],
+      grantedMilestones: Array.isArray(progressInput.grantedMilestones)
+        ? progressInput.grantedMilestones.filter((value): value is 21 | 50 | 100 => value === 21 || value === 50 || value === 100)
         : [],
       firstUseDate: typeof progressInput.firstUseDate === "string" ? progressInput.firstUseDate : undefined,
       lastActiveDate: typeof progressInput.lastActiveDate === "string" ? progressInput.lastActiveDate : undefined,
@@ -413,10 +416,12 @@ function normalizeInventory(value: unknown): AppState["inventory"] {
   const quantities = new Map<string, number>();
   if (Array.isArray(value.items)) {
     for (const entry of value.items) {
-      if (!isRecord(entry) || !isCatItemId(entry.itemId) || !Number.isInteger(entry.quantity) || (entry.quantity as number) < 1) continue;
-      const item = catItem(entry.itemId);
-      const next = (quantities.get(entry.itemId) ?? 0) + (entry.quantity as number);
-      quantities.set(entry.itemId, item?.kind === "food" ? Math.min(next, 999) : 1);
+      if (!isRecord(entry) || typeof entry.itemId !== "string" || !Number.isInteger(entry.quantity) || (entry.quantity as number) < 1) continue;
+      const itemId = LEGACY_ITEM_ALIASES[entry.itemId] ?? entry.itemId;
+      if (!isCatItemId(itemId)) continue;
+      const item = catItem(itemId);
+      const next = (quantities.get(itemId) ?? 0) + (entry.quantity as number);
+      quantities.set(itemId, item?.kind === "food" ? Math.min(next, 999) : 1);
     }
   }
   const items = [...quantities].map(([itemId, quantity]) => ({ itemId, quantity }));

@@ -9,15 +9,15 @@ import {
   MAX_IDLE_DELAY_MS,
   MIN_IDLE_DELAY_MS,
   USER_ACTION_DURATION_MS,
+  clampRoomPoint,
   createCatActionSequencer,
   messageForPose,
-  poseForAction,
   previewPose,
   randomIdleDelay,
   scheduleIdleBehavior,
   scheduleReturnToSitting,
 } from "./cat-behavior.ts";
-import { CAT_ITEMS, isCatItemUnlocked } from "./cat-items.ts";
+import { CAT_ITEMS, CAT_MILESTONES, isCatItemUnlocked } from "./cat-items.ts";
 import { inventoryQuantity, purchaseCatItem, useFood } from "./cat-store.ts";
 import { createEmptyState, type RewardEvent } from "./models.ts";
 import { gentleReturnMessage, kittenStage, syncProgress } from "./progress.ts";
@@ -25,10 +25,10 @@ import { loadAppState, saveAppState, type StorageLike } from "./repository.ts";
 import { startStopwatch, stopSession } from "./sessions.ts";
 
 test("purchases spend points, persist inventory, and enforce ownership rules", () => {
-  const funded = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 20, totalActiveDays: 50 } };
+  const funded = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 100, totalActiveDays: 50 } };
   const first = purchaseCatItem(funded, "yarn-toy", new Date("2026-07-19T12:00:00Z"), () => "purchase-1");
   assert.equal(first.outcome, "purchased");
-  assert.equal(first.state.progress.points, 14);
+  assert.equal(first.state.progress.points, 75);
   assert.equal(inventoryQuantity(first.state, "yarn-toy"), 1);
   assert.equal(purchaseCatItem(first.state, "yarn-toy").outcome, "already-owned");
   assert.equal(purchaseCatItem({ ...first.state, progress: { ...first.state.progress, points: 0 } }, "high-five").outcome, "insufficient");
@@ -37,29 +37,29 @@ test("purchases spend points, persist inventory, and enforce ownership rules", (
   const storage: StorageLike = { getItem: () => stored, setItem: (_key, value) => { stored = value; } };
   assert.equal(saveAppState(storage, first.state), true);
   const refreshed = loadAppState(storage);
-  assert.equal(refreshed.progress.points, 14);
+  assert.equal(refreshed.progress.points, 75);
   assert.equal(inventoryQuantity(refreshed, "yarn-toy"), 1);
 });
 
 test("food can be purchased repeatedly and consumed without penalties", () => {
-  const funded = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 5, totalActiveDays: 1 } };
+  const funded = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 20, totalActiveDays: 1 } };
   const once = purchaseCatItem(funded, "kitten-milk", new Date("2026-07-19T12:00:00Z"), () => "milk-1").state;
   const twice = purchaseCatItem(once, "kitten-milk", new Date("2026-07-19T12:01:00Z"), () => "milk-2").state;
   assert.equal(inventoryQuantity(twice, "kitten-milk"), 2);
   const used = useFood(twice, "kitten-milk");
   assert.equal(inventoryQuantity(used, "kitten-milk"), 1);
-  assert.equal(used.progress.points, 3);
+  assert.equal(used.progress.points, 10);
 });
 
 test("store unlocks use the exact active-day boundaries", () => {
-  const expected = new Map([["kitten-milk", 1], ["cat-treat", 3], ["yarn-toy", 7], ["cat-food", 21], ["high-five", 50]]);
+  const expected = new Map([["kitten-milk", 1], ["yarn-toy", 3], ["teaser-wand", 7], ["cat-food", 21], ["cat-treat", 50], ["high-five", 50], ["paw-shake", 100]]);
   for (const item of CAT_ITEMS) {
     const boundary = expected.get(item.id)!;
     assert.equal(item.unlockActiveDays, boundary);
     assert.equal(isCatItemUnlocked(item, boundary - 1), false);
     assert.equal(isCatItemUnlocked(item, boundary), true);
   }
-  const fundedButLocked = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 100, totalActiveDays: 6 } };
+  const fundedButLocked = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 200, totalActiveDays: 2 } };
   assert.equal(purchaseCatItem(fundedButLocked, "yarn-toy").outcome, "locked");
 });
 
@@ -101,7 +101,7 @@ test("reduced motion schedules no automatic idle timer", () => {
 test("user action overrides return to sitting and previews do not touch app state", () => {
   let callback: (() => void) | undefined;
   let delay = 0;
-  let pose = poseForAction("food");
+  let pose = "eating";
   scheduleReturnToSitting((next, delayMs) => { callback = next; delay = delayMs; return 1; }, () => undefined, () => { pose = "sitting"; });
   assert.equal(pose, "eating");
   assert.equal(delay, USER_ACTION_DURATION_MS);
@@ -110,17 +110,11 @@ test("user action overrides return to sitting and previews do not touch app stat
 
   const persisted = createEmptyState();
   const before = structuredClone(persisted);
-  assert.equal(previewPose("playing"), "playing");
+  assert.equal(previewPose("yarn"), "yarn");
   assert.deepEqual(persisted, before);
 });
 
-test("user actions map only to their relevant poses", () => {
-  assert.equal(poseForAction("food"), "eating");
-  assert.equal(poseForAction("toy"), "playing");
-  assert.equal(poseForAction("trick"), "happy");
-});
-
-test("food and treat feedback runs eat, happy roll, then sitting exactly once", () => {
+test("food, treat, toy, and trick interactions use distinct states", () => {
   const callbacks = new Map<number, () => void>();
   const delays: number[] = [];
   let nextId = 0;
@@ -129,15 +123,15 @@ test("food and treat feedback runs eat, happy roll, then sitting exactly once", 
     (callback, delayMs) => { nextId += 1; callbacks.set(nextId, callback); delays.push(delayMs); return nextId; },
     (timerId) => { callbacks.delete(timerId); },
   );
-  assert.equal(sequencer.startFoodSequence((pose) => poses.push(pose)), true);
-  assert.equal(sequencer.startFoodSequence((pose) => poses.push(pose)), false);
-  assert.deepEqual(poses, ["eating"]);
+  assert.equal(sequencer.startInteraction("treat", (pose) => poses.push(pose)), true);
+  assert.equal(sequencer.startInteraction("milk", (pose) => poses.push(pose)), false);
+  assert.deepEqual(poses, ["licking"]);
   assert.deepEqual(delays, [EATING_DURATION_MS]);
   callbacks.get(1)?.();
-  assert.deepEqual(poses, ["eating", "happy"]);
+  assert.deepEqual(poses, ["licking", "happy"]);
   assert.deepEqual(delays, [EATING_DURATION_MS, HAPPY_ROLL_DURATION_MS]);
   callbacks.get(2)?.();
-  assert.deepEqual(poses, ["eating", "happy", "sitting"]);
+  assert.deepEqual(poses, ["licking", "happy", "sitting"]);
   assert.equal(sequencer.isActive(), false);
 });
 
@@ -145,9 +139,33 @@ test("every visible pose has a matching message", () => {
   assert.match(messageForPose("sitting"), /sitting calmly/);
   assert.match(messageForPose("walking"), /exploring/);
   assert.match(messageForPose("sleeping"), /sleeping/);
-  assert.match(messageForPose("eating"), /eating or drinking/);
-  assert.match(messageForPose("playing"), /playing/);
+  assert.match(messageForPose("drinking"), /milk/);
+  assert.match(messageForPose("eating"), /kibble/);
+  assert.match(messageForPose("licking"), /pouch/);
+  assert.match(messageForPose("yarn"), /yarn/);
   assert.match(messageForPose("happy"), /happy and content/);
+});
+
+test("milestone grants occur once at 21, 50, and 100 active days", () => {
+  let state = createEmptyState();
+  for (const milestone of CAT_MILESTONES) {
+    state = { ...state, rewardEvents: Array.from({ length: milestone.day }, (_, index) => ({ id: `task:${index}`, source: "task" as const, sourceId: String(index), dateKey: `2026-${String(Math.floor(index / 28) + 1).padStart(2, "0")}-${String(index % 28 + 1).padStart(2, "0")}`, points: 5, createdAt: "2026-01-01T00:00:00Z" })) };
+    const once = syncProgress(state, "2026-07-20");
+    const twice = syncProgress(once, "2026-07-20");
+    assert.equal(once.progress.grantedMilestones.includes(milestone.day), true);
+    for (const grant of milestone.grants) assert.equal(inventoryQuantity(twice, grant.itemId), inventoryQuantity(once, grant.itemId));
+    state = once;
+  }
+});
+
+test("legacy soft food migrates to cat food and durable quantities stay one", () => {
+  const recovered = normalizeAppState({ ...createEmptyState(), inventory: { items: [{ itemId: "soft-kitten-food", quantity: 4 }, { itemId: "yarn-toy", quantity: 8 }] } });
+  assert.equal(inventoryQuantity(recovered, "cat-food"), 4);
+  assert.equal(inventoryQuantity(recovered, "yarn-toy"), 1);
+});
+
+test("wand pointer coordinates clamp inside the room", () => {
+  assert.deepEqual(clampRoomPoint(-20, 500, { left: 10, top: 20, width: 200, height: 120 }), { x: 8, y: 112 });
 });
 
 test("qualifying actions count distinct local active days only once", () => {

@@ -1,5 +1,6 @@
 import { daysBetween, isDateKey, localDateKey, previousDateKey } from "./dates.ts";
 import type { AppState, UserProgress } from "./models.ts";
+import { CAT_MILESTONES, type CatItemId } from "./cat-items.ts";
 
 export type KittenStage = "New kitten" | "Settling in" | "Curious kitten" | "Adventurous kitten" | "Companion";
 
@@ -14,6 +15,13 @@ export function syncProgress(state: AppState, today = localDateKey(), ensureFirs
   const unlockedMilestones = thresholds.filter(
     (threshold) => totalActiveDays >= threshold || state.progress.unlockedMilestones.includes(threshold),
   );
+  const grantedMilestones = [...state.progress.grantedMilestones];
+  let inventoryItems = [...state.inventory.items];
+  for (const milestone of CAT_MILESTONES) {
+    if (totalActiveDays < milestone.day || grantedMilestones.includes(milestone.day)) continue;
+    for (const grant of milestone.grants) inventoryItems = addInventory(inventoryItems, grant.itemId, grant.quantity);
+    grantedMilestones.push(milestone.day);
+  }
   const progress: UserProgress = {
     ...state.progress,
     activeDateKeys,
@@ -23,8 +31,14 @@ export function syncProgress(state: AppState, today = localDateKey(), ensureFirs
     totalActiveDays,
     gentleStreak: calculateGentleStreak(activeDateKeys, today),
     unlockedMilestones,
+    grantedMilestones: grantedMilestones.sort((a, b) => a - b),
   };
-  return { ...state, progress };
+  return { ...state, progress, inventory: { ...state.inventory, items: inventoryItems } };
+}
+
+function addInventory(items: AppState["inventory"]["items"], itemId: CatItemId, quantity: number) {
+  const current = items.find((item) => item.itemId === itemId)?.quantity ?? 0;
+  return [...items.filter((item) => item.itemId !== itemId), { itemId, quantity: current + quantity }];
 }
 
 export function qualifyingActiveDates(state: AppState): string[] {

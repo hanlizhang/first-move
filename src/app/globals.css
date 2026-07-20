@@ -80,6 +80,22 @@ textarea {
   animation: kitten-roll-c 4s steps(1, end) 1;
 }
 
+.pixel-kitten-eating .kibble-pieces {
+  animation: kibble-eaten 5s steps(3, end) 1 forwards;
+}
+
+.pixel-kitten-yarn circle {
+  animation: yarn-bat 1.2s steps(3, end) 4;
+}
+
+.pixel-kitten-butterfly .butterfly {
+  animation: butterfly-flutter 1.4s steps(4, end) infinite;
+}
+
+.cat-garden {
+  background: linear-gradient(#ccecff 0 62%, #d9f2c0 62% 100%);
+}
+
 .pixel-kitten-walking .walk-frame-a {
   animation: kitten-step-a 650ms steps(1, end) 10;
 }
@@ -143,6 +159,10 @@ textarea {
   0%, 65% { opacity: 0; }
   66%, 100% { opacity: 1; }
 }
+
+@keyframes kibble-eaten { 0% { opacity: 1; } 70% { opacity: .55; } 100% { opacity: .2; } }
+@keyframes yarn-bat { 0% { transform: translateX(0); } 50% { transform: translateX(-7px); } 100% { transform: translateX(3px); } }
+@keyframes butterfly-flutter { 0% { transform: translate(0, 0); } 50% { transform: translate(5px, -5px); } 100% { transform: translate(10px, 1px); } }
 
 @media (prefers-reduced-motion: reduce) {
   html {

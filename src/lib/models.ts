@@ -131,6 +131,7 @@ export interface UserProgress {
   points: number;
   activeDateKeys: string[];
   unlockedMilestones: Array<21 | 50 | 100>;
+  grantedMilestones: Array<21 | 50 | 100>;
   firstUseDate?: string;
   lastActiveDate?: string;
   journeyDay: number;
@@ -139,7 +140,7 @@ export interface UserProgress {
 }
 
 export interface AppState {
-  schemaVersion: 7;
+  schemaVersion: 8;
   tasks: Task[];
   habits: Habit[];
   activityIntents: ActivityIntent[];
@@ -152,7 +153,7 @@ export interface AppState {
   progress: UserProgress;
 }
 
-export const SCHEMA_VERSION = 7 as const;
+export const SCHEMA_VERSION = 8 as const;
 
 export function createEmptyState(): AppState {
   return {
@@ -170,6 +171,7 @@ export function createEmptyState(): AppState {
       points: 0,
       activeDateKeys: [],
       unlockedMilestones: [],
+      grantedMilestones: [],
       journeyDay: 0,
       totalActiveDays: 0,
       gentleStreak: 0,

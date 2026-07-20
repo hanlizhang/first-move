@@ -27,7 +27,7 @@ export function purchaseCatItem(
       ...state,
       inventory: {
         ...state.inventory,
-        items: setQuantity(state, itemId, owned + 1),
+        items: setQuantity(state, itemId, owned + item.purchaseQuantity),
       },
       rewardEvents: [...state.rewardEvents, { id: `store:${purchaseId}`, source: "store", sourceId: itemId, dateKey: localDateKey(now), points: -item.price, createdAt }],
       progress: { ...state.progress, points: roundPoints(state.progress.points - item.price) },

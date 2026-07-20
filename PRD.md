@@ -125,7 +125,8 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Provide a forgiving Cat Room with a compact reward shelf for Food, Treats, Toys, and Tricks.
 - Use a compact original local pixel kitten with coherent full-body sitting, two-frame walking, sleeping, eating, playing, and happy poses on one floor baseline. Wait five minutes before the first automatic idle action, then 5–10 randomized minutes between brief walk, sleep, or blink actions; reduced motion disables automatic changes and walking translation.
 - Let users spend local points, manage inventory, feed and play with the cat, and trigger a simple trick; furniture customization is deferred.
-- Offer kitten milk, cat food, a cat treat, yarn ball, and high-five at centrally configured prices and active-day unlocks of 1, 21, 3, 7, and 50 days respectively. Food is repeatable and consumable; toys and tricks are purchased once.
+- Use a staged local store: milk on active day 1; yarn on day 3; teaser wand on day 7; cat food plus 10 free servings on day 21; treats plus 10 free servings and high-five on day 50; and paw shake, a free outdoor garden, and butterfly play on day 100. Milestone grants are idempotent and depend on lifetime active days, never a perfect streak.
+- Give milk, kibble, treats, yarn, wand play, high-five, paw shake, and butterfly exploration distinct visual interactions. Food remains consumable; toys, tricks, scenes, and milestone interactions are durable.
 - Morning Start feeds the cat once per day without spending points.
 - Missed days, cancelled sessions, and incomplete actions never harm the cat or remove points, inventory, milestones, or progress.
 - Welcome returning users with gentle, non-judgmental messages.
