@@ -142,11 +142,11 @@
 
 ## TASK-06: Optional AI organization and Make It Smaller
 
-- [ ] Add explicit, opt-in GPT-5.6 organization for a user-submitted daily text brain dump.
-- [ ] Add explicit “Make It Smaller” and optional First Move adaptation for user-selected text.
-- [ ] Validate structured output against the five directions, concrete action rules, and 2/5/10/25 minute bounds.
-- [ ] Build review/edit/apply/cancel, loading, missing-key, offline, rejection, and malformed-response states.
-- [ ] Restrict each request to the text and context the user explicitly submits.
+- [x] Add explicit, opt-in GPT-5.6 organization for a user-submitted daily text brain dump.
+- [x] Add local “Make this smaller” adaptation for one selected reviewed item.
+- [x] Validate structured output against the five directions, concrete action rules, item-count limits, and 2/5/10/25 minute bounds.
+- [x] Build review/edit/delete/reorder/recategorize/add/confirm/cancel, loading, missing-key, offline, rejection, and malformed-response states.
+- [x] Restrict each request to the text and context the user explicitly submits.
 
 ### Acceptance criteria
 
@@ -154,6 +154,8 @@
 - AI task proposals and adapted moves are concise, valid, bounded, and safely rejected when malformed.
 - Reflections, images, habits, history, cat state, and unrelated local data are never sent.
 - Missing or failed AI never blocks local templates, manual First Moves, manual tasks, or sessions.
+
+**Status:** Complete. Mock planning is the safe default; live planning requires explicit server configuration and a user click. Suggestions remain transient until the editable review is confirmed.
 
 ## TASK-07: Toothbrush image verification
 

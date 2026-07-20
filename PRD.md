@@ -109,6 +109,8 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Propose reviewable tasks with titles, one of the five directions, order, and optional session duration.
 - Never apply proposals automatically. Manual task entry and organization remain complete alternatives.
 - Exclude reflections, toothbrush images, history, habits, cat state, and unrelated local data from AI requests.
+- Offer Plan my day after Morning Start and inside Today. Submit only an explicitly entered brain dump (maximum 2,000 characters), return one First Move plus up to three priority and three optional tasks, and require editable confirmation before saving.
+- Keep mock planning as the safe default. Live planning uses one non-retried Responses API request only after the user clicks Organize with AI; local manual planning and ordinary task creation remain available at all times.
 
 ### Rewards and activity timeline
 

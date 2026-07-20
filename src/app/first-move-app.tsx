@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import DayPlanner from "./day-planner";
+
 import {
   addHabit,
   addTask,
@@ -58,6 +60,9 @@ import { deleteReflection, hasReflectionContent, saveReflection, type Reflection
 import { getCalendarMonth, getDayDetail, getTrendSummary, HISTORY_CATEGORIES, type TrendSummary } from "@/lib/history";
 import { captureVideoFrame, compressImageToJpeg } from "@/lib/image-compression";
 import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, recordMorningAttempt, resetMorningCheck, verifyToothbrushPhoto } from "@/lib/morning-check";
+import { APP_VIEWS, APP_VIEW_LABELS, plannerPresentation, type AppView } from "@/lib/app-navigation";
+import { loadDailyPlan, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-plan-state";
+import type { PlanningReviewItem } from "@/lib/planning-review";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -73,6 +78,11 @@ export default function FirstMoveApp() {
   const state = useAppState();
   const today = localDateKey();
   const pendingIntent = getPendingIntent(state);
+  const openSession = getOpenSession(state);
+  const morningComplete = state.morningChecks.some((check) => check.dateKey === today);
+  const [activeView, setActiveView] = useState<AppView>("first-moves");
+  const [dailyPlan, setDailyPlan] = useState<DailyPlanRecord>();
+  const [reviewingPlan, setReviewingPlan] = useState(false);
 
   const update = useCallback((recipe: (current: AppState) => AppState) => {
     updateAppState(recipe);
@@ -82,21 +92,39 @@ export default function FirstMoveApp() {
     update((current) => syncProgress(current, today, true));
   }, [today, update]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDailyPlan(loadDailyPlan(window.localStorage, today));
+      setReviewingPlan(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [today]);
+
+  function navigate(view: AppView) {
+    setActiveView(view);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function savePlan(items: PlanningReviewItem[]) {
+    const record = { dateKey: today, items };
+    saveDailyPlan(window.localStorage, record);
+    setDailyPlan(record);
+    setReviewingPlan(false);
+  }
+
+  function reviewPlan() { setReviewingPlan(true); navigate("first-moves"); }
+  const plannerState = plannerPresentation(morningComplete, Boolean(dailyPlan), reviewingPlan);
+
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-stone-900">
       <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-[#f7f4ee]/95 px-5 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <a href="#top" className="font-bold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-600">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <button type="button" onClick={() => navigate("first-moves")} className="font-bold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-600">
             First Move
-          </a>
-          <nav aria-label="Page sections" className="hidden sm:block">
-            <ul className="flex gap-1 text-sm font-semibold text-stone-600">
-              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#moves">First Moves</a></li>
-              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#focus">Focus</a></li>
-              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#today">Today</a></li>
-              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#tasks">Tasks</a></li>
-              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#habits">Habits</a></li>
-              <li><a className="rounded-lg px-3 py-2 hover:bg-white focus-visible:outline-2 focus-visible:outline-orange-600" href="#cat">Cat</a></li>
+          </button>
+          <nav aria-label="Main views" className="order-last w-full overflow-x-auto sm:order-none sm:w-auto">
+            <ul className="flex min-w-max gap-1 text-sm font-semibold text-stone-600">
+              {APP_VIEWS.map((view) => <li key={view}><button type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => navigate(view)} className={`rounded-lg px-3 py-2 focus-visible:outline-2 focus-visible:outline-orange-600 ${activeView === view ? "bg-white text-stone-950 shadow-sm" : "hover:bg-white"}`}>{APP_VIEW_LABELS[view]}</button></li>)}
             </ul>
           </nav>
           <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
@@ -105,7 +133,9 @@ export default function FirstMoveApp() {
         </div>
       </header>
 
-      <main id="top" className="mx-auto max-w-6xl px-5 pb-20 pt-10 sm:px-8 sm:pt-14">
+      {openSession && activeView !== "focus" && <button type="button" onClick={() => navigate("focus")} className="fixed bottom-4 right-4 z-30 rounded-full bg-sky-800 px-4 py-2 text-sm font-bold text-white shadow-lg">{openSession.mode === "countdown" ? "Countdown" : "Tracking"} · {openSession.status}</button>}
+      <main id="top" className="mx-auto max-w-6xl px-5 pb-20 pt-8 sm:px-8 sm:pt-10">
+        {activeView === "first-moves" && <>
         <div className="max-w-3xl">
           <p className="text-sm font-semibold text-orange-700">I&apos;m Stuck</p>
           <h1 className="mt-2 text-4xl font-bold tracking-[-0.04em] text-stone-950 sm:text-5xl">One small move is enough to begin.</h1>
@@ -117,7 +147,10 @@ export default function FirstMoveApp() {
           </p>
         </div>
 
-        <MorningStart state={state} today={today} update={update} />
+        {plannerState === "morning" && <MorningStart state={state} today={today} update={update} />}
+        {plannerState === "full" && <><MorningStart state={state} today={today} update={update} /><DayPlanner id="daily-plan" state={state} update={update} onConfirmed={savePlan} onOpenTasks={() => navigate("tasks")} /></>}
+        {plannerState === "summary" && dailyPlan && <PlanSummary plan={dailyPlan} pendingIntent={pendingIntent} actionLabel="Review or edit plan" onAction={reviewPlan} />}
+        {plannerState === "review" && dailyPlan && <DayPlanner id="daily-plan" state={state} update={update} initialItems={dailyPlan.items} onConfirmed={savePlan} onClose={() => setReviewingPlan(false)} onOpenTasks={() => navigate("tasks")} />}
 
         <div className="mt-10 grid items-start gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <FirstMovePicker
@@ -125,6 +158,7 @@ export default function FirstMoveApp() {
             habits={state.habits}
             pendingIntent={pendingIntent}
             update={update}
+            onGoFocus={() => navigate("focus")}
             onSaveAsTask={(title, direction) => update((current) => addTask(current, { title, direction }))}
           />
           <section className="rounded-[1.75rem] border border-orange-200 bg-orange-50 p-6 sm:p-7" aria-labelledby="foundation-heading">
@@ -135,30 +169,30 @@ export default function FirstMoveApp() {
             </p>
           </section>
         </div>
+        </>}
 
-        <FocusPanel key={pendingIntent?.id ?? "focus"} state={state} update={update} />
+        {activeView === "focus" && <FocusPanel key={pendingIntent?.id ?? "focus"} state={state} update={update} />}
+        {activeView === "today" && <TodayOverview state={state} today={today} update={update} dailyPlan={dailyPlan} pendingIntent={pendingIntent} onReviewPlan={reviewPlan} />}
 
-        <TodayOverview state={state} today={today} update={update} />
-
-        <section id="tasks" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="tasks-heading">
+        {activeView === "tasks" && <section id="tasks" className="rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="tasks-heading">
           <div className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Manual and editable</p>
             <h2 id="tasks-heading" className="mt-2 text-3xl font-bold tracking-tight">Tasks</h2>
             <p className="mt-2 text-sm leading-6 text-stone-600">Completing a task earns 5 points once per local day, even if it is unchecked and completed again.</p>
           </div>
           <TaskEditor state={state} today={today} update={update} />
-        </section>
+        </section>}
 
-        <section id="habits" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="habits-heading">
+        {activeView === "habits" && <section id="habits" className="rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="habits-heading">
           <div className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Daily or selected days</p>
             <h2 id="habits-heading" className="mt-2 text-3xl font-bold tracking-tight">Habits</h2>
             <p className="mt-2 text-sm leading-6 text-stone-600">Today&apos;s scheduled habits can earn 3 points once. Unscheduled habits stay visible here so their schedule remains easy to edit.</p>
           </div>
           <HabitEditor habits={state.habits} today={today} update={update} />
-        </section>
+        </section>}
 
-        <CatRoom state={state} today={today} update={update} />
+        {activeView === "cat" && <CatRoom state={state} today={today} update={update} />}
       </main>
     </div>
   );
@@ -237,7 +271,7 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
   function skip() { stopCamera(); clearImage(); setMessage("Skipped for today. No reward or penalty was recorded."); setPhase("idle"); }
   function resetToday() { stopCamera(); clearImage(); setMessage(""); setPhase("idle"); update((current) => resetMorningCheck(current, today)); }
 
-  if (completed) return <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4" aria-labelledby="morning-heading"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Morning Start complete</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">The kitten enjoyed breakfast.</h2></div><div className="flex flex-wrap gap-2"><a href="#moves" className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">Choose my First Move</a>{process.env.NODE_ENV === "development" && <button type="button" className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-900" onClick={resetToday}>Reset today&apos;s Morning Check</button>}</div></div></section>;
+  if (completed) return <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4" aria-labelledby="morning-heading"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Morning Start complete</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">The kitten enjoyed breakfast.</h2></div>{process.env.NODE_ENV === "development" && <details className="mt-3 border-t border-emerald-200 pt-2 text-xs text-stone-500"><summary className="cursor-pointer">Development tools</summary><button type="button" className="mt-2 underline underline-offset-2" onClick={resetToday}>Reset today&apos;s Morning Check</button></details>}</section>;
 
   return <section className="mt-8 rounded-[1.75rem] border border-sky-200 bg-sky-50 p-6 shadow-sm sm:p-7" aria-labelledby="morning-heading"><p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Morning Start · Fixed daily mission</p><h2 id="morning-heading" className="mt-2 text-2xl font-bold">Take a current photo with your toothbrush</h2><p className="mt-2 text-sm leading-6 text-stone-600">The photo is resized to a maximum of 768 px in this browser and is never saved to local storage. This is a routine check, not dental analysis.</p>
     {phase === "idle" && <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={startCamera}>Open camera</button><UploadButton onFile={chooseFile} /></div>}
@@ -259,12 +293,14 @@ function FirstMovePicker({
   habits,
   pendingIntent,
   update,
+  onGoFocus,
   onSaveAsTask,
 }: {
   tasks: Task[];
   habits: Habit[];
   pendingIntent?: ActivityIntent;
   update: (recipe: (state: AppState) => AppState) => void;
+  onGoFocus: () => void;
   onSaveAsTask: (title: string, direction: Direction) => void;
 }) {
   const [stuckState, setStuckState] = useState<StuckState>(STUCK_STATES[0]);
@@ -334,7 +370,7 @@ function FirstMovePicker({
           </dl>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <a href="#focus" className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700">Go to Focus</a>
+          <button type="button" onClick={onGoFocus} className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700">Go to Focus</button>
           <button type="button" className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-violet-100 focus-visible:outline-2 focus-visible:outline-violet-700" onClick={() => update((state) => cancelPendingIntent(state, pendingIntent.id))}>Change move</button>
           <button type="button" className="rounded-xl px-4 py-2 text-sm font-semibold text-stone-600 hover:bg-white focus-visible:outline-2 focus-visible:outline-stone-700" onClick={() => { update((state) => cancelPendingIntent(state, pendingIntent.id)); setNotice("Cancelled. Nothing was lost."); }}>Cancel</button>
         </div>
@@ -609,7 +645,7 @@ function ReflectionField({ id, label, value, onChange }: { id: string; label: st
   return <label htmlFor={id} className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><textarea id={id} rows={2} maxLength={1000} className="mt-2 block w-full resize-y rounded-xl border border-stone-200 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function TodayOverview({ state, today, update }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void }) {
+function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onReviewPlan }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void; dailyPlan?: DailyPlanRecord; pendingIntent?: ActivityIntent; onReviewPlan: () => void }) {
   const [tab, setTab] = useState<"today" | "trends" | "calendar">("today");
   const summary = getTodaySummary(state, today);
   const timeline = getTodayTimeline(state, today);
@@ -617,6 +653,7 @@ function TodayOverview({ state, today, update }: { state: AppState; today: strin
     <section id="today" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-amber-200 bg-amber-50 p-6 shadow-sm sm:p-8" aria-labelledby="today-heading">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Today</p>
       <h2 id="today-heading" className="mt-2 text-3xl font-bold tracking-tight">Your intentional time</h2>
+      <PlanSummary plan={dailyPlan} pendingIntent={pendingIntent} actionLabel="Review plan" onAction={onReviewPlan} compact />
       <div className="mt-5 flex gap-1 rounded-xl bg-amber-100 p-1" role="tablist" aria-label="Today views">{(["today", "trends", "calendar"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={tab === value} className={`min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-amber-700 ${tab === value ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:bg-white/60"}`} onClick={() => setTab(value)}>{value}</button>)}</div>
       {tab === "today" && <div role="tabpanel">
         <div className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction}><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
@@ -628,6 +665,13 @@ function TodayOverview({ state, today, update }: { state: AppState; today: strin
       {tab === "calendar" && <CalendarPanel state={state} today={today} onShowToday={() => setTab("today")} />}
     </section>
   );
+}
+
+function PlanSummary({ plan, pendingIntent, actionLabel, onAction, compact = false }: { plan?: DailyPlanRecord; pendingIntent?: ActivityIntent; actionLabel: string; onAction: () => void; compact?: boolean }) {
+  const priorityCount = plan?.items.filter((item) => item.group === "priority").length ?? 0;
+  const optionalCount = plan?.items.filter((item) => item.group === "optional").length ?? 0;
+  const plannedMove = plan?.items.find((item) => item.group === "first-move")?.firstStep;
+  return <section className={`${compact ? "mt-5" : "mt-6"} rounded-2xl border border-indigo-200 bg-white p-4 sm:p-5`} aria-label="Today's plan summary"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-indigo-700">Today&apos;s plan</p><h2 className="mt-1 text-xl font-bold">{plan ? "Today’s plan is ready" : "No plan confirmed yet"}</h2><p className="mt-2 text-sm text-stone-600">{priorityCount} priority · {optionalCount} optional</p>{(pendingIntent?.moveText || plannedMove) && <p className="mt-2 text-sm"><span className="font-semibold">Current First Move:</span> {pendingIntent?.moveText ?? plannedMove}</p>}</div><button type="button" onClick={onAction} className="rounded-xl border border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-800">{actionLabel}</button></div></section>;
 }
 
 const chartColors: Record<(typeof HISTORY_CATEGORIES)[number], string> = { "Work & Study": "#2563eb", "Daily Life": "#d97706", "Exercise & Movement": "#059669", "Intentional Entertainment": "#9333ea", Rest: "#0e7490", Uncategorized: "#78716c" };
