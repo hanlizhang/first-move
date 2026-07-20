@@ -117,14 +117,14 @@ export default function FirstMoveApp() {
 
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-stone-900">
-      <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-[#f7f4ee]/95 px-5 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 sm:gap-4">
+      <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-[#f7f4ee]/95 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 sm:gap-3">
           <button type="button" onClick={() => navigate("first-moves")} className="font-bold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-600">
             First Move
           </button>
-          <nav aria-label="Main views" className="order-last w-full overflow-x-auto sm:order-none sm:w-auto">
+          <nav aria-label="Main views" className="order-last w-full overflow-x-auto overscroll-x-contain sm:order-none sm:w-auto">
             <ul className="flex min-w-max gap-1 text-sm font-semibold text-stone-600">
-              {APP_VIEWS.map((view) => <li key={view}><button type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => navigate(view)} className={`rounded-lg px-3 py-2 focus-visible:outline-2 focus-visible:outline-orange-600 ${activeView === view ? "bg-white text-stone-950 shadow-sm" : "hover:bg-white"}`}>{APP_VIEW_LABELS[view]}</button></li>)}
+              {APP_VIEWS.map((view) => <li key={view}><button type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => navigate(view)} className={`min-h-11 rounded-lg px-3 py-2 focus-visible:outline-2 focus-visible:outline-orange-600 ${activeView === view ? "bg-white text-stone-950 shadow-sm" : "hover:bg-white"}`}>{APP_VIEW_LABELS[view]}</button></li>)}
             </ul>
           </nav>
           <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
@@ -134,11 +134,11 @@ export default function FirstMoveApp() {
       </header>
 
       {openSession && activeView !== "focus" && <button type="button" onClick={() => navigate("focus")} className="fixed bottom-4 right-4 z-30 rounded-full bg-sky-800 px-4 py-2 text-sm font-bold text-white shadow-lg">{openSession.mode === "countdown" ? "Countdown" : "Tracking"} · {openSession.status}</button>}
-      <main id="top" className="mx-auto max-w-6xl px-5 pb-20 pt-8 sm:px-8 sm:pt-10">
+      <main id="top" className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
         {activeView === "first-moves" && <>
         <div className="max-w-3xl">
           <p className="text-sm font-semibold text-orange-700">I&apos;m Stuck</p>
-          <h1 className="mt-2 text-4xl font-bold tracking-[-0.04em] text-stone-950 sm:text-5xl">One small move is enough to begin.</h1>
+          <h1 className="mt-2 text-[clamp(2rem,5vw,3rem)] font-bold leading-[1.05] tracking-[-0.04em] text-stone-950">One small move is enough to begin.</h1>
           <p className="mt-4 text-base leading-7 text-stone-600 sm:text-lg">
             Name what is happening, choose a direction, and make one move small enough to begin. Everything here works locally without AI.
           </p>
@@ -152,7 +152,7 @@ export default function FirstMoveApp() {
         {plannerState === "summary" && dailyPlan && <PlanSummary plan={dailyPlan} pendingIntent={pendingIntent} actionLabel="Review or edit plan" onAction={reviewPlan} />}
         {plannerState === "review" && dailyPlan && <DayPlanner id="daily-plan" state={state} update={update} initialItems={dailyPlan.items} onConfirmed={savePlan} onClose={() => setReviewingPlan(false)} onOpenTasks={() => navigate("tasks")} />}
 
-        <div className="mt-10 grid items-start gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="mt-8 grid items-start gap-5 xl:grid-cols-[1.05fr_0.95fr]">
           <FirstMovePicker
             tasks={state.tasks}
             habits={state.habits}
@@ -161,7 +161,7 @@ export default function FirstMoveApp() {
             onGoFocus={() => navigate("focus")}
             onSaveAsTask={(title, direction) => update((current) => addTask(current, { title, direction }))}
           />
-          <section className="rounded-[1.75rem] border border-orange-200 bg-orange-50 p-6 sm:p-7" aria-labelledby="foundation-heading">
+          <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 sm:p-6" aria-labelledby="foundation-heading">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-700">This task only</p>
             <h2 id="foundation-heading" className="mt-3 text-2xl font-bold tracking-tight">A calm local starting point</h2>
             <p className="mt-3 text-sm leading-6 text-orange-950/70">
@@ -174,7 +174,7 @@ export default function FirstMoveApp() {
         {activeView === "focus" && <FocusPanel key={pendingIntent?.id ?? "focus"} state={state} update={update} />}
         {activeView === "today" && <TodayOverview state={state} today={today} update={update} dailyPlan={dailyPlan} pendingIntent={pendingIntent} onReviewPlan={reviewPlan} />}
 
-        {activeView === "tasks" && <section id="tasks" className="rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="tasks-heading">
+        {activeView === "tasks" && <section id="tasks" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="tasks-heading">
           <div className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Manual and editable</p>
             <h2 id="tasks-heading" className="mt-2 text-3xl font-bold tracking-tight">Tasks</h2>
@@ -183,7 +183,7 @@ export default function FirstMoveApp() {
           <TaskEditor state={state} today={today} update={update} />
         </section>}
 
-        {activeView === "habits" && <section id="habits" className="rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-8" aria-labelledby="habits-heading">
+        {activeView === "habits" && <section id="habits" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="habits-heading">
           <div className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Daily or selected days</p>
             <h2 id="habits-heading" className="mt-2 text-3xl font-bold tracking-tight">Habits</h2>
@@ -273,7 +273,7 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
 
   if (completed) return <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4" aria-labelledby="morning-heading"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Morning Start complete</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">The kitten enjoyed breakfast.</h2></div>{process.env.NODE_ENV === "development" && <details className="mt-3 border-t border-emerald-200 pt-2 text-xs text-stone-500"><summary className="cursor-pointer">Development tools</summary><button type="button" className="mt-2 underline underline-offset-2" onClick={resetToday}>Reset today&apos;s Morning Check</button></details>}</section>;
 
-  return <section className="mt-8 rounded-[1.75rem] border border-sky-200 bg-sky-50 p-6 shadow-sm sm:p-7" aria-labelledby="morning-heading"><p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Morning Start · Fixed daily mission</p><h2 id="morning-heading" className="mt-2 text-2xl font-bold">Take a current photo with your toothbrush</h2><p className="mt-2 text-sm leading-6 text-stone-600">The photo is resized to a maximum of 768 px in this browser and is never saved to local storage. This is a routine check, not dental analysis.</p>
+  return <section className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm sm:p-6" aria-labelledby="morning-heading"><p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Morning Start · Fixed daily mission</p><h2 id="morning-heading" className="mt-2 text-2xl font-bold">Take a current photo with your toothbrush</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">The photo is resized to a maximum of 768 px in this browser and is never saved to local storage. This is a routine check, not dental analysis.</p>
     {phase === "idle" && <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={startCamera}>Open camera</button><UploadButton onFile={chooseFile} /></div>}
     {phase === "permission" && <p className="mt-5 rounded-xl bg-white p-4 text-sm" role="status">Waiting for camera permission. Your browser may ask you to allow camera access.</p>}
     {phase === "camera" && <div className="mt-5"><video ref={videoRef} autoPlay playsInline muted className="max-h-96 w-full rounded-2xl bg-stone-900 object-contain" aria-label="Live camera preview" /><div className="mt-3 flex gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white" onClick={capture}>Take photo</button><SecondaryButton onClick={retry}>Cancel</SecondaryButton></div></div>}
@@ -478,7 +478,7 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
     : 0;
 
   return (
-    <section id="focus" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-sky-200 bg-sky-50 p-6 shadow-sm sm:p-8" aria-labelledby="focus-heading">
+    <section id="focus" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm sm:p-6" aria-labelledby="focus-heading">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Focus</p>
       <h2 id="focus-heading" className="mt-2 text-3xl font-bold tracking-tight">Track this time</h2>
 
@@ -499,7 +499,7 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
           </div>
         </div>
       ) : (
-        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
           <div className="rounded-2xl border border-sky-200 bg-white p-5">
             <h3 className="text-xl font-bold">Countdown</h3>
             {pendingIntent ? (
@@ -650,13 +650,13 @@ function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onRevie
   const summary = getTodaySummary(state, today);
   const timeline = getTodayTimeline(state, today);
   return (
-    <section id="today" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-amber-200 bg-amber-50 p-6 shadow-sm sm:p-8" aria-labelledby="today-heading">
+    <section id="today" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:p-6" aria-labelledby="today-heading">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Today</p>
       <h2 id="today-heading" className="mt-2 text-3xl font-bold tracking-tight">Your intentional time</h2>
       <PlanSummary plan={dailyPlan} pendingIntent={pendingIntent} actionLabel="Review plan" onAction={onReviewPlan} compact />
       <div className="mt-5 flex gap-1 rounded-xl bg-amber-100 p-1" role="tablist" aria-label="Today views">{(["today", "trends", "calendar"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={tab === value} className={`min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-amber-700 ${tab === value ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:bg-white/60"}`} onClick={() => setTab(value)}>{value}</button>)}</div>
       {tab === "today" && <div role="tabpanel">
-        <div className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction}><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
+        <div className="mt-5 rounded-2xl bg-white p-4 sm:p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction} className="min-w-0"><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
         <DailyReflection state={state} today={today} update={update} />
         <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
         {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{timelineDescription(entry)}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
@@ -681,7 +681,7 @@ function TrendsPanel({ state, today }: { state: AppState; today: string }) {
   const trend = getTrendSummary(state, today, period);
   return <div className="mt-5" role="tabpanel"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-bold">Trends</h3><label className="text-sm font-semibold">Period <select className="ml-2 rounded-lg border border-amber-200 bg-white px-3 py-2 font-normal" value={period} onChange={(event) => setPeriod(Number(event.target.value) as 7 | 30)}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select></label></div>
     <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Total tracked time" value={formatDuration(trend.totalTrackedMs)} /><Metric label="Active days" value={String(trend.activeDays)} /><Metric label="Completed First Moves" value={String(trend.completedFirstMoves)} /><Metric label="Completed sessions" value={String(trend.completedSessions)} /></dl>
-    {trend.totalTrackedMs === 0 ? <div className="mt-5"><EmptyState>No tracked sessions in this period. Rest, entertainment, and every direction are shown neutrally when recorded.</EmptyState></div> : <div className="mt-5 grid gap-5 lg:grid-cols-[1.35fr_0.65fr]"><LineChart trend={trend} /><CategoryChart trend={trend} /></div>}
+    {trend.totalTrackedMs === 0 ? <div className="mt-5"><EmptyState>No tracked sessions in this period. Rest, entertainment, and every direction are shown neutrally when recorded.</EmptyState></div> : <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[1.35fr_0.65fr]"><LineChart trend={trend} /><CategoryChart trend={trend} /></div>}
   </div>;
 }
 
@@ -712,7 +712,7 @@ function CalendarPanel({ state, today, onShowToday }: { state: AppState; today: 
   const maxTracked = Math.max(...days.map((day) => day.trackedMs), 1);
   function moveMonth(offset: number) { setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1, 12)); }
   return <div className="mt-5" role="tabpanel"><div className="flex items-center justify-between gap-3"><button type="button" className="rounded-lg border border-amber-200 bg-white px-3 py-2 font-semibold" onClick={() => moveMonth(-1)} aria-label="Previous month">←</button><h3 className="text-xl font-bold">{new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(monthCursor)}</h3><button type="button" className="rounded-lg border border-amber-200 bg-white px-3 py-2 font-semibold" onClick={() => moveMonth(1)} aria-label="Next month">→</button></div>
-    <div className="mt-4 rounded-2xl bg-white p-3"><div className="grid grid-cols-7 text-center text-xs font-semibold text-stone-500">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day} className="py-2">{day}</span>)}</div><div className="grid grid-cols-7 gap-1">{days.map((day) => { const intensity = day.trackedMs / maxTracked; return <button key={day.dateKey} type="button" onClick={() => setSelected(day.dateKey)} aria-label={`${formatLongDate(day.dateKey)}${day.isActive ? ", active day" : ""}, ${formatDuration(day.trackedMs)} tracked`} aria-pressed={selected === day.dateKey} className={`relative min-h-11 rounded-lg border text-sm focus-visible:outline-2 focus-visible:outline-amber-700 ${selected === day.dateKey ? "border-stone-900 ring-2 ring-stone-900" : day.isToday ? "border-amber-600" : "border-transparent"} ${day.inMonth ? "text-stone-900" : "text-stone-400"}`} style={{ backgroundColor: day.trackedMs ? `rgba(217, 119, 6, ${0.1 + intensity * 0.35})` : undefined }}><span>{day.dayNumber}</span>{day.isActive && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-stone-700" aria-hidden="true" />}</button>; })}</div><p className="mt-3 text-xs text-stone-500">Dot: active day. Deeper shading: more tracked minutes. Outline: today; dark ring: selected date.</p></div>
+    <div className="mt-4 min-w-0 rounded-2xl bg-white p-2 sm:p-3"><div className="grid grid-cols-7 text-center text-[0.6875rem] font-semibold text-stone-500 sm:text-xs">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day} className="py-2">{day}</span>)}</div><div className="grid grid-cols-7 gap-0.5 sm:gap-1">{days.map((day) => { const intensity = day.trackedMs / maxTracked; return <button key={day.dateKey} type="button" onClick={() => setSelected(day.dateKey)} aria-label={`${formatLongDate(day.dateKey)}${day.isActive ? ", active day" : ""}, ${formatDuration(day.trackedMs)} tracked`} aria-pressed={selected === day.dateKey} className={`relative min-h-11 min-w-0 rounded-lg border text-xs focus-visible:outline-2 focus-visible:outline-amber-700 sm:text-sm ${selected === day.dateKey ? "border-stone-900 ring-2 ring-stone-900" : day.isToday ? "border-amber-600" : "border-transparent"} ${day.inMonth ? "text-stone-900" : "text-stone-400"}`} style={{ backgroundColor: day.trackedMs ? `rgba(217, 119, 6, ${0.1 + intensity * 0.35})` : undefined }}><span>{day.dayNumber}</span>{day.isActive && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-stone-700" aria-hidden="true" />}</button>; })}</div><p className="mt-3 text-xs text-stone-500">Dot: active day. Deeper shading: more tracked minutes. Outline: today; dark ring: selected date.</p></div>
     <DayDetailPanel detail={detail} isToday={selected === today} onShowToday={onShowToday} />
   </div>;
 }
@@ -793,7 +793,7 @@ function TaskEditor({ state, today, update }: { state: AppState; today: string; 
   }
 
   return (
-    <div className="mt-7 grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+    <div className="mt-6 grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
       <form onSubmit={submit} className="rounded-2xl bg-stone-50 p-4">
         <h3 className="font-bold">{editing ? "Edit task" : "Add a task"}</h3>
         <TextField id="task-title" label="Task" value={title} onChange={setTitle} placeholder="Open the document" />
@@ -855,7 +855,7 @@ function HabitEditor({ habits, today, update }: { habits: Habit[]; today: string
   }
 
   return (
-    <div className="mt-7 grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+    <div className="mt-6 grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
       <form onSubmit={submit} className="rounded-2xl bg-stone-50 p-4">
         <h3 className="font-bold">{editing ? "Edit habit" : "Add a habit"}</h3>
         <TextField id="habit-title" label="Habit" value={title} onChange={setTitle} placeholder="Take a short walk" />
@@ -1023,12 +1023,12 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   const ownsTrick = inventoryQuantity(state, "high-five") > 0;
 
   return (
-    <section id="cat" className="scroll-mt-24 mt-8 rounded-[1.75rem] border border-fuchsia-200 bg-fuchsia-50 p-6 shadow-sm sm:p-8" aria-labelledby="cat-heading">
+    <section id="cat" className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-4 shadow-sm sm:p-6" aria-labelledby="cat-heading">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-700">Cat Room</p><h2 id="cat-heading" className="mt-2 text-3xl font-bold tracking-tight">A little companion for the journey</h2></div>
         <div className="rounded-full bg-white px-4 py-2 text-sm font-bold">✦ {formatPoints(state.progress.points)} points</div>
       </div>
-      <dl className="mt-5 grid gap-3 rounded-2xl bg-white p-4 text-sm sm:grid-cols-4">
+      <dl className="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-white p-4 text-sm sm:grid-cols-4">
         <div><dt className="text-stone-500">Today</dt><dd className="font-semibold">{formatRoomDate(today)}</dd></div>
         <div><dt className="text-stone-500">Journey day</dt><dd className="font-semibold">{state.progress.journeyDay || 1}</dd></div>
         <div><dt className="text-stone-500">Active days</dt><dd className="font-semibold">{state.progress.totalActiveDays}</dd></div>

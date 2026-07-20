@@ -177,6 +177,7 @@
 
 ## TASK-08: Mobile polish, testing, deployment, and submission
 
+- [x] TASK-08A: Polish the 375–1440 px responsive shell, cards, forms, charts, calendar, Cat Room, and compact scrollable navigation at 100% browser zoom.
 - [ ] Add project-local unit/integration test tooling and cover persistence, core loop, timing, rewards, privacy boundaries, rollover, and error states.
 - [ ] Verify keyboard navigation, focus management, semantics, labels, contrast, reduced motion, touch targets, and non-color cues.
 - [ ] Polish phone, tablet, and desktop layouts for one-decision-at-a-time stuck use, safe areas, long content, and interrupted sessions.
