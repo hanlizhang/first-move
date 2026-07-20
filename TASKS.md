@@ -162,7 +162,7 @@
 - [x] Add the default no-network mock verifier and development pass/fail controls behind the `OPENAI_LIVE_VISION` mode boundary.
 - [x] Atomically trigger the cat reaction, award points, count activity, and add one timeline event on the first successful daily check.
 - [x] Continue from successful Morning Start into the existing First Move selection.
-- [ ] Connect live image verification through a separately reviewed server boundary without persisting images or exposing credentials.
+- [x] Connect live image verification through a bounded server route without persisting images or exposing credentials.
 
 ### Acceptance criteria
 
@@ -171,7 +171,7 @@
 - Repeating or reloading cannot duplicate feeding, rewards, active-day counting, or the timeline event.
 - Morning Start leads into the same First Move flow while “I'm Stuck” remains independently available.
 
-**Status:** Local camera/upload, image disposal, persistence, rewards, timeline, cat reaction, rollover, and mock verification are complete. TASK-07 remains open for the explicitly deferred live verification boundary.
+**Status:** Complete. Mock remains the default; live verification requires explicit server configuration and a user click, uses one non-retried low-detail Responses API request, and preserves the three-attempt daily limit.
 
 ## TASK-08: Mobile polish, testing, deployment, and submission
 

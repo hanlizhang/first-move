@@ -38,7 +38,7 @@ Stopping, changing direction, or not completing a session never produces punishm
 2. On the first successful check that day, feed the cat, award points, and record the activity.
 3. Choose an intentional direction and begin a First Move.
 
-The toothbrush check is fixed and non-editable. Images are processed locally, discarded after confirmation or cancellation, and never used for dental diagnosis or sent to AI. If camera/file access is unavailable, provide a clearly labeled manual fallback.
+The toothbrush check is fixed and non-editable. Images are compressed locally, discarded after confirmation or cancellation, and never used for dental diagnosis. Mock verification is the default and sends nothing externally; when live vision is explicitly enabled by the deployer, a photo is sent to OpenAI only after the user clicks Verify photo. If camera/file access is unavailable, provide a clearly labeled manual fallback.
 
 ### I'm Stuck
 
@@ -155,7 +155,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 
 - Use a versioned, validated local schema with migrations, safe defaults, local-day rollover, and an explicit reset path.
 - Persist tasks, habits, templates/preferences, stuck-flow choices, session state, points, timeline, reflections, cat state, inventory, and milestones.
-- Do not persist toothbrush images or send them to AI.
+- Do not persist toothbrush images. Send one only for an explicit live verification action when live vision is configured; mock mode remains entirely local and makes no paid request.
 - Explain that clearing browser data removes progress; consider export/import only after the core MVP works.
 
 ## Success criteria

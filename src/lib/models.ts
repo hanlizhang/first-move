@@ -112,6 +112,11 @@ export interface MorningCheck {
   verifierMode: "mock" | "live";
 }
 
+export interface MorningAttempt {
+  dateKey: string;
+  count: number;
+}
+
 export interface InventoryItem {
   itemId: string;
   quantity: number;
@@ -134,7 +139,7 @@ export interface UserProgress {
 }
 
 export interface AppState {
-  schemaVersion: 6;
+  schemaVersion: 7;
   tasks: Task[];
   habits: Habit[];
   activityIntents: ActivityIntent[];
@@ -142,11 +147,12 @@ export interface AppState {
   rewardEvents: RewardEvent[];
   journalEntries: JournalEntry[];
   morningChecks: MorningCheck[];
+  morningAttempts: MorningAttempt[];
   inventory: Inventory;
   progress: UserProgress;
 }
 
-export const SCHEMA_VERSION = 6 as const;
+export const SCHEMA_VERSION = 7 as const;
 
 export function createEmptyState(): AppState {
   return {
@@ -158,6 +164,7 @@ export function createEmptyState(): AppState {
     rewardEvents: [],
     journalEntries: [],
     morningChecks: [],
+    morningAttempts: [],
     inventory: { items: [] },
     progress: {
       points: 0,

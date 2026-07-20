@@ -57,7 +57,7 @@ import { gentleReturnMessage, kittenStage, syncProgress } from "@/lib/progress";
 import { deleteReflection, hasReflectionContent, saveReflection, type ReflectionInput } from "@/lib/reflections";
 import { getCalendarMonth, getDayDetail, getTrendSummary, HISTORY_CATEGORIES, type TrendSummary } from "@/lib/history";
 import { captureVideoFrame, compressImageToJpeg } from "@/lib/image-compression";
-import { completeMorningCheck, morningVerificationMode, verifyToothbrushPhoto } from "@/lib/morning-check";
+import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, recordMorningAttempt, verifyToothbrushPhoto } from "@/lib/morning-check";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -176,7 +176,8 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
   const [mockOutcome, setMockOutcome] = useState<"pass" | "fail">("pass");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | undefined>(undefined);
-  const verifierMode = morningVerificationMode();
+  const verifyingRef = useRef(false);
+  const attempts = morningAttemptCount(state, today);
 
   const stopCamera = useCallback(() => { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = undefined; }, []);
   const clearImage = useCallback(() => { setImage(undefined); setPreviewUrl(""); }, []);
@@ -216,16 +217,20 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
   }
 
   async function verify() {
-    if (!image) return;
+    if (!image || verifyingRef.current || attempts >= MAX_MORNING_ATTEMPTS) return;
+    verifyingRef.current = true;
+    update((current) => recordMorningAttempt(current, today));
     setPhase("loading"); setMessage("Checking this photo…");
-    const result = await verifyToothbrushPhoto(image, mockOutcome);
-    if (result.outcome === "pass") {
-      update((current) => completeMorningCheck(current, today, captureMethod, verifierMode));
-      window.dispatchEvent(new Event("first-move:morning-success"));
-      clearImage(); setMessage("");
-    } else {
-      setMessage(result.message); setPhase(result.outcome === "unavailable" ? "unsupported" : "failure");
-    }
+    try {
+      const result = await verifyToothbrushPhoto(image, mockOutcome);
+      if (result.outcome === "pass") {
+        update((current) => completeMorningCheck(current, today, captureMethod, result.mode));
+        window.dispatchEvent(new Event("first-move:morning-success"));
+        clearImage(); setMessage("");
+      } else {
+        setMessage(result.message); setPhase(result.outcome === "unavailable" ? "unsupported" : "failure");
+      }
+    } finally { verifyingRef.current = false; }
   }
 
   function retry() { stopCamera(); clearImage(); setMessage(""); setPhase("idle"); }
@@ -237,12 +242,12 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
     {phase === "idle" && <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={startCamera}>Open camera</button><UploadButton onFile={chooseFile} /></div>}
     {phase === "permission" && <p className="mt-5 rounded-xl bg-white p-4 text-sm" role="status">Waiting for camera permission. Your browser may ask you to allow camera access.</p>}
     {phase === "camera" && <div className="mt-5"><video ref={videoRef} autoPlay playsInline muted className="max-h-96 w-full rounded-2xl bg-stone-900 object-contain" aria-label="Live camera preview" /><div className="mt-3 flex gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white" onClick={capture}>Take photo</button><SecondaryButton onClick={retry}>Cancel</SecondaryButton></div></div>}
-    {phase === "preview" && previewUrl && <div className="mt-5"><Image src={previewUrl} alt="Preview of the selected toothbrush check photo" width={768} height={768} unoptimized className="max-h-96 w-full rounded-2xl bg-stone-100 object-contain" /><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white" onClick={verify}>Verify toothbrush</button><SecondaryButton onClick={retry}>Retake</SecondaryButton></div></div>}
+    {phase === "preview" && previewUrl && <div className="mt-5"><Image src={previewUrl} alt="Preview of the selected toothbrush check photo" width={768} height={768} unoptimized className="max-h-96 w-full rounded-2xl bg-stone-100 object-contain" /><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={attempts >= MAX_MORNING_ATTEMPTS} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={verify}>Verify photo</button><SecondaryButton onClick={retry}>Retake</SecondaryButton></div></div>}
     {phase === "loading" && <p className="mt-5 rounded-xl bg-white p-4 text-sm" role="status">{message || "Preparing the photo…"}</p>}
     {(phase === "failure" || phase === "unsupported") && <div className="mt-5 rounded-xl border border-sky-200 bg-white p-4" role="alert"><p className="text-sm">{message || (phase === "unsupported" ? "Camera capture is not supported in this browser. Choose an image from this device instead." : "The check did not pass.")}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-sky-300 px-3 py-2 text-sm font-semibold" onClick={retry}>Retry</button><UploadButton onFile={chooseFile} /><button type="button" className="rounded-xl px-3 py-2 text-sm font-semibold text-stone-600" onClick={skip}>Skip without reward</button></div></div>}
     {message && phase === "idle" && <p className="mt-3 text-sm text-stone-600" role="status">{message}</p>}
     {process.env.NODE_ENV === "development" && <label className="mt-5 block border-t border-sky-200 pt-4 text-xs font-semibold text-stone-600">Development mock result <select className="ml-2 rounded-lg border border-sky-200 bg-white px-2 py-1" value={mockOutcome} onChange={(event) => setMockOutcome(event.target.value as "pass" | "fail")}><option value="pass">Simulate pass</option><option value="fail">Simulate fail</option></select></label>}
-    <p className="mt-3 text-xs text-stone-500">Verification mode: {verifierMode === "mock" ? "local mock (no network request)" : "live vision requested but not connected"}.</p>
+    <p className="mt-3 text-xs text-stone-500">{attempts} of {MAX_MORNING_ATTEMPTS} verification attempts used today. Mock mode is the safe server default unless live vision is explicitly configured.</p>
   </section>;
 }
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { normalizeAppState } from "./app-state.ts";
-import { completeMorningCheck, morningVerificationMode, verifyToothbrushPhoto } from "./morning-check.ts";
+import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, morningVerificationMode, recordMorningAttempt, verifyToothbrushPhoto } from "./morning-check.ts";
 import { createEmptyState } from "./models.ts";
 import { loadAppState, saveAppState, type StorageLike } from "./repository.ts";
 import { MORNING_REWARD_POINTS } from "./rewards.ts";
@@ -12,13 +12,25 @@ const clock = () => "2026-07-20T07:00:00.000Z";
 
 test("mock verification is the default and makes a deterministic local decision", async () => {
   assert.equal(morningVerificationMode({}), "mock");
-  assert.deepEqual(await verifyToothbrushPhoto(new Blob(["local"]), "pass", {}), { outcome: "pass" });
-  assert.equal((await verifyToothbrushPhoto(new Blob(["local"]), "fail", {})).outcome, "fail");
+  const passRequest: typeof fetch = async () => Response.json({ passed: true, detectedObject: "toothbrush", shortMessage: "Passed." }, { headers: { "X-Verification-Mode": "mock" } });
+  const failRequest: typeof fetch = async () => Response.json({ passed: false, detectedObject: "none", shortMessage: "Try again." });
+  assert.deepEqual(await verifyToothbrushPhoto(new Blob(["local"]), "pass", passRequest), { outcome: "pass", mode: "mock" });
+  assert.equal((await verifyToothbrushPhoto(new Blob(["local"]), "fail", failRequest)).outcome, "fail");
 });
 
-test("live flag remains unavailable without making an external request", async () => {
+test("live mode is explicit and client network errors do not retry", async () => {
   assert.equal(morningVerificationMode({ OPENAI_LIVE_VISION: "true" }), "live");
-  assert.equal((await verifyToothbrushPhoto(new Blob(), "pass", { OPENAI_LIVE_VISION: "true" })).outcome, "unavailable");
+  let calls = 0;
+  const request: typeof fetch = async () => { calls += 1; throw new Error("offline"); };
+  assert.equal((await verifyToothbrushPhoto(new Blob(), "pass", request)).outcome, "unavailable");
+  assert.equal(calls, 1);
+});
+
+test("morning verification attempts stop at three per local date", () => {
+  let state = createEmptyState();
+  for (let index = 0; index < 5; index += 1) state = recordMorningAttempt(state, dateKey);
+  assert.equal(morningAttemptCount(state, dateKey), MAX_MORNING_ATTEMPTS);
+  assert.equal(state.morningAttempts.length, 1);
 });
 
 test("a morning check and reward are created exactly once per local date", () => {
@@ -46,7 +58,8 @@ test("repository persists only check metadata and recovers malformed checks", ()
   const serialized = [...values.values()][0];
   assert.equal(serialized.includes("image"), false);
   assert.equal(loadAppState(storage).morningChecks.length, 1);
-  const recovered = normalizeAppState({ morningChecks: [{ dateKey, verifiedAt: clock(), captureMethod: "camera", verifierMode: "mock" }, { dateKey: "bad", image: "secret" }] });
+  const recovered = normalizeAppState({ morningChecks: [{ dateKey, verifiedAt: clock(), captureMethod: "camera", verifierMode: "mock" }, { dateKey: "bad", image: "secret" }], morningAttempts: [{ dateKey, count: 99 }, { dateKey: "bad", count: 2 }] });
   assert.equal(recovered.morningChecks.length, 1);
   assert.equal("image" in recovered.morningChecks[0], false);
+  assert.equal(recovered.morningAttempts[0].count, MAX_MORNING_ATTEMPTS);
 });

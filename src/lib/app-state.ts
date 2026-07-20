@@ -14,6 +14,7 @@ import {
   type IntendedDuration,
   type JournalEntry,
   type MorningCheck,
+  type MorningAttempt,
   type StuckState,
   type Task,
   type Weekday,
@@ -44,6 +45,7 @@ export function normalizeAppState(input: unknown): AppState {
     : [];
   const journalEntries = normalizeJournalEntries(input.journalEntries);
   const morningChecks = normalizeMorningChecks(input.morningChecks);
+  const morningAttempts = normalizeMorningAttempts(input.morningAttempts);
   const inventory = normalizeInventory(input.inventory);
   const progressInput = isRecord(input.progress) ? input.progress : {};
   const derivedPoints = rewardEvents.reduce((total, event) => total + event.points, 0);
@@ -57,6 +59,7 @@ export function normalizeAppState(input: unknown): AppState {
     rewardEvents,
     journalEntries,
     morningChecks,
+    morningAttempts,
     inventory,
     progress: {
       points:
@@ -385,6 +388,16 @@ function isMorningCheck(value: unknown): value is MorningCheck {
   return isRecord(value) && isDateKey(value.dateKey) && typeof value.verifiedAt === "string" &&
     (value.captureMethod === "camera" || value.captureMethod === "upload") &&
     (value.verifierMode === "mock" || value.verifierMode === "live");
+}
+
+function normalizeMorningAttempts(value: unknown): MorningAttempt[] {
+  if (!Array.isArray(value)) return [];
+  const attempts = new Map<string, MorningAttempt>();
+  for (const candidate of value) {
+    if (!isRecord(candidate) || !isDateKey(candidate.dateKey) || !Number.isInteger(candidate.count)) continue;
+    attempts.set(candidate.dateKey, { dateKey: candidate.dateKey, count: Math.min(3, Math.max(0, candidate.count as number)) });
+  }
+  return [...attempts.values()];
 }
 
 function optionalText(value: unknown): boolean {
