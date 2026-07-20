@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { normalizeAppState } from "./app-state.ts";
-import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, morningVerificationMode, recordMorningAttempt, verifyToothbrushPhoto } from "./morning-check.ts";
+import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, morningVerificationMode, recordMorningAttempt, resetMorningCheck, verifyToothbrushPhoto } from "./morning-check.ts";
 import { createEmptyState } from "./models.ts";
 import { loadAppState, saveAppState, type StorageLike } from "./repository.ts";
 import { MORNING_REWARD_POINTS } from "./rewards.ts";
@@ -48,6 +48,49 @@ test("the next local date creates a new check and reward", () => {
   const next = completeMorningCheck(first, "2026-07-21", "upload", "mock", () => "2026-07-21T07:00:00.000Z");
   assert.equal(next.morningChecks.length, 2);
   assert.equal(next.progress.points, MORNING_REWARD_POINTS * 2);
+});
+
+test("development reset removes today's check, reverses its reward, and recalculates activity", () => {
+  const completed = completeMorningCheck(createEmptyState(), dateKey, "camera", "mock", clock);
+  const reset = resetMorningCheck(completed, dateKey);
+  assert.equal(reset.morningChecks.length, 0);
+  assert.equal(reset.rewardEvents.length, 0);
+  assert.equal(reset.progress.points, 0);
+  assert.deepEqual(reset.progress.activeDateKeys, []);
+  assert.equal(reset.progress.totalActiveDays, 0);
+});
+
+test("repeated morning reset is idempotent", () => {
+  const completed = completeMorningCheck(createEmptyState(), dateKey, "camera", "mock", clock);
+  const once = resetMorningCheck(completed, dateKey);
+  const twice = resetMorningCheck(once, dateKey);
+  assert.equal(twice, once);
+  assert.equal(twice.progress.points, 0);
+});
+
+test("morning reset preserves unrelated records, dates, attempts, and rewards", () => {
+  const otherDate = "2026-07-19";
+  const base = completeMorningCheck(createEmptyState(), otherDate, "upload", "mock", () => "2026-07-19T07:00:00.000Z");
+  const todayComplete = completeMorningCheck(recordMorningAttempt(base, dateKey), dateKey, "camera", "mock", clock);
+  const state = {
+    ...todayComplete,
+    tasks: [{ id: "task", title: "Keep me", direction: "Daily Life" as const, order: 0, createdAt: clock(), updatedAt: clock(), completedOn: [dateKey] }],
+    habits: [{ id: "habit", title: "Keep me too", direction: "Rest" as const, schedule: { kind: "daily" as const }, createdAt: clock(), updatedAt: clock(), completedOn: [dateKey] }],
+    journalEntries: [{ dateKey, completed: "Still here", updatedAt: clock() }],
+    inventory: { items: [{ itemId: "kitten-milk", quantity: 2 }] },
+    sessions: [{ id: "session", mode: "stopwatch" as const, direction: "Rest" as const, label: "Keep this session", status: "completed" as const, startedAt: clock(), accumulatedElapsedMs: 120_000, endedAt: clock(), actualElapsedMs: 120_000 }],
+    rewardEvents: [...todayComplete.rewardEvents, { id: "store:purchase", source: "store" as const, sourceId: "kitten-milk", dateKey, points: -1, createdAt: clock() }],
+    progress: { ...todayComplete.progress, points: todayComplete.progress.points - 1 },
+  };
+  const reset = resetMorningCheck(state, dateKey);
+  assert.deepEqual(reset.tasks, state.tasks); assert.deepEqual(reset.habits, state.habits);
+  assert.deepEqual(reset.journalEntries, state.journalEntries); assert.deepEqual(reset.inventory, state.inventory);
+  assert.deepEqual(reset.sessions, state.sessions); assert.equal(reset.rewardEvents.some((event) => event.id === "store:purchase"), true);
+  assert.equal(reset.morningChecks.some((check) => check.dateKey === otherDate), true);
+  assert.equal(reset.rewardEvents.some((event) => event.id === `morning:${otherDate}`), true);
+  assert.equal(morningAttemptCount(reset, dateKey), 1);
+  assert.equal(reset.progress.points, MORNING_REWARD_POINTS - 1);
+  assert.deepEqual(reset.progress.activeDateKeys, [otherDate, dateKey]);
 });
 
 test("repository persists only check metadata and recovers malformed checks", () => {

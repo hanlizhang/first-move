@@ -57,7 +57,7 @@ import { gentleReturnMessage, kittenStage, syncProgress } from "@/lib/progress";
 import { deleteReflection, hasReflectionContent, saveReflection, type ReflectionInput } from "@/lib/reflections";
 import { getCalendarMonth, getDayDetail, getTrendSummary, HISTORY_CATEGORIES, type TrendSummary } from "@/lib/history";
 import { captureVideoFrame, compressImageToJpeg } from "@/lib/image-compression";
-import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, recordMorningAttempt, verifyToothbrushPhoto } from "@/lib/morning-check";
+import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, recordMorningAttempt, resetMorningCheck, verifyToothbrushPhoto } from "@/lib/morning-check";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -235,8 +235,9 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
 
   function retry() { stopCamera(); clearImage(); setMessage(""); setPhase("idle"); }
   function skip() { stopCamera(); clearImage(); setMessage("Skipped for today. No reward or penalty was recorded."); setPhase("idle"); }
+  function resetToday() { stopCamera(); clearImage(); setMessage(""); setPhase("idle"); update((current) => resetMorningCheck(current, today)); }
 
-  if (completed) return <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4" aria-labelledby="morning-heading"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Morning Start complete</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">The kitten enjoyed breakfast.</h2></div><a href="#moves" className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">Choose my First Move</a></div></section>;
+  if (completed) return <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4" aria-labelledby="morning-heading"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Morning Start complete</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">The kitten enjoyed breakfast.</h2></div><div className="flex flex-wrap gap-2"><a href="#moves" className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">Choose my First Move</a>{process.env.NODE_ENV === "development" && <button type="button" className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-900" onClick={resetToday}>Reset today&apos;s Morning Check</button>}</div></div></section>;
 
   return <section className="mt-8 rounded-[1.75rem] border border-sky-200 bg-sky-50 p-6 shadow-sm sm:p-7" aria-labelledby="morning-heading"><p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Morning Start · Fixed daily mission</p><h2 id="morning-heading" className="mt-2 text-2xl font-bold">Take a current photo with your toothbrush</h2><p className="mt-2 text-sm leading-6 text-stone-600">The photo is resized to a maximum of 768 px in this browser and is never saved to local storage. This is a routine check, not dental analysis.</p>
     {phase === "idle" && <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={startCamera}>Open camera</button><UploadButton onFile={chooseFile} /></div>}

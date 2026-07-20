@@ -50,6 +50,20 @@ export function completeMorningCheck(
   }, dateKey, true);
 }
 
+export function resetMorningCheck(state: AppState, dateKey: string): AppState {
+  if (!isDateKey(dateKey)) return state;
+  const rewardId = `morning:${dateKey}`;
+  const reward = state.rewardEvents.find((event) => event.id === rewardId && event.source === "morning" && event.dateKey === dateKey);
+  const hasCheck = state.morningChecks.some((check) => check.dateKey === dateKey);
+  if (!hasCheck && !reward) return state;
+  return syncProgress({
+    ...state,
+    morningChecks: state.morningChecks.filter((check) => check.dateKey !== dateKey),
+    rewardEvents: state.rewardEvents.filter((event) => event !== reward),
+    progress: reward ? { ...state.progress, points: roundPoints(Math.max(0, state.progress.points - reward.points)) } : state.progress,
+  }, dateKey, false);
+}
+
 function isVerificationPayload(value: unknown): value is { passed: boolean; detectedObject: string; shortMessage: string } {
   return typeof value === "object" && value !== null && typeof (value as { passed?: unknown }).passed === "boolean" && typeof (value as { detectedObject?: unknown }).detectedObject === "string" && typeof (value as { shortMessage?: unknown }).shortMessage === "string";
 }
