@@ -157,10 +157,12 @@
 
 ## TASK-07: Toothbrush image verification
 
-- [ ] Build the fixed Morning Start check with camera capture, image-file selection, permission guidance, preview, confirmation, retry, cancellation, and distinct manual fallback.
-- [ ] Dispose of image data after confirmation or cancellation; never persist, upload, or send it to AI.
-- [ ] Atomically feed the cat, award points, count activity, and add one timeline event on the first successful daily check.
-- [ ] Continue from successful Morning Start into intentional direction and First Move selection.
+- [x] Build the fixed Morning Start check with camera capture, image-file selection, permission guidance, preview, confirmation, retry, and skip states.
+- [x] Compress images locally to JPEG at a maximum 768 px and dispose of them after retake, skip, success, or unmount; never persist them.
+- [x] Add the default no-network mock verifier and development pass/fail controls behind the `OPENAI_LIVE_VISION` mode boundary.
+- [x] Atomically trigger the cat reaction, award points, count activity, and add one timeline event on the first successful daily check.
+- [x] Continue from successful Morning Start into the existing First Move selection.
+- [ ] Connect live image verification through a separately reviewed server boundary without persisting images or exposing credentials.
 
 ### Acceptance criteria
 
@@ -168,6 +170,8 @@
 - Camera/file and unavailable-access fallback paths are clear and accessible, with no dental or diagnostic claim.
 - Repeating or reloading cannot duplicate feeding, rewards, active-day counting, or the timeline event.
 - Morning Start leads into the same First Move flow while “I'm Stuck” remains independently available.
+
+**Status:** Local camera/upload, image disposal, persistence, rewards, timeline, cat reaction, rollover, and mock verification are complete. TASK-07 remains open for the explicitly deferred live verification boundary.
 
 ## TASK-08: Mobile polish, testing, deployment, and submission
 

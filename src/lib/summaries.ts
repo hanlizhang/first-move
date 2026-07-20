@@ -8,7 +8,8 @@ export interface TodaySummary {
 export type TimelineEntry =
   | { id: string; kind: "session"; timestamp: string; title: string; direction: Direction; durationMs: number; outcome: "completed" | "stopped"; points: number }
   | { id: string; kind: "task" | "habit"; timestamp: string; title: string; direction: Direction; points: number }
-  | { id: string; kind: "reflection"; timestamp: string; title: string; points: number };
+  | { id: string; kind: "reflection"; timestamp: string; title: string; points: number }
+  | { id: string; kind: "morning"; timestamp: string; title: string; points: number };
 
 export function getTodaySummary(state: AppState, dateKey: string): TodaySummary {
   const byDirection = Object.fromEntries(DIRECTIONS.map((direction) => [direction, 0])) as Record<Direction, number>;
@@ -45,6 +46,11 @@ export function getTodayTimeline(state: AppState, dateKey: string): TimelineEntr
       ? state.tasks.find((task) => task.id === event.sourceId)
       : state.habits.find((habit) => habit.id === event.sourceId);
     if (item) entries.push({ id: `timeline:${event.id}`, kind: event.source, timestamp: event.createdAt, title: item.title, direction: item.direction, points: event.points });
+  }
+  const morning = state.morningChecks.find((check) => check.dateKey === dateKey);
+  if (morning) {
+    const reward = state.rewardEvents.find((event) => event.source === "morning" && event.sourceId === dateKey);
+    entries.push({ id: `timeline:morning:${dateKey}`, kind: "morning", timestamp: morning.verifiedAt, title: "Morning toothbrush check", points: reward?.points ?? 0 });
   }
   const reflection = state.journalEntries.find((entry) => entry.dateKey === dateKey);
   if (reflection) {

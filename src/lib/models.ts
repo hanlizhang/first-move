@@ -105,6 +105,13 @@ export interface JournalEntry {
   updatedAt: string;
 }
 
+export interface MorningCheck {
+  dateKey: string;
+  verifiedAt: string;
+  captureMethod: "camera" | "upload";
+  verifierMode: "mock" | "live";
+}
+
 export interface InventoryItem {
   itemId: string;
   quantity: number;
@@ -127,18 +134,19 @@ export interface UserProgress {
 }
 
 export interface AppState {
-  schemaVersion: 5;
+  schemaVersion: 6;
   tasks: Task[];
   habits: Habit[];
   activityIntents: ActivityIntent[];
   sessions: ActivitySession[];
   rewardEvents: RewardEvent[];
   journalEntries: JournalEntry[];
+  morningChecks: MorningCheck[];
   inventory: Inventory;
   progress: UserProgress;
 }
 
-export const SCHEMA_VERSION = 5 as const;
+export const SCHEMA_VERSION = 6 as const;
 
 export function createEmptyState(): AppState {
   return {
@@ -149,6 +157,7 @@ export function createEmptyState(): AppState {
     sessions: [],
     rewardEvents: [],
     journalEntries: [],
+    morningChecks: [],
     inventory: { items: [] },
     progress: {
       points: 0,

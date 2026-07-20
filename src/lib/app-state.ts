@@ -13,6 +13,7 @@ import {
   type RewardEvent,
   type IntendedDuration,
   type JournalEntry,
+  type MorningCheck,
   type StuckState,
   type Task,
   type Weekday,
@@ -42,6 +43,7 @@ export function normalizeAppState(input: unknown): AppState {
     ? input.rewardEvents.filter(isRewardEvent)
     : [];
   const journalEntries = normalizeJournalEntries(input.journalEntries);
+  const morningChecks = normalizeMorningChecks(input.morningChecks);
   const inventory = normalizeInventory(input.inventory);
   const progressInput = isRecord(input.progress) ? input.progress : {};
   const derivedPoints = rewardEvents.reduce((total, event) => total + event.points, 0);
@@ -54,6 +56,7 @@ export function normalizeAppState(input: unknown): AppState {
     sessions: keepOneOpenSession(sessions),
     rewardEvents,
     journalEntries,
+    morningChecks,
     inventory,
     progress: {
       points:
@@ -369,6 +372,19 @@ function isJournalEntry(value: unknown): value is JournalEntry {
     optionalRating(value.mood) &&
     optionalRating(value.energy)
   );
+}
+
+function normalizeMorningChecks(value: unknown): MorningCheck[] {
+  if (!Array.isArray(value)) return [];
+  const checks = new Map<string, MorningCheck>();
+  for (const candidate of value) if (isMorningCheck(candidate)) checks.set(candidate.dateKey, candidate);
+  return [...checks.values()];
+}
+
+function isMorningCheck(value: unknown): value is MorningCheck {
+  return isRecord(value) && isDateKey(value.dateKey) && typeof value.verifiedAt === "string" &&
+    (value.captureMethod === "camera" || value.captureMethod === "upload") &&
+    (value.verifierMode === "mock" || value.verifierMode === "live");
 }
 
 function optionalText(value: unknown): boolean {

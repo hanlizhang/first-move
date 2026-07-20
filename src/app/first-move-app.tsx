@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -55,6 +56,8 @@ import { HAPPY_ROLL_DURATION_MS, USER_ACTION_DURATION_MS, createCatActionSequenc
 import { gentleReturnMessage, kittenStage, syncProgress } from "@/lib/progress";
 import { deleteReflection, hasReflectionContent, saveReflection, type ReflectionInput } from "@/lib/reflections";
 import { getCalendarMonth, getDayDetail, getTrendSummary, HISTORY_CATEGORIES, type TrendSummary } from "@/lib/history";
+import { captureVideoFrame, compressImageToJpeg } from "@/lib/image-compression";
+import { completeMorningCheck, morningVerificationMode, verifyToothbrushPhoto } from "@/lib/morning-check";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -114,6 +117,8 @@ export default function FirstMoveApp() {
           </p>
         </div>
 
+        <MorningStart state={state} today={today} update={update} />
+
         <div className="mt-10 grid items-start gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <FirstMovePicker
             tasks={state.tasks}
@@ -158,6 +163,90 @@ export default function FirstMoveApp() {
     </div>
   );
 }
+
+type MorningPhase = "idle" | "permission" | "camera" | "preview" | "loading" | "failure" | "unsupported";
+
+function MorningStart({ state, today, update }: { state: AppState; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
+  const completed = state.morningChecks.some((check) => check.dateKey === today);
+  const [phase, setPhase] = useState<MorningPhase>("idle");
+  const [image, setImage] = useState<Blob>();
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [captureMethod, setCaptureMethod] = useState<"camera" | "upload">("camera");
+  const [message, setMessage] = useState("");
+  const [mockOutcome, setMockOutcome] = useState<"pass" | "fail">("pass");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | undefined>(undefined);
+  const verifierMode = morningVerificationMode();
+
+  const stopCamera = useCallback(() => { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = undefined; }, []);
+  const clearImage = useCallback(() => { setImage(undefined); setPreviewUrl(""); }, []);
+
+  useEffect(() => {
+    if (phase === "camera" && videoRef.current && streamRef.current) videoRef.current.srcObject = streamRef.current;
+  }, [phase]);
+  useEffect(() => () => stopCamera(), [stopCamera]);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function startCamera() {
+    clearImage(); setMessage("");
+    if (!navigator.mediaDevices?.getUserMedia) { setPhase("unsupported"); return; }
+    setPhase("permission");
+    try {
+      streamRef.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      setCaptureMethod("camera"); setPhase("camera");
+    } catch {
+      setMessage("Camera access was unavailable or not allowed. You can choose an image instead."); setPhase("failure");
+    }
+  }
+
+  async function capture() {
+    try { const compressed = await captureVideoFrame(videoRef.current!); stopCamera(); showPreview(compressed, "camera"); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "The photo could not be captured."); setPhase("failure"); }
+  }
+
+  async function chooseFile(file?: File) {
+    if (!file) return;
+    stopCamera(); clearImage(); setPhase("loading"); setMessage("Compressing the photo in this browser…");
+    try { showPreview(await compressImageToJpeg(file), "upload"); }
+    catch { setMessage("That image could not be prepared. Try another image or skip for today."); setPhase("failure"); }
+  }
+
+  function showPreview(blob: Blob, method: "camera" | "upload") {
+    clearImage(); setImage(blob); setPreviewUrl(URL.createObjectURL(blob)); setCaptureMethod(method); setMessage(""); setPhase("preview");
+  }
+
+  async function verify() {
+    if (!image) return;
+    setPhase("loading"); setMessage("Checking this photo…");
+    const result = await verifyToothbrushPhoto(image, mockOutcome);
+    if (result.outcome === "pass") {
+      update((current) => completeMorningCheck(current, today, captureMethod, verifierMode));
+      window.dispatchEvent(new Event("first-move:morning-success"));
+      clearImage(); setMessage("");
+    } else {
+      setMessage(result.message); setPhase(result.outcome === "unavailable" ? "unsupported" : "failure");
+    }
+  }
+
+  function retry() { stopCamera(); clearImage(); setMessage(""); setPhase("idle"); }
+  function skip() { stopCamera(); clearImage(); setMessage("Skipped for today. No reward or penalty was recorded."); setPhase("idle"); }
+
+  if (completed) return <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4" aria-labelledby="morning-heading"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Morning Start complete</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">The kitten enjoyed breakfast.</h2></div><a href="#moves" className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">Choose my First Move</a></div></section>;
+
+  return <section className="mt-8 rounded-[1.75rem] border border-sky-200 bg-sky-50 p-6 shadow-sm sm:p-7" aria-labelledby="morning-heading"><p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Morning Start · Fixed daily mission</p><h2 id="morning-heading" className="mt-2 text-2xl font-bold">Take a current photo with your toothbrush</h2><p className="mt-2 text-sm leading-6 text-stone-600">The photo is resized to a maximum of 768 px in this browser and is never saved to local storage. This is a routine check, not dental analysis.</p>
+    {phase === "idle" && <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={startCamera}>Open camera</button><UploadButton onFile={chooseFile} /></div>}
+    {phase === "permission" && <p className="mt-5 rounded-xl bg-white p-4 text-sm" role="status">Waiting for camera permission. Your browser may ask you to allow camera access.</p>}
+    {phase === "camera" && <div className="mt-5"><video ref={videoRef} autoPlay playsInline muted className="max-h-96 w-full rounded-2xl bg-stone-900 object-contain" aria-label="Live camera preview" /><div className="mt-3 flex gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white" onClick={capture}>Take photo</button><SecondaryButton onClick={retry}>Cancel</SecondaryButton></div></div>}
+    {phase === "preview" && previewUrl && <div className="mt-5"><Image src={previewUrl} alt="Preview of the selected toothbrush check photo" width={768} height={768} unoptimized className="max-h-96 w-full rounded-2xl bg-stone-100 object-contain" /><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white" onClick={verify}>Verify toothbrush</button><SecondaryButton onClick={retry}>Retake</SecondaryButton></div></div>}
+    {phase === "loading" && <p className="mt-5 rounded-xl bg-white p-4 text-sm" role="status">{message || "Preparing the photo…"}</p>}
+    {(phase === "failure" || phase === "unsupported") && <div className="mt-5 rounded-xl border border-sky-200 bg-white p-4" role="alert"><p className="text-sm">{message || (phase === "unsupported" ? "Camera capture is not supported in this browser. Choose an image from this device instead." : "The check did not pass.")}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-sky-300 px-3 py-2 text-sm font-semibold" onClick={retry}>Retry</button><UploadButton onFile={chooseFile} /><button type="button" className="rounded-xl px-3 py-2 text-sm font-semibold text-stone-600" onClick={skip}>Skip without reward</button></div></div>}
+    {message && phase === "idle" && <p className="mt-3 text-sm text-stone-600" role="status">{message}</p>}
+    {process.env.NODE_ENV === "development" && <label className="mt-5 block border-t border-sky-200 pt-4 text-xs font-semibold text-stone-600">Development mock result <select className="ml-2 rounded-lg border border-sky-200 bg-white px-2 py-1" value={mockOutcome} onChange={(event) => setMockOutcome(event.target.value as "pass" | "fail")}><option value="pass">Simulate pass</option><option value="fail">Simulate fail</option></select></label>}
+    <p className="mt-3 text-xs text-stone-500">Verification mode: {verifierMode === "mock" ? "local mock (no network request)" : "live vision requested but not connected"}.</p>
+  </section>;
+}
+
+function UploadButton({ onFile }: { onFile: (file?: File) => void }) { return <label className="cursor-pointer rounded-xl border border-sky-300 bg-white px-4 py-2.5 text-sm font-semibold">Choose image<input className="sr-only" type="file" accept="image/*" onChange={(event) => { onFile(event.target.files?.[0]); event.target.value = ""; }} /></label>; }
 
 function FirstMovePicker({
   tasks,
@@ -527,7 +616,7 @@ function TodayOverview({ state, today, update }: { state: AppState; today: strin
         <div className="mt-5 rounded-2xl bg-white p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction}><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
         <DailyReflection state={state} today={today} update={update} />
         <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
-        {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{entry.kind === "reflection" ? "Private Mini Journal entry" : <>{entry.direction} · {entry.kind === "session" ? (entry.outcome === "stopped" ? `Stopped intentionally · ${formatDuration(entry.durationMs)}` : `Session · ${formatDuration(entry.durationMs)}`) : entry.kind === "task" ? "Task completed" : "Habit checked in"}</>}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
+        {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{timelineDescription(entry)}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
       </div>}
       {tab === "trends" && <TrendsPanel state={state} today={today} />}
       {tab === "calendar" && <CalendarPanel state={state} today={today} onShowToday={() => setTab("today")} />}
@@ -596,6 +685,13 @@ function sessionLinkedLabel(session: ActivitySession, state: AppState): string |
   if (session.linkedHabitId) return state.habits.find((habit) => habit.id === session.linkedHabitId)?.title;
   if (session.linkedIntentId) return state.activityIntents.find((intent) => intent.id === session.linkedIntentId)?.moveText;
   return undefined;
+}
+
+function timelineDescription(entry: ReturnType<typeof getTodayTimeline>[number]): string {
+  if (entry.kind === "reflection") return "Private Mini Journal entry";
+  if (entry.kind === "morning") return "Morning Start completed";
+  if (entry.kind === "session") return `${entry.direction} · ${entry.outcome === "stopped" ? "Stopped intentionally" : "Session"} · ${formatDuration(entry.durationMs)}`;
+  return `${entry.direction} · ${entry.kind === "task" ? "Task completed" : "Habit checked in"}`;
 }
 
 function formatDuration(milliseconds: number): string {
@@ -797,6 +893,23 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   }), [idleReset, reducedMotion]);
 
   useEffect(() => () => actionSequencer.current?.cancel(), []);
+
+  useEffect(() => {
+    const handleMorningSuccess = () => {
+      actionSequencer.current ??= createCatActionSequencer(
+        (callback, delayMs) => window.setTimeout(callback, delayMs),
+        (timerId) => window.clearTimeout(timerId),
+      );
+      const started = actionSequencer.current.startFoodSequence((nextPose) => {
+        setBlinking(false);
+        setPose(nextPose);
+        setNotice(messageForPose(nextPose));
+      });
+      if (started) setIdleReset((value) => value + 1);
+    };
+    window.addEventListener("first-move:morning-success", handleMorningSuccess);
+    return () => window.removeEventListener("first-move:morning-success", handleMorningSuccess);
+  }, []);
 
   function getActionSequencer() {
     actionSequencer.current ??= createCatActionSequencer(
