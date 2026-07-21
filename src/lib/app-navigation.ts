@@ -7,7 +7,7 @@ export const APP_VIEW_LABELS: Record<AppView, string> = {
   today: "Today",
   tasks: "Tasks",
   habits: "Habits",
-  cat: "Cat",
+  cat: "Cat Store",
 };
 
 export type PlannerPresentation = "morning" | "full" | "summary" | "review";

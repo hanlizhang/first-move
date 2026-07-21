@@ -43,6 +43,26 @@ textarea {
   image-rendering: pixelated;
 }
 
+.pixel-kitten-compact {
+  width: clamp(88px, 8vw, 112px);
+}
+
+.global-companion {
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: max(0.5rem, env(safe-area-inset-bottom));
+  width: clamp(96px, 10vw, 124px);
+}
+
+.global-session-indicator {
+  left: max(0.75rem, env(safe-area-inset-left));
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.proud-sparkles,
+.milestone-sparkles {
+  animation: kitten-sparkle 900ms steps(2, end) infinite;
+}
+
 .pixel-kitten-sleeping .kitten-walker {
   animation: kitten-breathe 1800ms steps(2, end) infinite;
 }
@@ -163,6 +183,7 @@ textarea {
 @keyframes kibble-eaten { 0% { opacity: 1; } 70% { opacity: .55; } 100% { opacity: .2; } }
 @keyframes yarn-bat { 0% { transform: translateX(0); } 50% { transform: translateX(-7px); } 100% { transform: translateX(3px); } }
 @keyframes butterfly-flutter { 0% { transform: translate(0, 0); } 50% { transform: translate(5px, -5px); } 100% { transform: translate(10px, 1px); } }
+@keyframes kitten-sparkle { 50% { opacity: .35; } }
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -190,10 +211,28 @@ textarea {
   .pixel-kitten .roll-frame-c {
     display: none;
   }
+
+  .proud-sparkles,
+  .milestone-sparkles {
+    animation: none;
+  }
 }
 
 @media (max-width: 640px) {
   .pixel-kitten {
     width: clamp(140px, 48vw, 180px);
+  }
+
+  .pixel-kitten-compact {
+    width: clamp(64px, 20vw, 84px);
+  }
+
+  .global-companion {
+    width: clamp(78px, 24vw, 96px);
+  }
+
+  .companion-speech {
+    margin-left: -5rem;
+    width: 10rem;
   }
 }

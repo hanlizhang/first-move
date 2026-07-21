@@ -64,6 +64,7 @@ import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, record
 import { APP_VIEWS, APP_VIEW_LABELS, plannerPresentation, type AppView } from "@/lib/app-navigation";
 import { loadDailyPlan, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-plan-state";
 import type { PlanningReviewItem } from "@/lib/planning-review";
+import { companionEventsForTransition, companionIdleAction, createCompanionEventController, shouldShowCompanion, type CompanionReaction } from "@/lib/companion-events";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -84,14 +85,31 @@ export default function FirstMoveApp() {
   const [activeView, setActiveView] = useState<AppView>("first-moves");
   const [dailyPlan, setDailyPlan] = useState<DailyPlanRecord>();
   const [reviewingPlan, setReviewingPlan] = useState(false);
+  const [companionReaction, setCompanionReaction] = useState<CompanionReaction>();
+  const companionController = useRef<ReturnType<typeof createCompanionEventController> | undefined>(undefined);
 
-  const update = useCallback((recipe: (current: AppState) => AppState) => {
-    updateAppState(recipe);
+  const emitCompanionEvents = useCallback((events: ReturnType<typeof companionEventsForTransition>) => {
+    companionController.current ??= createCompanionEventController({
+      setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      clearTimer: (timerId) => window.clearTimeout(timerId),
+      onReaction: setCompanionReaction,
+    });
+    companionController.current.enqueue(events);
   }, []);
 
+  const update = useCallback((recipe: (current: AppState) => AppState) => {
+    updateAppState((current) => {
+      const next = recipe(current);
+      emitCompanionEvents(companionEventsForTransition(current, next));
+      return next;
+    });
+  }, [emitCompanionEvents]);
+
+  useEffect(() => () => companionController.current?.dispose(), []);
+
   useEffect(() => {
-    update((current) => syncProgress(current, today, true));
-  }, [today, update]);
+    updateAppState((current) => syncProgress(current, today, true));
+  }, [today]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -134,8 +152,8 @@ export default function FirstMoveApp() {
         </div>
       </header>
 
-      {openSession && activeView !== "focus" && <button type="button" onClick={() => navigate("focus")} className="fixed bottom-4 right-4 z-30 rounded-full bg-sky-800 px-4 py-2 text-sm font-bold text-white shadow-lg">{openSession.mode === "countdown" ? "Countdown" : "Tracking"} · {openSession.status}</button>}
-      <main id="top" className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
+      {openSession && activeView !== "focus" && <button type="button" onClick={() => navigate("focus")} className="global-session-indicator fixed z-30 rounded-full bg-sky-800 px-4 py-2 text-sm font-bold text-white shadow-lg">{openSession.mode === "countdown" ? "Countdown" : "Tracking"} · {openSession.status}</button>}
+      <main id="top" className={`mx-auto w-full max-w-5xl px-4 pt-6 sm:px-6 sm:pt-8 ${shouldShowCompanion(activeView) ? "pb-36" : "pb-16"}`}>
         {activeView === "first-moves" && <>
         <div className="max-w-3xl">
           <p className="text-sm font-semibold text-orange-700">I&apos;m Stuck</p>
@@ -195,6 +213,7 @@ export default function FirstMoveApp() {
 
         {activeView === "cat" && <CatRoom state={state} today={today} update={update} />}
       </main>
+      {shouldShowCompanion(activeView) && <FloatingCompanion key={companionReaction?.id ?? "idle"} reaction={companionReaction} focusActive={Boolean(openSession)} onOpenStore={() => navigate("cat")} />}
     </div>
   );
 }
@@ -909,6 +928,55 @@ function HabitEditor({ habits, today, update }: { habits: Habit[]; today: string
   );
 }
 
+function FloatingCompanion({ reaction, focusActive, onOpenStore }: { reaction?: CompanionReaction; focusActive: boolean; onOpenStore: () => void }) {
+  const [idlePose, setIdlePose] = useState<CatPose>("sitting");
+  const [blinking, setBlinking] = useState(false);
+  const [walkingLeft, setWalkingLeft] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setReducedMotion(media.matches);
+    updatePreference();
+    media.addEventListener("change", updatePreference);
+    return () => media.removeEventListener("change", updatePreference);
+  }, []);
+
+  useEffect(() => {
+    if (reaction) return;
+    return scheduleIdleBehavior({
+      reducedMotion,
+      random: Math.random,
+      setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      clearTimer: (timerId) => window.clearTimeout(timerId),
+      onAction: (action) => {
+        const allowedAction = companionIdleAction(action, focusActive);
+        setBlinking(allowedAction === "blink");
+        setIdlePose(allowedAction === "walk" ? "walking" : allowedAction === "sleep" ? "sleeping" : "sitting");
+        if (allowedAction === "walk") setWalkingLeft((value) => !value);
+      },
+      onSit: () => { setIdlePose("sitting"); setBlinking(false); },
+    });
+  }, [focusActive, reaction, reducedMotion]);
+
+  const reactionPose: Partial<Record<CompanionReaction["kind"], CatPose>> = {
+    morning: "eating",
+    "session-complete": "happy",
+    "session-stopped": "sitting",
+    "task-complete": "proud",
+    "habit-complete": "high-five",
+    milestone: "milestone",
+  };
+  const pose = reaction ? reactionPose[reaction.kind] ?? "sitting" : idlePose;
+
+  return <aside className="global-companion pointer-events-none fixed z-30" aria-live="polite">
+    {reaction && <div className="companion-speech mb-1 rounded-xl border border-amber-200 bg-white px-3 py-2 text-center text-xs font-bold text-stone-800 shadow-lg">{reaction.message}</div>}
+    <button type="button" className="pointer-events-auto block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700" onClick={onOpenStore} aria-label="Open Cat Store">
+      <PixelKitten compact pose={pose} walkingLeft={walkingLeft} blinking={blinking} wandPoint={{ x: 80, y: 40 }} />
+    </button>
+  </aside>;
+}
+
 function CatRoom({ state, today, update }: { state: AppState; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
   const returnMessage = gentleReturnMessage(state.progress.lastActiveDate, today);
   const [pose, setPose] = useState<CatPose>("sitting");
@@ -1043,7 +1111,7 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   return (
     <section id="cat" className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-4 shadow-sm sm:p-6" aria-labelledby="cat-heading">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-700">Cat Room</p><h2 id="cat-heading" className="mt-2 text-3xl font-bold tracking-tight">A little companion for the journey</h2></div>
+        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-700">Cat Store</p><h2 id="cat-heading" className="mt-2 text-3xl font-bold tracking-tight">A little companion for the journey</h2></div>
         <div className="rounded-full bg-white px-4 py-2 text-sm font-bold">✦ {formatPoints(state.progress.points)} points</div>
       </div>
       <dl className="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-white p-4 text-sm sm:grid-cols-4">
@@ -1080,13 +1148,13 @@ function DevelopmentPosePreview({ onPreview, onInteraction, outdoor, onOutdoor }
   return <div className="relative z-10 mx-auto mt-4 max-w-2xl rounded-xl border border-dashed border-stone-400 bg-white/80 p-3"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Development interaction preview</p><div className="mt-2 flex flex-wrap justify-center gap-1.5">{previews.map(([label, interaction]) => <MiniButton key={interaction} onClick={() => onInteraction(interaction)}>{label}</MiniButton>)}<MiniButton onClick={() => onPreview("happy")}>Happy roll</MiniButton><MiniButton onClick={onOutdoor}>{outdoor ? "Indoor scene" : "Garden milestone"}</MiniButton><MiniButton onClick={() => onPreview("sitting")}>Reset</MiniButton></div></div>;
 }
 
-function PixelKitten({ pose, walkingLeft, blinking, wandPoint }: { pose: CatPose; walkingLeft: boolean; blinking: boolean; wandPoint: { x: number; y: number } }) {
+function PixelKitten({ pose, walkingLeft, blinking, wandPoint, compact = false }: { pose: CatPose; walkingLeft: boolean; blinking: boolean; wandPoint: { x: number; y: number }; compact?: boolean }) {
   return (
-    <div className={`pixel-kitten pixel-kitten-${pose} relative mx-auto my-2`} role="img" aria-label={`Pixel-art kitten ${pose}`}>
+    <div className={`pixel-kitten pixel-kitten-${pose} ${compact ? "pixel-kitten-compact" : ""} relative mx-auto my-2`} role="img" aria-label={`Pixel-art kitten ${pose}`}>
       <svg className="kitten-sprite h-auto w-full" viewBox="0 0 160 110" shapeRendering="crispEdges" aria-hidden="true">
         <rect x="8" y="94" width="144" height="4" fill="#b08968"/><rect x="18" y="98" width="124" height="3" fill="#ddb892"/>
         <g className={pose === "walking" && walkingLeft ? "kitten-walker kitten-walker-left" : "kitten-walker"}><g className={pose === "walking" && walkingLeft ? "kitten-facing-left" : undefined}>
-          {pose === "sleeping" ? <SleepingKitten /> : pose === "walking" ? <WalkingKitten /> : pose === "drinking" ? <DrinkingKitten /> : pose === "eating" ? <EatingKitten /> : pose === "licking" ? <LickingKitten /> : pose === "yarn" ? <PlayingKitten /> : pose === "wand" ? <WandKitten targetX={wandPoint.x} /> : pose === "high-five" ? <HighFiveKitten /> : pose === "paw-shake" ? <PawShakeKitten /> : pose === "butterfly" ? <ButterflyKitten /> : pose === "happy" ? <HappyRollKitten /> : <SittingKitten blinking={blinking} />}
+          {pose === "sleeping" ? <SleepingKitten /> : pose === "walking" ? <WalkingKitten /> : pose === "drinking" ? <DrinkingKitten /> : pose === "eating" ? <EatingKitten /> : pose === "licking" ? <LickingKitten /> : pose === "yarn" ? <PlayingKitten /> : pose === "wand" ? <WandKitten targetX={wandPoint.x} /> : pose === "high-five" ? <HighFiveKitten /> : pose === "paw-shake" ? <PawShakeKitten /> : pose === "butterfly" ? <ButterflyKitten /> : pose === "happy" ? <HappyRollKitten /> : pose === "proud" ? <ProudKitten /> : pose === "milestone" ? <MilestoneKitten /> : <SittingKitten blinking={blinking} />}
         </g></g>
       </svg>
     </div>
@@ -1142,6 +1210,8 @@ function PlayingKitten() {
 
 function WandKitten({ targetX }: { targetX: number }) { const left = targetX < 80; return <g transform={left ? "translate(160 0) scale(-1 1)" : undefined}><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="76" y="81" width="8" height="13" fill={fur}/><rect x="94" y="74" width="25" height="7" fill={fur}/><rect x="111" y="79" width="8" height="8" fill={furDark}/></g>; }
 function HighFiveKitten() { return <g><SittingKitten blinking={false}/><rect x="105" y="53" width="9" height="28" fill={fur}/><rect x="113" y="50" width="8" height="9" fill={furDark}/><rect x="128" y="45" width="20" height="28" rx="3" fill="#d8a47f"/><rect x="122" y="51" width="10" height="7" fill="#d8a47f"/></g>; }
+function ProudKitten() { return <g><CurvedTail x={101} y={68} raised/><rect x="65" y="49" width="34" height="39" fill={fur}/><rect x="71" y="55" width="22" height="33" fill={furLight}/><CatFace x={62} y={17} happy/><rect x="64" y="82" width="8" height="12" fill={furDark}/><rect x="78" y="82" width="8" height="12" fill={fur}/><rect x="92" y="82" width="8" height="12" fill={furDark}/><g className="proud-sparkles" fill="#e9a23b"><rect x="42" y="30" width="4" height="10"/><rect x="39" y="33" width="10" height="4"/><rect x="121" y="26" width="4" height="9"/><rect x="118" y="29" width="10" height="4"/></g></g>; }
+function MilestoneKitten() { return <g><ProudKitten/><g className="milestone-sparkles" fill="#d946ef"><rect x="29" y="50" width="4" height="11"/><rect x="25" y="54" width="12" height="4"/><rect x="132" y="52" width="4" height="11"/><rect x="128" y="56" width="12" height="4"/></g></g>; }
 function PawShakeKitten() { return <g><SittingKitten blinking={false}/><rect x="98" y="78" width="28" height="8" fill={fur}/><rect x="119" y="80" width="25" height="12" rx="3" fill="#d8a47f"/><rect x="137" y="70" width="10" height="20" fill="#d8a47f"/></g>; }
 function ButterflyKitten() { return <g><PlayingKitten/><g className="butterfly" transform="translate(2 -15)"><rect x="128" y="42" width="3" height="9" fill="#50394c"/><rect x="120" y="39" width="8" height="7" fill="#f4a261"/><rect x="131" y="39" width="8" height="7" fill="#e76f51"/></g></g>; }
 

@@ -1,4 +1,4 @@
-export const CAT_POSES = ["sitting", "walking", "sleeping", "drinking", "eating", "licking", "yarn", "wand", "high-five", "paw-shake", "butterfly", "happy"] as const;
+export const CAT_POSES = ["sitting", "walking", "sleeping", "drinking", "eating", "licking", "yarn", "wand", "high-five", "paw-shake", "butterfly", "happy", "proud", "milestone"] as const;
 export type CatPose = (typeof CAT_POSES)[number];
 export type IdleAction = "walk" | "sleep" | "blink";
 export type CatInteraction = "milk" | "food" | "treat" | "yarn" | "wand" | "high-five" | "paw-shake" | "butterfly";
@@ -49,6 +49,6 @@ export function randomIdleDelay(value: number) { return Math.round(MIN_IDLE_DELA
 export function idleActionFor(value: number): IdleAction { return (["walk", "sleep", "blink"] as const)[Math.floor(Math.max(0, Math.min(.999, value)) * 3)]; }
 export function previewPose(pose: CatPose): CatPose { return pose; }
 export function messageForPose(pose: CatPose): string {
-  const messages: Record<CatPose, string> = { sitting: "The kitten is sitting calmly nearby.", walking: "The kitten is exploring the room.", sleeping: "The kitten is sleeping peacefully.", drinking: "The kitten laps milk from a shallow dish.", eating: "The kitten crunches kibble from its bowl.", licking: "The kitten licks a treat from the pouch.", yarn: "The kitten pounces and bats the yarn ball.", wand: "The kitten watches the teaser wand closely.", "high-five": "The kitten raises a paw to meet your hand.", "paw-shake": "The kitten places one paw gently in your hand.", butterfly: "The kitten follows a butterfly through the garden.", happy: "The kitten rolls over, happy and content." };
+  const messages: Record<CatPose, string> = { sitting: "The kitten is sitting calmly nearby.", walking: "The kitten is exploring the room.", sleeping: "The kitten is sleeping peacefully.", drinking: "The kitten laps milk from a shallow dish.", eating: "The kitten crunches kibble from its bowl.", licking: "The kitten licks a treat from the pouch.", yarn: "The kitten pounces and bats the yarn ball.", wand: "The kitten watches the teaser wand closely.", "high-five": "The kitten raises a paw to meet your hand.", "paw-shake": "The kitten places one paw gently in your hand.", butterfly: "The kitten follows a butterfly through the garden.", happy: "The kitten rolls over, happy and content.", proud: "The kitten closes its eyes and purrs proudly.", milestone: "The kitten celebrates a new adventure milestone." };
   return messages[pose];
 }

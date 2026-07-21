@@ -122,7 +122,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 
 ### Virtual cat
 
-- Provide a forgiving Cat Room with a compact reward shelf for Food, Treats, Toys, and Tricks.
+- Provide a forgiving Cat Store with a compact reward shelf for Food, Treats, Toys, and Tricks, plus a small global kitten companion that gives transient, non-punitive feedback without changing rewards.
 - Use a compact original local pixel kitten with coherent full-body sitting, two-frame walking, sleeping, eating, playing, and happy poses on one floor baseline. Wait five minutes before the first automatic idle action, then 5–10 randomized minutes between brief walk, sleep, or blink actions; reduced motion disables automatic changes and walking translation.
 - Let users spend local points, manage inventory, feed and play with the cat, and trigger a simple trick; furniture customization is deferred.
 - Use a staged local store: milk on active day 1; yarn on day 3; teaser wand on day 7; cat food plus 10 free servings on day 21; treats plus 10 free servings and high-five on day 50; and paw shake, a free outdoor garden, and butterfly play on day 100. Milestone grants are idempotent and depend on lifetime active days, never a perfect streak.
@@ -150,7 +150,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Morning contains Morning Start and its toothbrush check.
 - Today contains the stuck entry, tasks, scheduled habits, reflection, points, and activity timeline.
 - Focus/session UI presents the current First Move, timer, and neutral return choice.
-- Cat contains status, room, store, inventory, tricks, and milestones.
+- Cat Store contains status, room, store, inventory, tricks, and milestones; the global companion links there from every other main view.
 - Minimize required typing and show one decision at a time during the stuck flow.
 - Use large touch targets, semantic controls, keyboard support, visible focus, reduced-motion support, sufficient contrast, and non-color status cues.
 

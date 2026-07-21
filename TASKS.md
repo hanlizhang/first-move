@@ -179,12 +179,14 @@
 
 - [x] TASK-08A: Polish the 375–1440 px responsive shell, cards, forms, charts, calendar, Cat Room, and compact scrollable navigation at 100% browser zoom.
 - [x] TASK-08B: Add distinct kitten food/toy/trick interactions, the simplified four-category store, idempotent 21/50/100 active-day grants, milestone cards, and the day-100 garden.
+- [x] TASK-08C: Prepare Build Week README and Devpost submission documentation, including privacy, GPT-5.6 Luna, Codex collaboration, cost controls, deployment, limitations, and a sub-three-minute demo plan.
+- [x] Add the persistent, reduced-motion-aware global kitten companion, transient completion feedback, and user-facing Cat Store naming without changing rewards or stored records.
 - [ ] Add project-local unit/integration test tooling and cover persistence, core loop, timing, rewards, privacy boundaries, rollover, and error states.
 - [ ] Verify keyboard navigation, focus management, semantics, labels, contrast, reduced motion, touch targets, and non-color cues.
 - [ ] Polish phone, tablet, and desktop layouts for one-decision-at-a-time stuck use, safe areas, long content, and interrupted sessions.
-- [ ] Run lint, type checks, tests, and production build; fix every failure.
-- [ ] Document setup, privacy, AI configuration, behavioral inspiration, medical limitations, testing, and demo flow.
-- [ ] Prepare deployment and submission assets without committing or pushing automatically.
+- [x] Run lint, type checks, tests, and production build; fix every failure.
+- [x] Document setup, privacy, AI configuration, behavioral inspiration, medical limitations, testing, and demo flow.
+- [x] Prepare deployment and submission documentation without committing or pushing automatically.
 
 ### Acceptance criteria
 
