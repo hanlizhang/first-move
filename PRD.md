@@ -16,7 +16,7 @@ The app helps the user notice the moment, choose a direction, take one very smal
 
 ## Non-goals
 
-No authentication, server database, payments, native app, system alarms, app/site blocking, social features, cross-device sync, medical treatment, diagnosis, crisis intervention, or claims about repairing or stimulating the brain. Daily Reflection is private journaling, not clinical assessment; there is no AI sentiment analysis or mental-health diagnosis.
+No social features, advertising, consumable real-money purchases, system alarms, app/site blocking, medical treatment, diagnosis, crisis intervention, or claims about repairing or stimulating the brain. Daily Reflection is private journaling, not clinical assessment; there is no AI sentiment analysis or mental-health diagnosis. Mainland China is not part of the initial production launch.
 
 ## Core loop
 
@@ -79,6 +79,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Let the user explicitly request “Make It Smaller” or adapt a First Move using only text they choose to submit.
 - Return one concise, concrete proposal with a valid direction and bounded duration; never start or apply it automatically.
 - Local templates and manual entry provide the complete fallback when AI is unavailable or declined.
+- Live AI uses `gpt-5.6-luna` through a trusted server, short structured outputs, and no automatic retries. Availability depends on account quota and supported launch region.
 
 ## Bounded sessions and return choice
 
@@ -111,6 +112,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Exclude reflections, toothbrush images, history, habits, cat state, and unrelated local data from AI requests.
 - Offer Plan my day after Morning Start and inside Today. Submit only an explicitly entered brain dump (maximum 2,000 characters), return one First Move plus up to three priority and three optional tasks, and require editable confirmation before saving.
 - Keep mock planning as the safe default. Live planning uses one non-retried Responses API request only after the user clicks Organize with AI; local manual planning and ordinary task creation remain available at all times.
+- Pro permits one AI daily-plan request per local day. A Free account may use one of its five lifetime introductory AI actions.
 
 ### Rewards and activity timeline
 
@@ -132,6 +134,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Welcome returning users with gentle, non-judgmental messages.
 - Count each local date once when it contains a completed task, habit check-in, session of at least one minute, Morning Check, or Daily Reflection. Track first use, last activity, journey day, total active days, and a gentle current streak without reducing lifetime progress after absences.
 - Keep the cat kitten-like while labeling stages as New kitten on active days 1–7, Settling in on 8–21, Curious kitten on 22–50, Adventurous kitten from 51 until the 100th active day, and Companion from day 100 onward. Retain milestones at 21, 50, and 100 active days.
+- Keep the existing core cat experience Free. Pro may add premium cat content without removing, degrading, or confiscating Free or previously earned core items.
 
 ### Daily Reflection
 
@@ -142,7 +145,7 @@ Each direction uses neutral language and can be changed before or after a sessio
   - optional mood 1–5, energy 1–5, and free text
 - Save at most one editable reflection per local day, with every field optional.
 - Award 2 local points on the first save for a date; edits and deletion followed by recreation never award that date again.
-- Keep reflections on-device and outside all AI requests. Never score, diagnose, infer sentiment, or produce mental-health conclusions.
+- Keep reflections on-device in guest mode and under private per-user access controls when the user enables cloud sync. Keep them outside all AI requests. Never score, diagnose, infer sentiment, or produce mental-health conclusions.
 
 ## Navigation and experience
 
@@ -160,6 +163,32 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Persist tasks, habits, templates/preferences, stuck-flow choices, session state, points, timeline, reflections, cat state, inventory, and milestones.
 - Do not persist toothbrush images. Send one only for an explicit live verification action when live vision is configured; mock mode remains entirely local and makes no paid request.
 - Explain that clearing browser data removes progress; consider export/import only after the core MVP works.
+- Guest mode remains local and complete. Authenticated users may choose **Sync across devices** using email OTP and Supabase; first login offers Start fresh or Import local data and never automatically deletes local data.
+- Cross-device sync is included in Free and Pro. Mini Journal is private user data protected by per-user access controls and excluded from AI requests and telemetry payloads.
+- RevenueCat is authoritative for the `pro` entitlement, using the Supabase Auth UUID as RevenueCat App User ID. Clients cannot authorize paid AI calls.
+- OpenAI keys and other secret credentials remain server-side. Toothbrush photos are never persisted.
+
+## Free and Pro
+
+| Capability | Free | Pro |
+| --- | --- | --- |
+| Core non-AI productivity | Included | Included |
+| Manual daily planning and local First Move templates | Included | Included |
+| Tasks, habits, timers, Mini Journal, core cat, and cross-device sync | Included | Included |
+| Introductory AI | 5 lifetime AI actions per account, shared across AI features | Unused credits remain if Pro later lapses |
+| AI daily plan | Uses an introductory action | 1 per local day |
+| AI toothbrush verification | Uses an introductory action | Up to 3 per local day |
+| AI Make this smaller | Uses an introductory action | Up to 5 per local day |
+| Advanced history | Not included | Included |
+| Premium cat content | Not included | Included |
+
+One AI action means one paid provider request dispatched by the server. Manual/local fallbacks and requests rejected before provider dispatch do not consume quota. Free has at most 5 lifetime paid calls; Pro has at most 9 paid calls per local day. Product quotas are enforced server-side in addition to abuse rate limits.
+
+Before any paid OpenAI dispatch, the server verifies the authenticated Supabase user, RevenueCat `pro` entitlement or remaining introductory credit, feature-specific local-day quota, supported region, and server-side rate limit, then records one idempotent usage event. Client counters and entitlement claims are not trusted.
+
+## Regional AI strategy
+
+Initial production launch targets supported international markets and does not offer OpenAI-backed features in unsupported regions. Mainland China is excluded initially. A common trusted-server provider interface supports OpenAI (`gpt-5.6-luna`) for approved markets, manual/local behavior, and a possible future region-specific provider after legal, privacy, residency, safety, and quality review. Every AI feature retains a manual fallback.
 
 ## Success criteria
 
@@ -174,9 +203,12 @@ Each direction uses neutral language and can be changed before or after a sessio
 
 ## MVP decisions
 
-- Single anonymous local profile with no sync.
+- Guest mode is a complete local profile. Optional email-OTP accounts add Free cross-device sync.
 - “I'm Stuck” works independently and is the primary product path; Morning Start is a complementary entry.
 - Five fixed directions organize local templates, tasks, habits, and AI output.
 - Sessions use fixed 2, 5, 10, or 25 minute bounds; Intentional Entertainment uses 5 or 10 minutes.
 - Effort receives gentle feedback, while missed days and failed or cancelled sessions receive no punishment.
 - AI is optional and user-initiated; local templates and manual controls are always available.
+- RevenueCat is authoritative for Pro; Supabase Auth UUID is its App User ID.
+- Free includes 5 lifetime introductory AI actions. Pro daily limits are 1 plan, 3 toothbrush verifications, and 5 Make this smaller requests.
+- OpenAI-backed features launch only in supported international markets, use `gpt-5.6-luna` with short structured outputs and no automatic retries, and keep credentials server-side.

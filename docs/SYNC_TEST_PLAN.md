@@ -6,7 +6,7 @@ Status: pre-implementation test specification. No Supabase project or deployed e
 
 Test the sync system at four layers: deterministic domain/unit tests, PostgreSQL migration/RLS tests, client repository integration tests, and end-to-end multi-device scenarios. Use isolated users and seeded clocks. Never use real journal text, email addresses, access tokens, API keys, or toothbrush photos in fixtures/logs.
 
-Release gates: all existing guest-mode tests remain green; migration applies and rolls back in an ephemeral database; every user-owned table passes cross-user RLS tests; economic concurrency tests show no duplicate rewards, negative balances, or duplicate milestones; offline and second-device scenarios pass on web plus platform adapters for iOS and Android.
+Release gates: all existing guest-mode tests remain green; migration applies and rolls back in an ephemeral database; every user-owned table passes cross-user RLS tests; economic and AI-quota concurrency tests show no duplicate usage, rewards, negative balances, or milestones; offline and second-device scenarios pass on web plus platform adapters for iOS and Android.
 
 ## 1. Schema and migration
 
@@ -17,6 +17,7 @@ Release gates: all existing guest-mode tests remain green; migration applies and
 - Verify partial unique indexes allow only one pending intent and one open session per user, while different users remain independent.
 - Verify all mutable updates increment `version` and set server `updated_at`; tombstones remain pullable.
 - Confirm append-only tables cannot be updated/deleted by authenticated clients.
+- Confirm `ai_usage_events` is server-write-only, idempotent by request UUID, and indexed for lifetime and local-day quota counts.
 - Run query plans for per-user cursor pulls, daily history, ledger balance, active-day derivation, and inventory history; assert intended indexes are used at production-like volumes.
 
 ## 2. RLS and authorization matrix
@@ -30,6 +31,7 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 - Views (`active_days`, `point_balances`) expose only caller-owned rows under `security_invoker`.
 - Journal content never appears through generic timeline/list RPCs or another user’s queries.
 - Security-definer functions use an empty search path, ignore supplied ownership claims, and are safe against object-shadowing/search-path attacks.
+- Clients cannot insert, alter, or delete AI usage events or subscription state, and cannot authorize Pro using a client-supplied RevenueCat payload.
 
 ## 3. Guest mode and account entry
 
@@ -38,6 +40,7 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 - Failed/cancelled OTP returns to usable guest mode without altering local state.
 - OTP rate-limit, expired link, wrong code, duplicate callback, and deep-link reopening produce safe recoverable states.
 - The same account authenticates on web, iOS, and Android adapters; tokens use the platform’s protected storage and never logs.
+- RevenueCat receives the exact Supabase Auth UUID as App User ID on every platform; logout/account switching cannot leak or transfer another user’s entitlement.
 
 ## 4. First login: Start fresh
 
@@ -141,12 +144,38 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 - Logs redact Authorization, cookies, OTPs, email addresses where possible, journal fields, AI request bodies, and mutation payload text.
 - Export contains journal only after explicit confirmation and is protected from accidental analytics upload.
 
-## 14. Performance, resilience, and release
+## 14. Free, Pro, entitlement, and quota enforcement
+
+- Free receives exactly 5 lifetime introductory AI dispatches across daily plan, toothbrush verification, and Make this smaller; the sixth is rejected before dispatch.
+- Active Pro receives exactly 1 daily-plan, 3 toothbrush-verification, and 5 Make this smaller dispatches per valid local day; each next request is rejected.
+- A Pro user can therefore dispatch at most 9 paid calls per local day. Advanced history and premium cat access generate no model calls.
+- Manual planning, local templates, manual toothbrush fallback, deterministic local shrinking, validation failures, unsupported-region failures, quota rejection, and rate-limit rejection create no usage event.
+- A provider-dispatched request creates one usage event even on provider timeout/error and has no automatic retry.
+- Concurrent requests from web/iOS/Android at every quota boundary serialize correctly; no more than the allowed number reaches the provider.
+- Reusing a request UUID with the same feature and payload returns the idempotent result without a second call; reuse with a different feature or payload is rejected.
+- RevenueCat active `pro` permits Pro quotas; expired, refunded, transferred, or inactive entitlement does not. Client-forged entitlement state is ignored.
+- RevenueCat timeout or stale-cache behavior fails closed and preserves manual fallback. Webhook delay cannot grant unverified Pro.
+- Upgrade, restore, downgrade, grace period, account switch, and lapse preserve synced/local data and unused introductory credits.
+- Server rate limits are tested independently from product quotas by user, IP/device risk keys, bursts, and distributed concurrency.
+- Local-day validation covers UTC boundaries, DST, travel, deliberately changed timezone, historic/future date abuse, and two devices in different zones.
+
+## 15. Provider and regional behavior
+
+- Provider selection occurs server-side from the approved launch allowlist; client headers or UI flags cannot force OpenAI.
+- A supported international market selects `OpenAiProvider`, model `gpt-5.6-luna`, bounded structured output, timeout, and zero automatic retries.
+- An unsupported region receives no OpenAI dispatch, no quota debit, clear availability copy, and complete manual/local behavior.
+- Mainland China is rejected for the initial production launch and is absent from store/marketing availability.
+- `ManualLocalProvider` never makes paid AI calls and remains available during provider, RevenueCat, Supabase, or network outages wherever local behavior is possible.
+- Contract tests run identical validated result shapes against OpenAI, manual/local behavior, and a fake future region-specific provider.
+- A future provider cannot launch until privacy, residency, safety, credentials, quota mapping, and output-validation tests pass.
+
+## 16. Performance, resilience, and release
 
 - Measure initial hydration, incremental pull, and outbox replay on slow mobile networks and low-memory devices.
 - Validate pagination and bounded payloads at 1, 3, and 5 years of realistic activity.
 - Simulate Supabase outage: guest/manual/local cached experience remains usable; queued status is clear.
 - Verify feature-flag rollback preserves outbox and export access.
+- Simulate RevenueCat and OpenAI outages independently; core features and manual fallbacks remain usable, and failures before dispatch do not consume quota.
 - Run web accessibility tests for OTP, import choice, conflict dialogs, offline banners, and deletion confirmation.
 - Complete threat model, RLS review, dependency review, backup/restore drill, account-deletion drill, and incident runbook before production enablement.
 
@@ -155,8 +184,10 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 1. Product documents approved; privacy and conflict decisions recorded.
 2. Legacy mapper passes fixture/property tests without network.
 3. Migration and exhaustive RLS suite pass in ephemeral CI.
-4. Command/RPC concurrency and rollback suite passes.
-5. Offline cache/outbox and cursor sync suite passes.
-6. Start fresh/import and second-device end-to-end suites pass.
-7. Web/iOS/Android auth-link and secure-storage adapter suites pass.
-8. Privacy, load, resilience, accessibility, and deletion gates pass before rollout.
+4. RevenueCat identity, entitlement lifecycle, and storefront sandbox suites pass.
+5. AI region, entitlement, lifetime/daily quota, rate-limit, idempotency, structured-output, and no-retry suites pass.
+6. Command/RPC concurrency and rollback suite passes.
+7. Offline cache/outbox and cursor sync suite passes.
+8. Start fresh/import and second-device end-to-end suites pass.
+9. Web/iOS/Android auth-link, secure-storage, purchase, and restore adapter suites pass.
+10. Privacy, load, resilience, accessibility, deletion, and launch-region gates pass before rollout.

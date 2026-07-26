@@ -11,6 +11,8 @@ create type public.intent_status as enum ('pending', 'consumed', 'cancelled');
 create type public.import_choice as enum ('start_fresh', 'import_local');
 create type public.import_status as enum ('pending', 'running', 'completed', 'failed');
 create type public.inventory_event_kind as enum ('purchase', 'consume', 'milestone_grant', 'correction');
+create type public.ai_feature as enum ('daily_plan', 'toothbrush_verification', 'make_smaller');
+create type public.ai_access_basis as enum ('introductory', 'pro');
 
 create function public.set_updated_at()
 returns trigger language plpgsql set search_path = '' as $$
@@ -303,6 +305,25 @@ create table public.milestone_grants (
   unique (user_id, milestone_day)
 );
 
+-- Server-written quota reservation inserted immediately before provider dispatch.
+-- Never store prompts, images, outputs, journal text, emails, tokens, or credentials.
+create table public.ai_usage_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  request_id uuid not null,
+  request_fingerprint text not null check (request_fingerprint ~ '^[0-9a-f]{64}$'),
+  feature public.ai_feature not null,
+  access_basis public.ai_access_basis not null,
+  provider text not null check (provider = 'openai'),
+  model text not null check (model = 'gpt-5.6-luna'),
+  local_date date not null,
+  timezone text not null check (public.valid_timezone(timezone)),
+  region_code text not null check (region_code ~ '^[A-Z]{2}$'),
+  entitlement_checked_at timestamptz not null,
+  dispatched_at timestamptz not null default transaction_timestamp(),
+  unique (user_id, request_id)
+);
+
 create unique index one_pending_intent_per_user on public.activity_intents(user_id) where status = 'pending' and deleted_at is null;
 create unique index one_open_session_per_user on public.activity_sessions(user_id) where status in ('running', 'paused') and deleted_at is null;
 create index tasks_sync_idx on public.tasks(user_id, updated_at, id);
@@ -314,6 +335,8 @@ create index sessions_history_idx on public.activity_sessions(user_id, local_dat
 create index journal_sync_idx on public.journal_entries(user_id, updated_at, id);
 create index reward_ledger_user_date_idx on public.reward_ledger(user_id, local_date, created_at);
 create index inventory_events_user_idx on public.inventory_events(user_id, created_at);
+create index ai_usage_lifetime_idx on public.ai_usage_events(user_id, access_basis, dispatched_at);
+create index ai_usage_daily_quota_idx on public.ai_usage_events(user_id, local_date, feature, access_basis);
 
 create trigger profiles_updated before update on public.profiles for each row execute function public.set_updated_at();
 create trigger devices_updated before update on public.devices for each row execute function public.set_updated_at();
@@ -461,11 +484,12 @@ alter table public.reward_ledger enable row level security;
 alter table public.inventory_events enable row level security;
 alter table public.inventory_balances enable row level security;
 alter table public.milestone_grants enable row level security;
+alter table public.ai_usage_events enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['profiles','devices','import_batches','client_mutations','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','journal_entries','morning_checks','morning_attempts','reward_ledger','inventory_events','inventory_balances','milestone_grants']
+  foreach t in array array['profiles','devices','import_batches','client_mutations','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','journal_entries','morning_checks','morning_attempts','reward_ledger','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
   loop
     execute format('create policy %I on public.%I for select to authenticated using ((select auth.uid()) = user_id)', t || '_select_own', t);
   end loop;
@@ -499,3 +523,4 @@ insert into public.inventory_items (id, name, kind, price_tenths, unlock_active_
 
 comment on table public.journal_entries is 'Private Mini Journal data. Exclude from AI, analytics payloads, logs, and notification previews.';
 comment on table public.morning_checks is 'Metadata only. Toothbrush images and image hashes must never be stored.';
+comment on table public.ai_usage_events is 'Server-written paid AI dispatch ledger. Never store prompts, images, outputs, journal text, email, tokens, or credentials.';

@@ -1,12 +1,14 @@
 # First Move cloud sync architecture
 
-Status: design proposal only. This document deliberately does not authorize implementation. Authentication and cross-device sync conflict with the current PRD/TASKS scope and require product approval plus updates to both files before application work begins.
+Status: approved product architecture; implementation still requires staged delivery and security review. Optional authentication, cross-device sync, AI quotas, and subscription entitlements are now in product scope.
 
 ## 1. Goals and boundaries
 
 First Move remains fully usable in guest mode. The account entry point is phrased **Sync across devices**, not “Sign up to continue.” Email OTP is the first login method. Supabase Auth provides one user identity usable by the web client and future iOS and Android clients; platform clients use the public project URL and publishable/anon key, never the service-role key.
 
 Cloud sync stores structured product records, not a single JSON state row. Toothbrush photos are never uploaded to Supabase Storage or retained in the database. The existing live verification route may send a transient image to OpenAI after explicit consent and must continue to discard it. Mini Journal rows are private user data, excluded from AI input, logs, analytics payloads, support tooling, and notification previews. OpenAI credentials remain server-only environment variables in Next.js route handlers (or another trusted server runtime).
+
+RevenueCat is the source of truth for the `pro` entitlement. The authenticated Supabase Auth user UUID, serialized as a string, is the RevenueCat App User ID on web, iOS, and Android. Clients may display cached subscription state for responsiveness, but clients never authorize paid features.
 
 ## 2. Current local architecture and risks
 
@@ -23,7 +25,7 @@ Risks to resolve before sync:
 - Local dates are calculated from the device clock with no stored IANA timezone, so travel, incorrect clocks, and second-device edits are ambiguous.
 - There is no server authority for balance checks, purchases, milestones, or “one open session” invariants.
 - Deleting local records currently removes evidence while some rewards intentionally remain; cloud semantics must make this explicit.
-- PRD.md and TASKS.md explicitly exclude authentication, databases, and sync.
+- Existing clients have no server-authoritative subscription, AI quota, or rate-limit accounting.
 
 ## 3. Modes and ownership
 
@@ -64,6 +66,7 @@ All user-owned tables include `user_id uuid references auth.users(id) on delete 
 | `inventory_events` | Purchase, consume, and milestone inventory deltas | append-only ledger |
 | `inventory_balances` | Transactionally maintained quantity projection | mutable projection |
 | `milestone_grants` | One grant per user/threshold | append-only idempotency record |
+| `ai_usage_events` | One immutable, idempotent reservation for each dispatched paid AI request | append-only server ledger |
 
 Task/habit/session references use `on delete restrict` or soft-deleted parents so historical meaning survives. Journal rows are not joined into general timeline payloads unless the user explicitly opens the journal/history view.
 
@@ -125,7 +128,9 @@ Open sessions receive special treatment: pull them before enabling session contr
 
 Mutable: profile, devices, tasks, task/habit schedule and completion state, intents, sessions, journal, morning attempt counter, and inventory balance projection. Mutable user records carry a version and tombstone.
 
-Append-only: client mutation receipts, successful morning checks, reward ledger, inventory events, milestone grants, and finalized import audit. “Append-only” is enforced by privileges/RLS: clients can read owned rows but cannot update/delete them. Security-definer RPCs create sensitive event rows.
+Append-only: client mutation receipts, successful morning checks, reward ledger, inventory events, milestone grants, AI usage events, and finalized import audit. “Append-only” is enforced by privileges/RLS: clients can read owned rows but cannot update/delete them. Security-definer RPCs create sensitive event rows.
+
+AI usage events are server-written. They store feature, access basis, provider/model, local date/timezone, region code, request UUID, a server-computed request fingerprint, and dispatch time, but never prompts, images, journal text, model output, email, tokens, or provider credentials.
 
 ## 11. Rewards, balances, active days, and RPCs
 
@@ -165,25 +170,76 @@ Account deletion requires recent authentication and a confirmation step describi
 - Do not use journal fields in telemetry. Redact request bodies and tokens from logs. Encrypt transport and rely on Supabase encryption at rest; document that RLS is access control, not end-to-end encryption.
 - Do not create a toothbrush-photo bucket. Verification endpoints use `Cache-Control: no-store`, bounded payloads, no body logging, and immediate memory disposal.
 
-## 15. Decisions requiring approval
+## 15. Free, Pro, entitlement, and AI quota model
 
-1. Approve changing PRD/TASKS product scope from local-only/no-auth to optional account sync.
-2. Confirm whether v1 import is allowed only into an empty cloud account (recommended) or must merge two populated histories.
-3. Confirm soft-delete retention (recommended: retain tombstones while the account exists, compact only after every registered device passes a cursor plus a safety window).
-4. Confirm account backup/deletion retention language and target jurisdictions.
-5. Choose web session strategy and native framework before implementation; both affect deep links and secure token storage.
-6. Decide whether Mini Journal is cloud-synced by default with the rest of an imported account or requires a separate opt-in. Recommended: explicit checkbox because it is private text.
-7. Decide whether logout defaults to keeping or removing the synced cache on shared devices. Recommended: ask every time.
-8. Approve integer tenths as the canonical points unit and the rule that undoing a completion never claws back an earned reward.
+| Capability | Free | Pro |
+| --- | --- | --- |
+| Core non-AI productivity | Included | Included |
+| Manual daily planning and local First Move templates | Included | Included |
+| Tasks, habits, timers, Mini Journal, cat, and cross-device sync | Included | Included |
+| Introductory AI actions | 5 lifetime total per account across all AI features | Not applicable while Pro is active; unused introductory credits remain if Pro lapses |
+| AI daily plan | Uses a remaining lifetime introductory action | 1 per local day |
+| AI toothbrush verification | Uses a remaining lifetime introductory action; manual/mock fallback remains | Up to 3 per local day |
+| AI “Make this smaller” | Uses a remaining lifetime introductory action | Up to 5 per local day |
+| Advanced history | Not included | Included |
+| Premium cat content | Not included | Included |
 
-## 16. Staged implementation plan
+An “AI action” is one server-dispatched provider request. Local templates, manual planning, manual toothbrush fallback, deterministic local shrinking, validation failures before dispatch, entitlement checks, quota checks, and unsupported-region checks do not consume an action. Once a request is dispatched to a paid provider it consumes quota even if the provider times out or rejects it, because cost may already have been incurred. There are no automatic model retries.
 
-1. **Product approval:** update PRD.md and TASKS.md; settle the decisions above and privacy copy.
+Maximum paid calls are therefore 5 lifetime for a Free account and 9 per local day for an active Pro account. These are product ceilings, not concurrency or abuse limits; server-side minute/hour rate limits can be lower.
+
+### Server-side authorization and reservation flow
+
+Every paid AI route uses the following order:
+
+1. Validate the Supabase access token on the trusted server and derive `auth.uid()`; never accept a user UUID from the client body.
+2. Validate feature input, payload size, requested timezone/local date, and launch-region availability before spending quota.
+3. Use `auth.uid()` as the RevenueCat App User ID and verify the active `pro` entitlement from RevenueCat. A signed webhook mirror may improve UI/cache performance, but RevenueCat remains authoritative. A short server cache is acceptable only with a defined freshness bound; a stale or unavailable check fails closed without spending an introductory credit.
+4. Apply a server-side rate limit keyed by authenticated user plus IP/device risk signals. A rejected request creates no usage reservation.
+5. In one database transaction, apply a per-user lock, look up the idempotency UUID, count authoritative usage, and reserve exactly one `ai_usage_events` row. Active Pro enforces the feature quota for the valid local day; otherwise enforce fewer than 5 lifetime introductory events across all features.
+6. Dispatch exactly one provider request using `gpt-5.6-luna`, short structured output, bounded input/output, a timeout, and `maxRetries: 0`.
+7. Validate the structured response and return a reviewable proposal. Never apply an AI result automatically.
+
+Concurrent devices cannot exceed quotas because reservation and counting are serialized. Repeating the same request UUID never causes another provider call; the server returns a stored safe status or an “already dispatched” response if model output is deliberately not retained. Different payload or feature with a reused request UUID is rejected.
+
+Daily quotas use the request’s server-validated IANA timezone and `local_date`. The server checks plausibility against its current time and profile timezone, permits a documented travel transition, and prevents arbitrary historic/future dates from evading limits.
+
+### Subscription lifecycle
+
+Purchase and restore run through RevenueCat SDKs for the applicable storefront/platform. After login, the client identifies the RevenueCat user with the Supabase UUID; anonymous RevenueCat identities must be aliased under an approved account-transfer policy before purchase restoration. Webhooks may populate a server-side read model for UI and audit, but do not replace authoritative entitlement verification.
+
+Upgrade takes effect after RevenueCat reports active `pro`. Downgrade, expiry, refund, billing grace, and transfer behavior follow RevenueCat entitlement state. Losing Pro never deletes synced data, local data, history, cat items, or journal entries. Pro-only views/content become unavailable without destructive mutation. Remaining lifetime introductory credits are preserved and may be used after Pro lapses.
+
+### Regional provider strategy
+
+Define a trusted-server `AiProvider` interface for daily planning, toothbrush verification, and making a move smaller:
+
+- `OpenAiProvider`: initial supported international markets; `gpt-5.6-luna`, structured short outputs, no automatic retries, server-held key.
+- `ManualLocalProvider`: always available; manual planning, local First Move templates, manual toothbrush path, and deterministic/local shrinking; no paid request or usage event.
+- `RegionSpecificProvider`: future adapter using the same validated contracts after privacy, data-residency, safety, and quality review.
+
+Region gating occurs server-side before entitlement/quota reservation using the production launch allowlist and applicable legal/provider availability signals. The client may hide unavailable controls but is not authoritative. Do not offer OpenAI-backed features in unsupported regions. Mainland China is excluded from the initial production launch. The first launch targets supported international markets only. Subscription copy must not promise AI where regional restrictions apply; non-AI features and manual fallbacks remain usable where the overall product launches.
+
+## 16. Remaining decisions requiring approval
+
+1. Confirm whether v1 import is allowed only into an empty cloud account (recommended) or must merge two populated histories.
+2. Confirm soft-delete retention and account backup/deletion retention language for target launch jurisdictions.
+3. Choose web subscription checkout approach, native framework, and RevenueCat account-transfer policy.
+4. Decide whether Mini Journal cloud import requires a separate opt-in (recommended).
+5. Approve the exact supported-country allowlist, prices, grace-period behavior, and advanced-history/premium-cat inventory.
+6. Approve integer-tenths points and the no-reward-clawback rule.
+
+## 17. Staged implementation plan
+
+1. **Product specification:** finalize remaining decisions, regional allowlist, subscription copy, privacy disclosures, and store policies.
 2. **Repository boundary:** introduce normalized domain DTOs, UUID generation, a repository interface, legacy-ID mapper, and migration tests without enabling auth.
 3. **Supabase foundation:** create separate development project, apply reviewed migration, seed catalog, verify RLS with adversarial tests, and configure email OTP/deep links for web/iOS/Android.
-4. **Server commands:** implement idempotent mutation, reward, purchase, consume, session-close, morning-success, and milestone RPCs; add concurrency tests.
-5. **Local sync engine:** add IndexedDB cache/outbox, cursored pull, retry/backoff, tombstones, integrity checks, and offline tests.
-6. **Account UI:** add **Sync across devices**, OTP flow, Start fresh/Import local data preview, resumable import, and explicit journal choice.
-7. **Hydration and conflicts:** add second-device hydration, running-session takeover, conflict UI, logout choices, export, and account deletion.
-8. **Platform hardening:** validate universal/app links and secure token storage on web/iOS/Android; privacy/security review and observability redaction.
-9. **Release:** staged rollout behind a feature flag, migration telemetry without private content, rollback/export rehearsal, and documented support procedures.
+4. **RevenueCat foundation:** map Supabase UUIDs to RevenueCat App User IDs, configure `pro`, purchases/restores/webhooks, and server entitlement verification.
+5. **AI gateway:** implement provider interface, region allowlist, idempotent quota reservation, rate limiting, `gpt-5.6-luna` structured calls with no retries, and manual fallbacks.
+6. **Server commands:** implement idempotent mutation, reward, purchase, consume, session-close, morning-success, and milestone RPCs; add concurrency tests.
+7. **Local sync engine:** add IndexedDB cache/outbox, cursored pull, retry/backoff, tombstones, integrity checks, and offline tests.
+8. **Account UI:** add **Sync across devices**, OTP flow, Start fresh/Import local data preview, resumable import, and explicit journal choice.
+9. **Paywall and premium UI:** show Free/Pro limits, usage, upgrade/restore/manage-subscription, advanced history, and premium cat gates without blocking core features.
+10. **Hydration and conflicts:** add second-device hydration, running-session takeover, conflict UI, logout choices, export, and account deletion.
+11. **Platform hardening:** validate auth links, secure token storage, RevenueCat identity transitions, storefront rules, privacy/security review, and log redaction.
+12. **Release:** launch only in the approved supported-market allowlist behind feature flags; rehearse rollback/export and provider/RevenueCat outages.
