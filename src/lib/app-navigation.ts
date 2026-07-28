@@ -1,4 +1,4 @@
-export const APP_VIEWS = ["first-moves", "focus", "today", "tasks", "habits", "cat"] as const;
+export const APP_VIEWS = ["first-moves", "focus", "today", "tasks", "habits", "cat", "settings"] as const;
 export type AppView = (typeof APP_VIEWS)[number];
 
 export const APP_VIEW_LABELS: Record<AppView, string> = {
@@ -8,6 +8,7 @@ export const APP_VIEW_LABELS: Record<AppView, string> = {
   tasks: "Tasks",
   habits: "Habits",
   cat: "Cat Store",
+  settings: "Settings",
 };
 
 export type PlannerPresentation = "morning" | "full" | "summary" | "review";
