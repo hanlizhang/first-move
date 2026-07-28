@@ -135,7 +135,7 @@
 
 - Any subset of fields can be saved and reopened; mood and energy accept only 1–5 or empty.
 - Reflection is described as private and non-diagnostic and performs no scoring, sentiment analysis, or mental-health inference.
-- Reflection text remains on-device and never enters organization or First Move AI requests.
+- Reflection text remains on-device in guest mode, is private under authenticated sync, and never enters organization or First Move AI requests.
 - Repeated edits do not duplicate the daily timeline completion event.
 
 **Status:** Complete. A stable date-based reward record prevents repeat rewards after edits, deletion, or recreation.
@@ -195,12 +195,38 @@
 - Tests confirm no punishment for missed/failed sessions, no persisted toothbrush images, and no reflection leakage to AI.
 - Lint, type checks, tests, and production build pass; deployed behavior and submission documentation match the PRD.
 
+## TASK-09: Optional account and cross-device sync foundation
+
+- [ ] Add email OTP under **Sync across devices** while preserving complete guest mode.
+- [ ] Implement normalized Supabase persistence, RLS, UUID migration, tombstones, IndexedDB cache/outbox, idempotent mutations, and second-device hydration.
+- [ ] Implement Start fresh and Import local data without automatic local deletion.
+- [ ] Add logout, export, cache choice, account deletion, and private Mini Journal handling.
+- [ ] Verify web/iOS/Android identity and secure token-storage adapters.
+
+## TASK-10: RevenueCat subscriptions and product access
+
+- [ ] Configure RevenueCat `pro` entitlement with Supabase Auth UUID as App User ID.
+- [ ] Implement purchase, restore, account switch, downgrade/expiry/refund, grace-period, and webhook/read-model behavior.
+- [ ] Add transparent Free/Pro comparison, usage display, manage-subscription flow, and non-destructive feature gates.
+- [ ] Keep cross-device sync and all core non-AI productivity features Free.
+- [ ] Define advanced-history and premium-cat scope without degrading Free data or earned items.
+
+## TASK-11: Server AI gateway, quotas, and regional providers
+
+- [ ] Define provider contracts for daily plan, toothbrush verification, and Make this smaller, with OpenAI, manual/local, and fake future regional implementations.
+- [ ] Before dispatch, verify authenticated user, supported region, RevenueCat Pro or remaining introductory credit, feature daily quota, and server rate limit.
+- [ ] Add append-only, idempotent server-side AI usage events; enforce 5 lifetime Free actions and Pro limits of 1/3/5 per local day under concurrency.
+- [ ] Use `gpt-5.6-luna`, short validated structured outputs, bounded inputs/outputs, explicit user action, timeouts, and no automatic retries.
+- [ ] Preserve manual fallback for every AI feature and consume no usage when rejected before provider dispatch.
+- [ ] Launch only in an approved supported-international-market allowlist; exclude Mainland China initially.
+- [ ] Test entitlement forgery, quota races, timezone abuse, provider/RevenueCat outages, privacy boundaries, and absence of secrets from clients.
+
 ## Explicitly excluded
 
-- Authentication, accounts, server/database persistence, or sync
-- Payments or monetization
-- Native iOS/Android code
+- Advertising or consumable real-money purchases
 - System alarms or guaranteed background alerts
 - App/site blocking
+- Social features
 - Medical treatment, diagnosis, crisis intervention, or brain-stimulation/repair claims
 - AI sentiment analysis or mental-health diagnosis
+- OpenAI-backed features in unsupported regions; Mainland China in the initial production launch

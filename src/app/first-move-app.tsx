@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import DayPlanner from "./day-planner";
+import AuthSettings from "./auth-settings";
 
 import {
   addHabit,
@@ -76,7 +77,7 @@ const weekdayLabels: Record<Weekday, string> = {
   sat: "Sat",
 };
 
-export default function FirstMoveApp() {
+export default function FirstMoveApp({ initialEmail }: { initialEmail: string | null }) {
   const state = useAppState();
   const today = localDateKey();
   const pendingIntent = getPendingIntent(state);
@@ -149,6 +150,7 @@ export default function FirstMoveApp() {
           <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
             <span aria-hidden="true">✦</span> {formatPoints(state.progress.points)} points
           </div>
+          {initialEmail && <button type="button" onClick={() => navigate("settings")} className="max-w-52 truncate rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" title={initialEmail}>{initialEmail}</button>}
         </div>
       </header>
 
@@ -212,6 +214,7 @@ export default function FirstMoveApp() {
         </section>}
 
         {activeView === "cat" && <CatRoom state={state} today={today} update={update} />}
+        {activeView === "settings" && <AuthSettings initialEmail={initialEmail} />}
       </main>
       {shouldShowCompanion(activeView) && <FloatingCompanion key={companionReaction?.id ?? "idle"} reaction={companionReaction} focusActive={Boolean(openSession)} onOpenStore={() => navigate("cat")} />}
     </div>
