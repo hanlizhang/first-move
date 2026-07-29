@@ -63,6 +63,48 @@ test("malformed reflections are discarded and duplicate dates recover to one ent
   assert.equal(recovered.journalEntries[0].completed, "Latest");
 });
 
+test("schema-v8 normalization preserves legacy completed and free-text journal fields", () => {
+  const recovered = normalizeAppState({
+    schemaVersion: 8,
+    journalEntries: [{
+      dateKey,
+      whatHelped: "A walk",
+      completed: "Legacy completed note",
+      difficult: "Interruptions",
+      nextStep: "Put water nearby",
+      freeText: "Legacy body and feelings note",
+      updatedAt: firstClock(),
+    }],
+  });
+
+  assert.deepEqual(recovered.journalEntries[0], {
+    dateKey,
+    whatHelped: "A walk",
+    completed: "Legacy completed note",
+    difficult: "Interruptions",
+    nextStep: "Put water nearby",
+    freeText: "Legacy body and feelings note",
+    updatedAt: firstClock(),
+  });
+});
+
+test("editing visible journal fields can preserve hidden compatible fields", () => {
+  const saved = saveReflection(createEmptyState(), dateKey, {
+    completed: "Existing activity note",
+    freeText: "Existing additional note",
+  }, firstClock);
+  const edited = saveReflection(saved, dateKey, {
+    whatHelped: "A clear desk",
+    difficult: "Noise",
+    nextStep: "Prepare headphones",
+    completed: saved.journalEntries[0].completed,
+    freeText: saved.journalEntries[0].freeText,
+  }, laterClock);
+
+  assert.equal(edited.journalEntries[0].completed, "Existing activity note");
+  assert.equal(edited.journalEntries[0].freeText, "Existing additional note");
+});
+
 test("an empty reflection is not stored or rewarded", () => {
   const state = saveReflection(createEmptyState(), dateKey, { completed: "   " }, firstClock);
   assert.equal(state.journalEntries.length, 0);

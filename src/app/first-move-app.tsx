@@ -67,6 +67,12 @@ import { loadDailyPlan, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-
 import type { PlanningReviewItem } from "@/lib/planning-review";
 import { companionEventsForTransition, companionIdleAction, createCompanionEventController, shouldShowCompanion, type CompanionReaction } from "@/lib/companion-events";
 import { accountSyncLabel } from "@/lib/account-sync-status";
+import {
+  ADDITIONAL_NOTE_LABEL,
+  DEFAULT_REFLECTION_PROMPTS,
+  REFLECTION_PRIVACY_TEXT,
+  shouldOpenAdditionalNote,
+} from "@/lib/reflection-presentation";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -619,6 +625,7 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
   const [difficult, setDifficult] = useState(existing?.difficult ?? "");
   const [nextStep, setNextStep] = useState(existing?.nextStep ?? "");
   const [freeText, setFreeText] = useState(existing?.freeText ?? "");
+  const [additionalNoteOpen, setAdditionalNoteOpen] = useState(shouldOpenAdditionalNote(existing?.freeText));
   const [notice, setNotice] = useState("");
 
   const input: ReflectionInput = {
@@ -635,7 +642,7 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
     event.preventDefault();
     if (!hasReflectionContent(input)) return;
     update((current) => saveReflection(current, today, input));
-    setNotice(existing ? "Mini Journal updated." : "Mini Journal saved privately in this browser.");
+    setNotice(existing ? "Mini Journal updated." : "Mini Journal saved on this device.");
   }
 
   function remove() {
@@ -653,17 +660,21 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
       <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
         <RatingField label="Mood" value={mood} onChange={setMood} />
         <RatingField label="Energy" value={energy} onChange={setEnergy} />
-        <ReflectionField id="reflection-helped" label="What gave me energy or helped?" value={whatHelped} onChange={setWhatHelped} />
-        <ReflectionField id="reflection-difficult" label="What drained my time or energy?" value={difficult} onChange={setDifficult} />
-        <ReflectionField id="reflection-notes" label="What did I notice in my body or feelings?" value={freeText} onChange={setFreeText} />
-        <ReflectionField id="reflection-completed" label="What did I do today?" value={completed} onChange={setCompleted} />
-        <ReflectionField id="reflection-next" label="What would support me tomorrow?" value={nextStep} onChange={setNextStep} />
+        <ReflectionField id="reflection-helped" label={DEFAULT_REFLECTION_PROMPTS[0].label} value={whatHelped} onChange={setWhatHelped} />
+        <ReflectionField id="reflection-difficult" label={DEFAULT_REFLECTION_PROMPTS[1].label} value={difficult} onChange={setDifficult} />
+        <ReflectionField id="reflection-next" label={DEFAULT_REFLECTION_PROMPTS[2].label} value={nextStep} onChange={setNextStep} />
+        <details className="rounded-xl border border-stone-200 bg-stone-50 p-3 sm:col-span-2" open={additionalNoteOpen} onToggle={(event) => setAdditionalNoteOpen(event.currentTarget.open)}>
+          <summary className="cursor-pointer text-sm font-semibold">Add another note</summary>
+          <div className="mt-3">
+            <ReflectionField id="reflection-notes" label={ADDITIONAL_NOTE_LABEL} value={freeText} onChange={setFreeText} />
+          </div>
+        </details>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <button disabled={!hasReflectionContent(input)} className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900">{existing ? "Update journal" : "Save journal"}</button>
           {existing && <SecondaryButton onClick={remove}>Delete today&apos;s entry</SecondaryButton>}
         </div>
       </form>
-      <p className="mt-4 text-xs text-stone-500">Private: entries remain in this browser and are not sent to AI, analytics, logs, or notifications.</p>
+      <p className="mt-4 text-xs text-stone-500">{REFLECTION_PRIVACY_TEXT}</p>
       {notice && <p className="mt-2 text-sm font-semibold text-emerald-700" role="status">{notice}</p>}
     </section>
   );
