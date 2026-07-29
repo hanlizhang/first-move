@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(12);
 
 insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
 values ('30000000-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'import@example.test', '', now(), now(), now());
@@ -60,6 +60,31 @@ select is(
   (select status::text from public.import_batches where id = '33300000-0000-4000-8000-000000000003'),
   'completed',
   'completed status persists'
+);
+
+select lives_ok(
+  $$insert into public.milestone_grants (user_id, milestone_day, active_day_count) values
+    ('30000000-0000-4000-8000-000000000003', 21, 100),
+    ('30000000-0000-4000-8000-000000000003', 50, 100),
+    ('30000000-0000-4000-8000-000000000003', 100, 100)$$,
+  'one grant for each milestone can be inserted'
+);
+select throws_ok(
+  $$insert into public.milestone_grants (user_id, milestone_day, active_day_count)
+    values ('30000000-0000-4000-8000-000000000003', 21, 100)$$,
+  '23505',
+  null,
+  'duplicate milestone grant is rejected by the unique constraint'
+);
+select is(
+  (select count(*)::integer from public.milestone_grants where user_id = '30000000-0000-4000-8000-000000000003'),
+  3,
+  'the user has exactly three milestone grants'
+);
+select is(
+  (select count(distinct milestone_day)::integer from public.milestone_grants where user_id = '30000000-0000-4000-8000-000000000003'),
+  3,
+  'each 21, 50, and 100 day milestone exists at most once'
 );
 
 select * from finish();

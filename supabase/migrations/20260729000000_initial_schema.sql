@@ -520,7 +520,8 @@ begin
   foreach v_day in array array[21, 50, 100] loop
     if v_active_days < v_day then continue; end if;
     insert into public.milestone_grants (user_id, milestone_day, active_day_count)
-    values (v_user, v_day, v_active_days) on conflict (user_id, milestone_day) do nothing;
+    values (v_user, v_day, v_active_days)
+    on conflict on constraint milestone_grants_user_id_milestone_day_key do nothing;
     get diagnostics v_inserted = row_count;
     if v_inserted = 1 then
       if v_day = 21 then
