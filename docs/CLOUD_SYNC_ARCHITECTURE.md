@@ -50,6 +50,7 @@ All user-owned tables include `user_id uuid references auth.users(id) on delete 
 | `profiles` | One per auth user; timezone and first-use metadata | mutable singleton |
 | `devices` | Registered installations and last sync cursor | mutable |
 | `import_batches` | Records start-fresh/import-local choice and import result | append-oriented audit |
+| `import_entity_mappings` | Durable local-ID to cloud-UUID and payload-digest mapping for retry-safe imports | append-only import audit |
 | `client_mutations` | `(user_id, device_id, mutation_id)` idempotency receipts | append-only |
 | `tasks` | Ordered manual tasks | mutable + tombstone |
 | `task_completions` | One task/date completion | mutable tombstone; unique task/date |

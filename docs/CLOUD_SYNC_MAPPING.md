@@ -195,6 +195,8 @@ The catalog includes all active current items and inactive legacy furniture (`ca
 
 Every exposed user-owned table contains `user_id`, enables RLS, and has an owner-only SELECT policy explicitly scoped `TO authenticated`. Mutable tables have owner-only INSERT/UPDATE policies. Every user-owned table has an explicit authenticated hard-DELETE denial; soft deletion is an UPDATE. Server-only tables additionally have explicit denied client INSERT/UPDATE policies:
 
+- `import_batches`
+- `import_entity_mappings`
 - `client_mutations`
 - `morning_checks`
 - `morning_attempts`
@@ -206,6 +208,8 @@ Every exposed user-owned table contains `user_id`, enables RLS, and has an owner
 - `ai_usage_events`
 
 `inventory_items` is a non-user-owned reference catalog with authenticated read-only RLS. All server-only mutations require narrowly scoped RPCs or trusted server routes. Browser/mobile clients receive only the project URL and publishable key; they never receive service-role, database, JWT-signing, RevenueCat secret, or OpenAI keys.
+
+PostgREST exposure is privilege allowlisted: `anon` has no access to the public schema; `authenticated` receives SELECT/INSERT/UPDATE only on owner-mutable tables, SELECT only on server-authoritative/import/catalog tables and security-invoker views, and EXECUTE only on explicitly approved functions. No client role receives table DELETE privileges.
 
 ## Remaining mapping gaps before sync code
 

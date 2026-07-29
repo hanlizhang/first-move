@@ -10,7 +10,7 @@ Release gates: all existing guest-mode tests remain green; migration applies and
 
 ## 1. Schema and migration
 
-- Apply `0001_initial_schema.sql` to an empty ephemeral Supabase-compatible PostgreSQL instance; verify types, constraints, triggers, views, functions, grants, indexes, and seed rows.
+- Apply `20260729000000_initial_schema.sql` to an empty ephemeral Supabase-compatible PostgreSQL instance; verify types, constraints, triggers, views, functions, grants, indexes, and seed rows.
 - Confirm every user-owned table has RLS enabled and no accidental `anon` access.
 - Verify client-generated UUID inserts and all composite ownership foreign keys.
 - Reject invalid direction, weekday, ratings, durations, states, negative elapsed time, invalid timezone, multiple entity links, and empty journal content.
@@ -44,7 +44,7 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 
 ## 4. First login: Start fresh
 
-- Snapshot populated guest state, select Start fresh, and verify empty cloud hydration.
+- Snapshot every localStorage key/value before any other operation, verify the immutable IndexedDB backup digest, select Start fresh, and verify empty cloud hydration.
 - Verify original guest snapshot remains intact, accessible/exportable, and never uploads automatically.
 - Crash at every transition boundary; restart must present an unambiguous guest/cloud workspace and never delete data.
 - Repeating the choice/idempotency mutation creates one profile/import batch.
@@ -53,12 +53,14 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 ## 5. First login: Import local data
 
 - Import empty, minimal, and maximum-size valid schema-v8 snapshots.
+- Include the separate daily-plan localStorage collection and preserve every current guest localStorage key in the local backup.
 - Map every legacy prefixed ID to a UUID and preserve task/habit/intent/session links.
 - Expand `completedOn` arrays into unique completion rows; duplicates remain one row.
 - Preserve UTC instants, local dates, and importing IANA timezone metadata.
-- Import journal rows separately and honor the explicit journal opt-in decision.
+- Import every journal field as private owner data without sending content to logs, telemetry, notifications, or AI.
 - Confirm no image/blob/data URL or toothbrush image hash is included.
-- Reconstruct reward/inventory events, compare derived point and quantity projections, and flag unexplained cached balances without minting value.
+- Import reward events, reconstruct current inventory with auditable opening correction events, compare derived point and quantity projections, and reject unexplained balance mismatches without minting value.
+- If any cloud workspace data already exists, offer **Use cloud progress**, retain the new local snapshot, and assert that no guest upload request occurs.
 - Interrupt each batch/chunk, resume on the same or another network, and prove mutation/batch idempotency.
 - Reject malformed rows individually with a review report; retain the untouched source snapshot.
 - Complete only after server counts/checksums match the preview. Re-running a completed import changes nothing.

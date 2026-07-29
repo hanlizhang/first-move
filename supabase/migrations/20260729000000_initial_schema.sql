@@ -10,6 +10,12 @@ create type public.session_status as enum ('running', 'paused', 'completed', 'st
 create type public.intent_status as enum ('pending', 'consumed', 'cancelled');
 create type public.import_choice as enum ('start_fresh', 'import_local');
 create type public.import_status as enum ('pending', 'running', 'completed', 'failed');
+create type public.import_entity_type as enum (
+  'profile', 'user_settings', 'task', 'task_completion', 'habit', 'habit_schedule_weekday',
+  'habit_completion', 'activity_intent', 'activity_session', 'daily_plan', 'daily_plan_item',
+  'morning_check', 'morning_attempt', 'journal_entry', 'reward_event', 'inventory_event',
+  'inventory_balance', 'milestone_grant'
+);
 create type public.inventory_event_kind as enum ('purchase', 'consume', 'milestone_grant', 'correction');
 create type public.daily_plan_group as enum ('first-move', 'priority', 'optional');
 create type public.ai_feature as enum ('daily_plan', 'toothbrush_verification', 'make_smaller');
@@ -60,12 +66,34 @@ create table public.import_batches (
   status public.import_status not null default 'pending',
   source_schema_version integer,
   source_timezone text check (source_timezone is null or public.valid_timezone(source_timezone)),
-  record_counts jsonb not null default '{}'::jsonb check (jsonb_typeof(record_counts) = 'object'),
+  snapshot_sha256 text not null check (snapshot_sha256 ~ '^[0-9a-f]{64}$'),
+  expected_record_counts jsonb not null default '{}'::jsonb check (jsonb_typeof(expected_record_counts) = 'object'),
+  imported_record_counts jsonb not null default '{}'::jsonb check (jsonb_typeof(imported_record_counts) = 'object'),
+  expected_points_tenths bigint,
+  verified_points_tenths bigint,
+  expected_inventory_balances jsonb not null default '{}'::jsonb check (jsonb_typeof(expected_inventory_balances) = 'object'),
+  verified_inventory_balances jsonb not null default '{}'::jsonb check (jsonb_typeof(verified_inventory_balances) = 'object'),
   error_code text,
   created_at timestamptz not null default transaction_timestamp(),
   completed_at timestamptz,
+  verified_at timestamptz,
   unique (user_id, id),
+  unique (user_id, snapshot_sha256),
+  check (status <> 'completed' or (completed_at is not null and verified_at is not null)),
   foreign key (user_id, device_id) references public.devices(user_id, id)
+);
+
+create table public.import_entity_mappings (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  import_batch_id uuid not null,
+  entity_type public.import_entity_type not null,
+  local_id text not null check (char_length(local_id) between 1 and 300),
+  cloud_id uuid not null,
+  payload_sha256 text not null check (payload_sha256 ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default transaction_timestamp(),
+  primary key (user_id, import_batch_id, entity_type, local_id),
+  unique (user_id, import_batch_id, entity_type, cloud_id),
+  foreign key (user_id, import_batch_id) references public.import_batches(user_id, id)
 );
 
 create table public.client_mutations (
@@ -385,6 +413,8 @@ create index reward_ledger_user_date_idx on public.reward_ledger(user_id, local_
 create index inventory_events_user_idx on public.inventory_events(user_id, created_at);
 create index ai_usage_lifetime_idx on public.ai_usage_events(user_id, access_basis, dispatched_at);
 create index ai_usage_daily_quota_idx on public.ai_usage_events(user_id, local_date, feature, access_basis);
+create index import_batches_user_status_idx on public.import_batches(user_id, status, created_at);
+create index import_entity_mappings_cloud_idx on public.import_entity_mappings(user_id, cloud_id);
 
 create trigger profiles_updated before update on public.profiles for each row execute function public.set_updated_at();
 create trigger devices_updated before update on public.devices for each row execute function public.set_updated_at();
@@ -520,6 +550,7 @@ $$;
 alter table public.profiles enable row level security;
 alter table public.devices enable row level security;
 alter table public.import_batches enable row level security;
+alter table public.import_entity_mappings enable row level security;
 alter table public.client_mutations enable row level security;
 alter table public.tasks enable row level security;
 alter table public.task_completions enable row level security;
@@ -543,17 +574,17 @@ alter table public.ai_usage_events enable row level security;
 do $$
 declare t text;
 begin
-  foreach t in array array['profiles','devices','import_batches','client_mutations','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','daily_plans','daily_plan_items','journal_entries','morning_checks','morning_attempts','reward_ledger','user_settings','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
+  foreach t in array array['profiles','devices','import_batches','import_entity_mappings','client_mutations','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','daily_plans','daily_plan_items','journal_entries','morning_checks','morning_attempts','reward_ledger','user_settings','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
   loop
     execute format('create policy %I on public.%I for select to authenticated using ((select auth.uid()) = user_id)', t || '_select_own', t);
     execute format('create policy %I on public.%I for delete to authenticated using (false)', t || '_delete_denied', t);
   end loop;
-  foreach t in array array['profiles','devices','import_batches','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','daily_plans','daily_plan_items','journal_entries']
+  foreach t in array array['profiles','devices','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','daily_plans','daily_plan_items','journal_entries']
   loop
     execute format('create policy %I on public.%I for insert to authenticated with check ((select auth.uid()) = user_id)', t || '_insert_own', t);
     execute format('create policy %I on public.%I for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', t || '_update_own', t);
   end loop;
-  foreach t in array array['client_mutations','morning_checks','morning_attempts','reward_ledger','user_settings','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
+  foreach t in array array['import_batches','import_entity_mappings','client_mutations','morning_checks','morning_attempts','reward_ledger','user_settings','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
   loop
     execute format('create policy %I on public.%I for insert to authenticated with check (false)', t || '_insert_denied', t);
     execute format('create policy %I on public.%I for update to authenticated using (false) with check (false)', t || '_update_denied', t);
@@ -562,8 +593,48 @@ end $$;
 
 -- Reference catalog is readable but only server/migrations may change it.
 alter table public.inventory_items enable row level security;
-create policy inventory_items_read on public.inventory_items for select to authenticated using (active);
+create policy inventory_items_read on public.inventory_items for select to authenticated using (true);
 
+-- PostgREST table exposure is opt-in. Anon receives no public-schema access.
+revoke all on schema public from anon, authenticated;
+grant usage on schema public to authenticated;
+revoke all on all tables in schema public from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+revoke execute on all functions in schema public from public, anon, authenticated;
+
+grant select, insert, update on table
+  public.profiles,
+  public.devices,
+  public.tasks,
+  public.task_completions,
+  public.habits,
+  public.habit_schedule_weekdays,
+  public.habit_completions,
+  public.activity_intents,
+  public.activity_sessions,
+  public.daily_plans,
+  public.daily_plan_items,
+  public.journal_entries
+to authenticated;
+
+grant select on table
+  public.import_batches,
+  public.import_entity_mappings,
+  public.client_mutations,
+  public.morning_checks,
+  public.morning_attempts,
+  public.reward_ledger,
+  public.inventory_items,
+  public.user_settings,
+  public.inventory_events,
+  public.inventory_balances,
+  public.milestone_grants,
+  public.ai_usage_events,
+  public.active_days,
+  public.point_balances
+to authenticated;
+
+grant execute on function public.valid_timezone(text) to authenticated;
 revoke all on function public.purchase_inventory_item(text, uuid, date, text) from public;
 revoke all on function public.grant_earned_milestones(date, text) from public;
 grant execute on function public.purchase_inventory_item(text, uuid, date, text) to authenticated;
@@ -587,3 +658,5 @@ comment on table public.journal_entries is 'Private Mini Journal data. Exclude f
 comment on table public.morning_checks is 'Metadata only. Toothbrush images and image hashes must never be stored.';
 comment on table public.user_settings is 'Server-maintained settings projection. selected_furniture_id must be changed only after ownership validation.';
 comment on table public.ai_usage_events is 'Server-written paid AI dispatch ledger. Never store prompts, images, outputs, journal text, email, tokens, or credentials.';
+comment on table public.import_batches is 'Server-written import audit and verification summary. Raw guest snapshots remain local-only.';
+comment on table public.import_entity_mappings is 'Durable, auditable local-ID to cloud-UUID mapping for retry-safe first-device imports.';

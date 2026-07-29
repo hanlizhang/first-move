@@ -6,13 +6,13 @@ Status: implementation plan only. SQL has not been executed and sync remains dis
 
 Keep the cloud-sync feature flag disabled through B1, B2, B3, and B4. Authentication may show the signed-in email, but it must continue to state that progress is local-only. Do not present an account as synchronized until initialization, core records, reward/inventory/milestone commands, hydration, and integrity checks all work together.
 
-The first developer test uses **Start fresh**. Existing schema-v8 local test progress remains untouched. No import, upload, merge, replacement, or local deletion is attempted. A cloud workspace becomes active only after initialization commits and an empty canonical hydration succeeds.
+The first developer test may use **Import this device** or **Start fresh**. Both choices first create an immutable local snapshot. Import is allowed only into an empty account and follows `CLOUD_SYNC_IMPORT_MAPPING.md`; an account with existing cloud data offers **Use cloud progress** and defers merge. A cloud workspace becomes active only after initialization/import commits, canonical hydration succeeds, and all integrity checks pass.
 
 ## B1. Apply and security-test the migration
 
 Prerequisite: explicit approval to install/use project-local Supabase tooling or an approved ephemeral test path.
 
-1. Re-review `0001_initial_schema.sql` and pin the target Supabase/PostgreSQL environment.
+1. Re-review `20260729000000_initial_schema.sql` and pin the target Supabase/PostgreSQL environment.
 2. Apply only to an empty development/test project or ephemeral database, never production first.
 3. Verify every table, enum, FK, CHECK, trigger, view, index, function privilege, and catalog seed.
 4. Run an RLS matrix as anon, user A, user B, and trusted server:
@@ -29,19 +29,20 @@ Prerequisite: explicit approval to install/use project-local Supabase tooling or
 
 Exit gate: clean ephemeral apply, adversarial RLS suite, function privilege audit, and concurrency suite all pass. Any failure blocks B2.
 
-## B2. Start-fresh account initialization and initial hydration
+## B2. Account initialization, import, and initial hydration
 
 1. Add a server-authoritative initialization command using `auth.uid()`.
 2. Register the device and create `profiles`, `user_settings`, and a completed `import_batches` Start-fresh audit row idempotently.
 3. Snapshot but do not modify the current guest localStorage.
-4. Show an explicit Start fresh confirmation that states local progress will remain on the device.
-5. Initialize the empty cloud workspace transactionally.
-6. Pull the canonical empty profile/settings/catalog result into a separate cache namespace.
-7. Compare expected counts/checksum, then mark initialization successful.
-8. Only after success allow a development-only switch into the empty cloud workspace; never delete the guest snapshot.
-9. On error or interruption, remain in Guest Mode and make initialization safely retryable.
+4. Offer **Import this device** and **Start fresh** only for an empty account; otherwise offer **Use cloud progress** and retain the local snapshot.
+5. For Import, create durable local-ID/cloud-UUID mappings and upload parents, children, facts, ledgers, milestones, and inventory projections in one trusted transaction.
+6. For Start fresh, initialize the empty workspace transactionally without uploading guest records.
+7. Pull the canonical result into a separate cache namespace.
+8. Compare counts, references, reward balance, inventory event sums/projections, milestones, and snapshot checksum; then mark initialization successful.
+9. Only after canonical hydration succeeds switch into cloud mode; never delete the guest snapshot.
+10. On error or interruption, remain in Guest Mode and resume with the same batch and mappings.
 
-Exit gate: repeated initialization is idempotent; failure at every boundary preserves local data; localhost, Vercel desktop, and Vercel mobile hydrate the same empty account identity.
+Exit gate: repeated initialization/import is idempotent; every failure preserves local data; an existing cloud account never receives an automatic guest upload; all clients hydrate the same verified account identity.
 
 ## B3. Core records sync
 
@@ -114,4 +115,3 @@ Exit gate: every client converges, no cross-user access is possible, no duplicat
 - Policy lookup fields are backed by PK, unique, sync, history, or quota indexes.
 - Reward source uniqueness, completion/date uniqueness, milestone uniqueness, purchase idempotency, and client mutation uniqueness are present.
 - No application sync code, localStorage mutation, SQL execution, remote project change, CLI install, commit, or push is part of B1 audit preparation.
-
