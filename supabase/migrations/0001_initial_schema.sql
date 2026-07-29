@@ -11,6 +11,7 @@ create type public.intent_status as enum ('pending', 'consumed', 'cancelled');
 create type public.import_choice as enum ('start_fresh', 'import_local');
 create type public.import_status as enum ('pending', 'running', 'completed', 'failed');
 create type public.inventory_event_kind as enum ('purchase', 'consume', 'milestone_grant', 'correction');
+create type public.daily_plan_group as enum ('first-move', 'priority', 'optional');
 create type public.ai_feature as enum ('daily_plan', 'toothbrush_verification', 'make_smaller');
 create type public.ai_access_basis as enum ('introductory', 'pro');
 
@@ -205,6 +206,37 @@ create table public.activity_sessions (
   foreign key (user_id, linked_intent_id) references public.activity_intents(user_id, id)
 );
 
+create table public.daily_plans (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  local_date date not null,
+  timezone text not null check (public.valid_timezone(timezone)),
+  created_at timestamptz not null default transaction_timestamp(),
+  updated_at timestamptz not null default transaction_timestamp(),
+  version bigint not null default 1 check (version > 0),
+  deleted_at timestamptz,
+  unique (user_id, local_date),
+  unique (user_id, id)
+);
+
+create table public.daily_plan_items (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  daily_plan_id uuid not null,
+  item_group public.daily_plan_group not null,
+  title text not null check (char_length(btrim(title)) between 1 and 160),
+  first_step text not null check (char_length(btrim(first_step)) between 1 and 160),
+  direction public.direction not null,
+  duration_minutes integer not null check (duration_minutes in (2, 5, 10, 25)),
+  position integer not null check (position between 0 and 6),
+  created_at timestamptz not null default transaction_timestamp(),
+  updated_at timestamptz not null default transaction_timestamp(),
+  version bigint not null default 1 check (version > 0),
+  deleted_at timestamptz,
+  unique (user_id, id),
+  foreign key (user_id, daily_plan_id) references public.daily_plans(user_id, id)
+);
+
 create table public.journal_entries (
   id uuid primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -212,6 +244,7 @@ create table public.journal_entries (
   timezone text not null check (public.valid_timezone(timezone)),
   mood smallint check (mood between 1 and 5),
   energy smallint check (energy between 1 and 5),
+  what_helped text check (char_length(what_helped) <= 1000),
   completed text check (char_length(completed) <= 1000),
   difficult text check (char_length(difficult) <= 1000),
   next_step text check (char_length(next_step) <= 1000),
@@ -221,7 +254,7 @@ create table public.journal_entries (
   version bigint not null default 1 check (version > 0),
   deleted_at timestamptz,
   unique (user_id, local_date),
-  check (num_nonnulls(mood, energy, completed, difficult, next_step, free_text) > 0)
+  check (num_nonnulls(mood, energy, what_helped, completed, difficult, next_step, free_text) > 0)
 );
 
 create table public.morning_checks (
@@ -271,6 +304,14 @@ create table public.inventory_items (
   durable boolean not null,
   milestone_only boolean not null default false,
   active boolean not null default true
+);
+
+create table public.user_settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  selected_furniture_id text references public.inventory_items(id),
+  created_at timestamptz not null default transaction_timestamp(),
+  updated_at timestamptz not null default transaction_timestamp(),
+  version bigint not null default 1 check (version > 0)
 );
 
 create table public.inventory_events (
@@ -326,12 +367,19 @@ create table public.ai_usage_events (
 
 create unique index one_pending_intent_per_user on public.activity_intents(user_id) where status = 'pending' and deleted_at is null;
 create unique index one_open_session_per_user on public.activity_sessions(user_id) where status in ('running', 'paused') and deleted_at is null;
+create unique index one_first_move_per_daily_plan on public.daily_plan_items(user_id, daily_plan_id) where item_group = 'first-move' and deleted_at is null;
+create unique index one_position_per_daily_plan on public.daily_plan_items(user_id, daily_plan_id, position) where deleted_at is null;
+create unique index one_reward_per_source_event on public.reward_ledger(user_id, source_type, source_id) where source_id is not null and source_type in ('task', 'habit', 'session', 'morning', 'reflection');
 create index tasks_sync_idx on public.tasks(user_id, updated_at, id);
 create index task_completions_sync_idx on public.task_completions(user_id, updated_at, id);
 create index habits_sync_idx on public.habits(user_id, updated_at, id);
+create index habit_schedule_sync_idx on public.habit_schedule_weekdays(user_id, updated_at, id);
 create index habit_completions_sync_idx on public.habit_completions(user_id, updated_at, id);
+create index intents_sync_idx on public.activity_intents(user_id, updated_at, id);
 create index sessions_sync_idx on public.activity_sessions(user_id, updated_at, id);
 create index sessions_history_idx on public.activity_sessions(user_id, local_date, ended_at) where deleted_at is null;
+create index daily_plans_sync_idx on public.daily_plans(user_id, updated_at, id);
+create index daily_plan_items_sync_idx on public.daily_plan_items(user_id, updated_at, id);
 create index journal_sync_idx on public.journal_entries(user_id, updated_at, id);
 create index reward_ledger_user_date_idx on public.reward_ledger(user_id, local_date, created_at);
 create index inventory_events_user_idx on public.inventory_events(user_id, created_at);
@@ -347,8 +395,11 @@ create trigger habit_schedule_updated before update on public.habit_schedule_wee
 create trigger habit_completions_updated before update on public.habit_completions for each row execute function public.set_updated_at();
 create trigger intents_updated before update on public.activity_intents for each row execute function public.set_updated_at();
 create trigger sessions_updated before update on public.activity_sessions for each row execute function public.set_updated_at();
+create trigger daily_plans_updated before update on public.daily_plans for each row execute function public.set_updated_at();
+create trigger daily_plan_items_updated before update on public.daily_plan_items for each row execute function public.set_updated_at();
 create trigger journal_updated before update on public.journal_entries for each row execute function public.set_updated_at();
 create trigger attempts_updated before update on public.morning_attempts for each row execute function public.set_updated_at();
+create trigger user_settings_updated before update on public.user_settings for each row execute function public.set_updated_at();
 create trigger inventory_balances_updated before update on public.inventory_balances for each row execute function public.set_updated_at();
 
 create view public.active_days with (security_invoker = true) as
@@ -477,10 +528,13 @@ alter table public.habit_schedule_weekdays enable row level security;
 alter table public.habit_completions enable row level security;
 alter table public.activity_intents enable row level security;
 alter table public.activity_sessions enable row level security;
+alter table public.daily_plans enable row level security;
+alter table public.daily_plan_items enable row level security;
 alter table public.journal_entries enable row level security;
 alter table public.morning_checks enable row level security;
 alter table public.morning_attempts enable row level security;
 alter table public.reward_ledger enable row level security;
+alter table public.user_settings enable row level security;
 alter table public.inventory_events enable row level security;
 alter table public.inventory_balances enable row level security;
 alter table public.milestone_grants enable row level security;
@@ -489,14 +543,20 @@ alter table public.ai_usage_events enable row level security;
 do $$
 declare t text;
 begin
-  foreach t in array array['profiles','devices','import_batches','client_mutations','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','journal_entries','morning_checks','morning_attempts','reward_ledger','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
+  foreach t in array array['profiles','devices','import_batches','client_mutations','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','daily_plans','daily_plan_items','journal_entries','morning_checks','morning_attempts','reward_ledger','user_settings','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
   loop
     execute format('create policy %I on public.%I for select to authenticated using ((select auth.uid()) = user_id)', t || '_select_own', t);
+    execute format('create policy %I on public.%I for delete to authenticated using (false)', t || '_delete_denied', t);
   end loop;
-  foreach t in array array['profiles','devices','import_batches','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','journal_entries']
+  foreach t in array array['profiles','devices','import_batches','tasks','task_completions','habits','habit_schedule_weekdays','habit_completions','activity_intents','activity_sessions','daily_plans','daily_plan_items','journal_entries']
   loop
     execute format('create policy %I on public.%I for insert to authenticated with check ((select auth.uid()) = user_id)', t || '_insert_own', t);
     execute format('create policy %I on public.%I for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', t || '_update_own', t);
+  end loop;
+  foreach t in array array['client_mutations','morning_checks','morning_attempts','reward_ledger','user_settings','inventory_events','inventory_balances','milestone_grants','ai_usage_events']
+  loop
+    execute format('create policy %I on public.%I for insert to authenticated with check (false)', t || '_insert_denied', t);
+    execute format('create policy %I on public.%I for update to authenticated using (false) with check (false)', t || '_update_denied', t);
   end loop;
 end $$;
 
@@ -510,17 +570,20 @@ grant execute on function public.purchase_inventory_item(text, uuid, date, text)
 grant execute on function public.grant_earned_milestones(date, text) to authenticated;
 
 -- Catalog seed mirrors the current local product. Prices are integer tenths of a point.
-insert into public.inventory_items (id, name, kind, price_tenths, unlock_active_days, purchase_quantity, durable, milestone_only) values
-  ('kitten-milk', 'Kitten milk', 'food', 50, 1, 1, false, false),
-  ('cat-food', 'Cat food', 'food', 100, 21, 1, false, false),
-  ('cat-treat', 'Cat treat', 'food', 200, 50, 1, false, false),
-  ('yarn-toy', 'Yarn ball', 'toy', 250, 3, 1, true, false),
-  ('teaser-wand', 'Teaser wand', 'toy', 400, 7, 1, true, false),
-  ('high-five', 'High-five', 'trick', 800, 50, 1, true, false),
-  ('paw-shake', 'Paw shake', 'trick', 1200, 100, 1, true, false),
-  ('outdoor-garden', 'Outdoor garden', 'scene', 0, 100, 1, true, true),
-  ('butterfly', 'Butterfly', 'interaction', 0, 100, 1, true, true);
+insert into public.inventory_items (id, name, kind, price_tenths, unlock_active_days, purchase_quantity, durable, milestone_only, active) values
+  ('kitten-milk', 'Kitten milk', 'food', 50, 1, 1, false, false, true),
+  ('cat-food', 'Cat food', 'food', 100, 21, 1, false, false, true),
+  ('cat-treat', 'Cat treat', 'food', 200, 50, 1, false, false, true),
+  ('yarn-toy', 'Yarn ball', 'toy', 250, 3, 1, true, false, true),
+  ('teaser-wand', 'Teaser wand', 'toy', 400, 7, 1, true, false, true),
+  ('high-five', 'High-five', 'trick', 800, 50, 1, true, false, true),
+  ('paw-shake', 'Paw shake', 'trick', 1200, 100, 1, true, false, true),
+  ('outdoor-garden', 'Outdoor garden', 'scene', 0, 100, 1, true, true, true),
+  ('butterfly', 'Butterfly', 'interaction', 0, 100, 1, true, true, true),
+  ('cat-bed', 'Cat bed', 'furniture', 100, 0, 1, true, false, false),
+  ('window-cushion', 'Window cushion', 'furniture', 140, 0, 1, true, false, false);
 
 comment on table public.journal_entries is 'Private Mini Journal data. Exclude from AI, analytics payloads, logs, and notification previews.';
 comment on table public.morning_checks is 'Metadata only. Toothbrush images and image hashes must never be stored.';
+comment on table public.user_settings is 'Server-maintained settings projection. selected_furniture_id must be changed only after ownership validation.';
 comment on table public.ai_usage_events is 'Server-written paid AI dispatch ledger. Never store prompts, images, outputs, journal text, email, tokens, or credentials.';
