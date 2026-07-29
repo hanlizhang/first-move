@@ -66,6 +66,7 @@ import { APP_VIEWS, APP_VIEW_LABELS, plannerPresentation, type AppView } from "@
 import { loadDailyPlan, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-plan-state";
 import type { PlanningReviewItem } from "@/lib/planning-review";
 import { companionEventsForTransition, companionIdleAction, createCompanionEventController, shouldShowCompanion, type CompanionReaction } from "@/lib/companion-events";
+import { accountSyncLabel } from "@/lib/account-sync-status";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -134,23 +135,28 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
 
   function reviewPlan() { setReviewingPlan(true); navigate("first-moves"); }
   const plannerState = plannerPresentation(morningComplete, Boolean(dailyPlan), reviewingPlan);
+  const accountLabel = accountSyncLabel(Boolean(initialEmail));
 
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-stone-900">
       <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-[#f7f4ee]/95 px-4 py-3 backdrop-blur sm:px-6">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="mx-auto grid max-w-5xl grid-cols-[auto_1fr] items-center gap-2 sm:flex sm:flex-wrap sm:justify-between sm:gap-3">
           <button type="button" onClick={() => navigate("first-moves")} className="font-bold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-600">
             First Move
           </button>
-          <nav aria-label="Main views" className="order-last w-full overflow-x-auto overscroll-x-contain sm:order-none sm:w-auto">
+          <nav aria-label="Main views" className="order-last col-span-2 w-full overflow-x-auto overscroll-x-contain sm:order-none sm:w-auto">
             <ul className="flex min-w-max gap-1 text-sm font-semibold text-stone-600">
               {APP_VIEWS.map((view) => <li key={view}><button type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => navigate(view)} className={`min-h-11 rounded-lg px-3 py-2 focus-visible:outline-2 focus-visible:outline-orange-600 ${activeView === view ? "bg-white text-stone-950 shadow-sm" : "hover:bg-white"}`}>{APP_VIEW_LABELS[view]}</button></li>)}
             </ul>
           </nav>
-          <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
-            <span aria-hidden="true">✦</span> {formatPoints(state.progress.points)} points
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 justify-self-end sm:flex-nowrap">
+            <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
+              <span aria-hidden="true">✦</span> {formatPoints(state.progress.points)} points
+            </div>
+            <button type="button" onClick={() => navigate("settings")} className="whitespace-nowrap rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 sm:text-sm">
+              {accountLabel}
+            </button>
           </div>
-          {initialEmail && <button type="button" onClick={() => navigate("settings")} className="max-w-52 truncate rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" title={initialEmail}>{initialEmail}</button>}
         </div>
       </header>
 
@@ -608,6 +614,7 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
   const existing = state.journalEntries.find((entry) => entry.dateKey === today);
   const [mood, setMood] = useState(existing?.mood ? String(existing.mood) : "");
   const [energy, setEnergy] = useState(existing?.energy ? String(existing.energy) : "");
+  const [whatHelped, setWhatHelped] = useState(existing?.whatHelped ?? "");
   const [completed, setCompleted] = useState(existing?.completed ?? "");
   const [difficult, setDifficult] = useState(existing?.difficult ?? "");
   const [nextStep, setNextStep] = useState(existing?.nextStep ?? "");
@@ -617,6 +624,7 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
   const input: ReflectionInput = {
     mood: mood ? Number(mood) as 1 | 2 | 3 | 4 | 5 : undefined,
     energy: energy ? Number(energy) as 1 | 2 | 3 | 4 | 5 : undefined,
+    whatHelped,
     completed,
     difficult,
     nextStep,
@@ -632,7 +640,7 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
 
   function remove() {
     update((current) => deleteReflection(current, today));
-    setMood(""); setEnergy(""); setCompleted(""); setDifficult(""); setNextStep(""); setFreeText("");
+    setMood(""); setEnergy(""); setWhatHelped(""); setCompleted(""); setDifficult(""); setNextStep(""); setFreeText("");
     setNotice("Mini Journal entry removed. There is no penalty.");
   }
 
@@ -645,16 +653,17 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
       <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
         <RatingField label="Mood" value={mood} onChange={setMood} />
         <RatingField label="Energy" value={energy} onChange={setEnergy} />
-        <ReflectionField id="reflection-completed" label="One thing I did" value={completed} onChange={setCompleted} />
-        <ReflectionField id="reflection-difficult" label="What felt hard" value={difficult} onChange={setDifficult} />
-        <ReflectionField id="reflection-next" label="My next small step" value={nextStep} onChange={setNextStep} />
-        <ReflectionField id="reflection-notes" label="Anything else" value={freeText} onChange={setFreeText} />
+        <ReflectionField id="reflection-helped" label="What gave me energy or helped?" value={whatHelped} onChange={setWhatHelped} />
+        <ReflectionField id="reflection-difficult" label="What drained my time or energy?" value={difficult} onChange={setDifficult} />
+        <ReflectionField id="reflection-notes" label="What did I notice in my body or feelings?" value={freeText} onChange={setFreeText} />
+        <ReflectionField id="reflection-completed" label="What did I do today?" value={completed} onChange={setCompleted} />
+        <ReflectionField id="reflection-next" label="What would support me tomorrow?" value={nextStep} onChange={setNextStep} />
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <button disabled={!hasReflectionContent(input)} className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900">{existing ? "Update journal" : "Save journal"}</button>
           {existing && <SecondaryButton onClick={remove}>Delete today&apos;s entry</SecondaryButton>}
         </div>
       </form>
-      <p className="mt-4 text-xs text-stone-500">Private: entries remain in this browser and are not analyzed or sent to AI.</p>
+      <p className="mt-4 text-xs text-stone-500">Private: entries remain in this browser and are not sent to AI, analytics, logs, or notifications.</p>
       {notice && <p className="mt-2 text-sm font-semibold text-emerald-700" role="status">{notice}</p>}
     </section>
   );
@@ -743,7 +752,7 @@ function CalendarPanel({ state, today, onShowToday }: { state: AppState; today: 
 function DayDetailPanel({ detail, isToday, onShowToday }: { detail: ReturnType<typeof getDayDetail>; isToday: boolean; onShowToday: () => void }) {
   const hasAnything = detail.totalTrackedMs > 0 || detail.completedTasks.length > 0 || detail.habitCheckIns.length > 0 || detail.journalEntry;
   return <section className="mt-5 rounded-2xl bg-white p-5" aria-live="polite"><h4 className="text-lg font-bold">{formatLongDate(detail.dateKey)}</h4><p className="mt-1 text-sm text-stone-600">Total tracked: <strong>{formatDuration(detail.totalTrackedMs)}</strong></p>
-    {!hasAnything ? <p className="mt-4 text-sm text-stone-500">No recorded activity for this date.</p> : <><dl className="mt-4 grid gap-2 sm:grid-cols-2">{HISTORY_CATEGORIES.map((category) => detail.byCategory[category] > 0 && <div key={category} className="flex justify-between gap-3 text-sm"><dt>{category}</dt><dd className="font-semibold">{formatDuration(detail.byCategory[category])}</dd></div>)}</dl><DetailList title="Completed tasks" items={detail.completedTasks.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Habit check-ins" items={detail.habitCheckIns.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Sessions" items={detail.sessions.map((session) => `${session.label} · ${session.direction} · ${session.status === "stopped" ? "Stopped intentionally" : "Completed"} · ${formatDuration(session.actualElapsedMs ?? 0)}`)} />{detail.journalEntry && <div className="mt-4"><h5 className="text-sm font-bold">Mini Journal</h5><ul className="mt-1 space-y-1 text-sm text-stone-600">{detail.journalEntry.completed && <li>One thing I did: {detail.journalEntry.completed}</li>}{detail.journalEntry.difficult && <li>What felt hard: {detail.journalEntry.difficult}</li>}{detail.journalEntry.nextStep && <li>My next small step: {detail.journalEntry.nextStep}</li>}{detail.journalEntry.freeText && <li>Anything else: {detail.journalEntry.freeText}</li>}{detail.journalEntry.mood && <li>Mood: {detail.journalEntry.mood}/5</li>}{detail.journalEntry.energy && <li>Energy: {detail.journalEntry.energy}/5</li>}</ul></div>}</>}
+    {!hasAnything ? <p className="mt-4 text-sm text-stone-500">No recorded activity for this date.</p> : <><dl className="mt-4 grid gap-2 sm:grid-cols-2">{HISTORY_CATEGORIES.map((category) => detail.byCategory[category] > 0 && <div key={category} className="flex justify-between gap-3 text-sm"><dt>{category}</dt><dd className="font-semibold">{formatDuration(detail.byCategory[category])}</dd></div>)}</dl><DetailList title="Completed tasks" items={detail.completedTasks.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Habit check-ins" items={detail.habitCheckIns.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Sessions" items={detail.sessions.map((session) => `${session.label} · ${session.direction} · ${session.status === "stopped" ? "Stopped intentionally" : "Completed"} · ${formatDuration(session.actualElapsedMs ?? 0)}`)} />{detail.journalEntry && <div className="mt-4"><h5 className="text-sm font-bold">Mini Journal</h5><ul className="mt-1 space-y-1 text-sm text-stone-600">{detail.journalEntry.whatHelped && <li>What helped: {detail.journalEntry.whatHelped}</li>}{detail.journalEntry.difficult && <li>What drained me: {detail.journalEntry.difficult}</li>}{detail.journalEntry.freeText && <li>Body or feelings: {detail.journalEntry.freeText}</li>}{detail.journalEntry.completed && <li>What I did: {detail.journalEntry.completed}</li>}{detail.journalEntry.nextStep && <li>Tomorrow&apos;s support: {detail.journalEntry.nextStep}</li>}{detail.journalEntry.mood && <li>Mood: {detail.journalEntry.mood}/5</li>}{detail.journalEntry.energy && <li>Energy: {detail.journalEntry.energy}/5</li>}</ul></div>}</>}
     {isToday && <nav className="mt-5 flex flex-wrap gap-2 text-sm font-semibold" aria-label="Edit today's activity"><a className="rounded-lg border border-stone-200 px-3 py-2" href="#focus">Focus</a><a className="rounded-lg border border-stone-200 px-3 py-2" href="#tasks">Tasks</a><a className="rounded-lg border border-stone-200 px-3 py-2" href="#habits">Habits</a><button type="button" className="rounded-lg border border-stone-200 px-3 py-2" onClick={onShowToday}>Mini Journal</button></nav>}
   </section>;
 }

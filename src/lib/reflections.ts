@@ -8,6 +8,7 @@ type Rating = 1 | 2 | 3 | 4 | 5;
 export interface ReflectionInput {
   mood?: Rating;
   energy?: Rating;
+  whatHelped?: string;
   completed?: string;
   difficult?: string;
   nextStep?: string;
@@ -50,13 +51,14 @@ export function deleteReflection(state: AppState, dateKey: string): AppState {
 }
 
 export function hasReflectionContent(input: ReflectionInput): boolean {
-  return Boolean(input.mood || input.energy || input.completed || input.difficult || input.nextStep || input.freeText);
+  return Boolean(input.mood || input.energy || input.whatHelped || input.completed || input.difficult || input.nextStep || input.freeText);
 }
 
 function cleanInput(input: ReflectionInput): ReflectionInput {
   return {
     mood: validRating(input.mood) ? input.mood : undefined,
     energy: validRating(input.energy) ? input.energy : undefined,
+    whatHelped: cleanText(input.whatHelped),
     completed: cleanText(input.completed),
     difficult: cleanText(input.difficult),
     nextStep: cleanText(input.nextStep),
