@@ -93,6 +93,8 @@ Push order is parent rows, child rows, then append-only events. Exponential back
 
 ## 7. First login and initial hydration
 
+Phase B2 implements this flow behind `NEXT_PUBLIC_CLOUD_SETUP_ENABLED` with authenticated `cloud_workspace_status`, `initialize_cloud_workspace`, and `get_cloud_workspace` RPCs. The setup RPC is atomic and derives ownership from `auth.uid()`; the readback RPC returns one canonical owner-scoped payload for verification before hydration. This is not continuous synchronization.
+
 1. The user selects **Sync across devices**, enters email, and verifies the OTP/deep link.
 2. The app freezes no local functionality; it snapshots the guest state and displays two explicit choices:
    - **Start fresh**: create an empty cloud profile, leave the guest snapshot untouched on-device, and offer “Keep local copy”/export. Never upload or erase it automatically.

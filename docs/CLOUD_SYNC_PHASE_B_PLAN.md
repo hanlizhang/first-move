@@ -31,6 +31,8 @@ Exit gate: clean ephemeral apply, adversarial RLS suite, function privilege audi
 
 ## B2. Account initialization, import, and initial hydration
 
+Implementation status: complete locally behind `NEXT_PUBLIC_CLOUD_SETUP_ENABLED`; the second RPC migration has not been pushed remotely. Continuous writes remain disabled.
+
 1. Add a server-authoritative initialization command using `auth.uid()`.
 2. Register the device and create `profiles`, `user_settings`, and a completed `import_batches` Start-fresh audit row idempotently.
 3. Snapshot but do not modify the current guest localStorage.

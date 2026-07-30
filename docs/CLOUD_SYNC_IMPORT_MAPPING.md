@@ -2,6 +2,8 @@
 
 Status: pre-implementation design. No SQL has been executed and no remote project has been linked.
 
+Implementation note: Phase B2 now implements this design locally through `20260730120000_import_workspace.sql`. That migration has not been pushed to the remote project; the UI remains disabled unless `NEXT_PUBLIC_CLOUD_SETUP_ENABLED=true`.
+
 ## 1. First-sync choices
 
 After email authentication, the application checks for any cloud workspace before offering a write:

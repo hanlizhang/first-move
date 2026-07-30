@@ -66,7 +66,8 @@ import { APP_VIEWS, APP_VIEW_LABELS, plannerPresentation, type AppView } from "@
 import { loadDailyPlan, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-plan-state";
 import type { PlanningReviewItem } from "@/lib/planning-review";
 import { companionEventsForTransition, companionIdleAction, createCompanionEventController, shouldShowCompanion, type CompanionReaction } from "@/lib/companion-events";
-import { accountSyncLabel } from "@/lib/account-sync-status";
+import { accountSyncLabel, type CloudSyncStatus } from "@/lib/account-sync-status";
+import { getCloudSetupEnabled } from "@/lib/cloud-setup-feature";
 import {
   ADDITIONAL_NOTE_LABEL,
   DEFAULT_REFLECTION_PROMPTS,
@@ -93,6 +94,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
   const [activeView, setActiveView] = useState<AppView>("first-moves");
   const [dailyPlan, setDailyPlan] = useState<DailyPlanRecord>();
   const [reviewingPlan, setReviewingPlan] = useState(false);
+  const [cloudSetupStatus, setCloudSetupStatus] = useState<CloudSyncStatus>("not-initialized");
   const [companionReaction, setCompanionReaction] = useState<CompanionReaction>();
   const companionController = useRef<ReturnType<typeof createCompanionEventController> | undefined>(undefined);
 
@@ -141,7 +143,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
 
   function reviewPlan() { setReviewingPlan(true); navigate("first-moves"); }
   const plannerState = plannerPresentation(morningComplete, Boolean(dailyPlan), reviewingPlan);
-  const accountLabel = accountSyncLabel(Boolean(initialEmail));
+  const accountLabel = accountSyncLabel(Boolean(initialEmail), getCloudSetupEnabled() ? cloudSetupStatus : "not-initialized");
 
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-stone-900">
@@ -226,7 +228,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
         </section>}
 
         {activeView === "cat" && <CatRoom state={state} today={today} update={update} />}
-        {activeView === "settings" && <AuthSettings initialEmail={initialEmail} />}
+        {activeView === "settings" && <AuthSettings initialEmail={initialEmail} onCloudStatusChange={setCloudSetupStatus} />}
       </main>
       {shouldShowCompanion(activeView) && <FloatingCompanion key={companionReaction?.id ?? "idle"} reaction={companionReaction} focusActive={Boolean(openSession)} onOpenStore={() => navigate("cat")} />}
     </div>

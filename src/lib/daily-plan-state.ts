@@ -7,12 +7,17 @@ export const DAILY_PLAN_STORAGE_KEY = "first-move:daily-plans:v1";
 export interface DailyPlanRecord { dateKey: string; items: PlanningReviewItem[] }
 export interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void }
 
-export function loadDailyPlan(storage: Pick<StorageLike, "getItem">, dateKey: string): DailyPlanRecord | undefined {
+export function loadDailyPlans(storage: Pick<StorageLike, "getItem">): DailyPlanRecord[] {
   try {
     const value: unknown = JSON.parse(storage.getItem(DAILY_PLAN_STORAGE_KEY) ?? "[]");
-    if (!Array.isArray(value)) return undefined;
-    return value.filter(isDailyPlanRecord).find((plan) => plan.dateKey === dateKey);
-  } catch { return undefined; }
+    return Array.isArray(value) ? value.filter(isDailyPlanRecord) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function loadDailyPlan(storage: Pick<StorageLike, "getItem">, dateKey: string): DailyPlanRecord | undefined {
+  return loadDailyPlans(storage).find((plan) => plan.dateKey === dateKey);
 }
 
 export function saveDailyPlan(storage: StorageLike, record: DailyPlanRecord): boolean {
