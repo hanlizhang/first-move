@@ -1,10 +1,10 @@
 # First Move Phase B cloud-sync plan
 
-Status: implementation plan only. SQL has not been executed and sync remains disabled.
+Status: B2 is applied and manually verified. The smallest B3/B4 continuous-sync MVP is implemented and tested locally; its new migration has not been pushed remotely. B5 remains deferred.
 
 ## Release invariant
 
-Keep the cloud-sync feature flag disabled through B1, B2, B3, and B4. Authentication may show the signed-in email, but it must continue to state that progress is local-only. Do not present an account as synchronized until initialization, core records, reward/inventory/milestone commands, hydration, and integrity checks all work together.
+Keep cloud setup and sync behind `NEXT_PUBLIC_CLOUD_SETUP_ENABLED` until the local B3/B4 migration is reviewed and applied. Authentication alone is never synchronization. Present Synced only after initialization, canonical hydration, core writes, and economic commands have completed successfully; present offline or attention states while durable writes remain pending.
 
 The first developer test may use **Import this device** or **Start fresh**. Both choices first create an immutable local snapshot. Import is allowed only into an empty account and follows `CLOUD_SYNC_IMPORT_MAPPING.md`; an account with existing cloud data offers **Use cloud progress** and defers merge. A cloud workspace becomes active only after initialization/import commits, canonical hydration succeeds, and all integrity checks pass.
 
@@ -31,7 +31,7 @@ Exit gate: clean ephemeral apply, adversarial RLS suite, function privilege audi
 
 ## B2. Account initialization, import, and initial hydration
 
-Implementation status: complete locally behind `NEXT_PUBLIC_CLOUD_SETUP_ENABLED`; the second RPC migration has not been pushed remotely. Continuous writes remain disabled.
+Implementation status: applied and manually verified. Import and Start fresh semantics remain unchanged; continuous mode activates only after the verified canonical copy is loaded.
 
 1. Add a server-authoritative initialization command using `auth.uid()`.
 2. Register the device and create `profiles`, `user_settings`, and a completed `import_batches` Start-fresh audit row idempotently.
@@ -48,6 +48,8 @@ Exit gate: repeated initialization/import is idempotent; every failure preserves
 
 ## B3. Core records sync
 
+Implementation status: smallest complete MVP implemented locally using an authenticated atomic full-workspace command, server-receipt-time last-write-wins, soft deletion, startup/focus/manual hydration, and a durable localStorage retry queue. The normalized IndexedDB outbox and change cursor remain B5 work.
+
 Scope: profiles/timezone, tasks/completions, habits/schedules/completions, intents, sessions, daily plans/items, morning metadata, morning attempt counters, and private journal entries.
 
 1. Introduce cloud DTOs and repository interfaces without replacing the local guest repository.
@@ -62,6 +64,8 @@ Scope: profiles/timezone, tasks/completions, habits/schedules/completions, inten
 Exit gate: core records converge on two test clients with no rewards/inventory drift. Cloud sync remains disabled to users.
 
 ## B4. Reward, inventory, and milestone sync
+
+Implementation status: smallest complete MVP implemented locally. Task, habit, session, morning, and reflection rewards are server-derived; purchases, consumption, balances, and milestones remain server-authoritative and idempotent.
 
 1. Implement transactionally scoped commands for:
    - task/habit completion plus one reward;

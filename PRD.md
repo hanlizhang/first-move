@@ -164,7 +164,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Do not persist toothbrush images. Send one only for an explicit live verification action when live vision is configured; mock mode remains entirely local and makes no paid request.
 - Explain that clearing browser data removes progress; consider export/import only after the core MVP works.
 - Guest mode remains local and complete. Authenticated users may choose **Sync across devices** using email OTP and Supabase; first login offers Start fresh or Import local data and never automatically deletes local data.
-- Phase B2 cloud setup is development-gated by `NEXT_PUBLIC_CLOUD_SETUP_ENABLED`. It creates or loads one verified cloud copy but must not claim ongoing synchronization until continuous writes ship.
+- Cloud setup and the continuous-sync MVP are development-gated by `NEXT_PUBLIC_CLOUD_SETUP_ENABLED`. After verified hydration activates cloud mode, Supabase is canonical, localStorage is an immediate cache, failed writes remain in a small durable retry queue, and the UI says Synced only after a successful cloud operation.
 - Cross-device sync is included in Free and Pro. Mini Journal is private user data protected by per-user access controls and excluded from AI requests and telemetry payloads.
 - RevenueCat is authoritative for the `pro` entitlement, using the Supabase Auth UUID as RevenueCat App User ID. Clients cannot authorize paid AI calls.
 - OpenAI keys and other secret credentials remain server-side. Toothbrush photos are never persisted.

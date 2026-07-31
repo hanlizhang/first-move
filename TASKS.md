@@ -198,12 +198,13 @@
 ## TASK-09: Optional account and cross-device sync foundation
 
 - [x] Add email OTP under **Sync across devices** while preserving complete guest mode.
-- [ ] Implement normalized Supabase persistence, RLS, UUID migration, tombstones, IndexedDB cache/outbox, idempotent mutations, and second-device hydration.
+- [x] Implement the smallest continuous-sync MVP: normalized owner-scoped snapshots, UUIDs, tombstones, canonical startup/focus hydration, a durable local retry queue, idempotent economic commands, and confirmed second-device hydration.
+- [ ] Replace the MVP full-snapshot queue with the planned normalized IndexedDB cache/outbox, change cursor, and long-offline conflict recovery before a broad production rollout.
 - [x] Implement development-gated Phase B2 Start fresh, Import this device, immutable local backup, retry-safe UUID mapping, and canonical initial hydration without automatic local deletion.
 - [ ] Add logout, export, cache choice, account deletion, and private Mini Journal handling.
 - [ ] Verify web/iOS/Android identity and secure token-storage adapters.
 
-**Phase B2 status:** Complete locally. Ongoing writes remain device-local; the B2 RPC migration is local-only pending explicit remote review/application, and the UI never labels the account Synced.
+**Cloud-sync status:** Phase B2 is applied and manually verified. The continuous-sync MVP and its new RPC migration are tested locally but remain development-gated and must not be pushed remotely without explicit approval.
 
 ## TASK-10: RevenueCat subscriptions and product access
 
