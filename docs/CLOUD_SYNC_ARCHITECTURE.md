@@ -50,6 +50,7 @@ All user-owned tables include `user_id uuid references auth.users(id) on delete 
 | `profiles` | One per auth user; timezone and first-use metadata | mutable singleton |
 | `devices` | Registered installations and last sync cursor | mutable |
 | `import_batches` | Records start-fresh/import-local choice and import result | append-oriented audit |
+| `import_entity_mappings` | Durable local-ID to cloud-UUID and payload-digest mapping for retry-safe imports | append-only import audit |
 | `client_mutations` | `(user_id, device_id, mutation_id)` idempotency receipts | append-only |
 | `tasks` | Ordered manual tasks | mutable + tombstone |
 | `task_completions` | One task/date completion | mutable tombstone; unique task/date |
@@ -91,6 +92,8 @@ Pull changes using a server-issued cursor ordered by `(updated_at, id)` or, pref
 Push order is parent rows, child rows, then append-only events. Exponential backoff with jitter applies to network/5xx failures. Do not retry validation, authorization, insufficient-balance, or stale-version errors without user/action changes. Keep failed mutations visible and exportable; never drop local data automatically.
 
 ## 7. First login and initial hydration
+
+Phase B2 implements this flow behind `NEXT_PUBLIC_CLOUD_SETUP_ENABLED` with authenticated `cloud_workspace_status`, `initialize_cloud_workspace`, and `get_cloud_workspace` RPCs. The setup RPC is atomic and derives ownership from `auth.uid()`; the readback RPC returns one canonical owner-scoped payload for verification before hydration. This is not continuous synchronization.
 
 1. The user selects **Sync across devices**, enters email, and verifies the OTP/deep link.
 2. The app freezes no local functionality; it snapshots the guest state and displays two explicit choices:

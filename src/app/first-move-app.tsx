@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import DayPlanner from "./day-planner";
 import AuthSettings from "./auth-settings";
@@ -66,6 +66,14 @@ import { APP_VIEWS, APP_VIEW_LABELS, plannerPresentation, type AppView } from "@
 import { loadDailyPlan, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-plan-state";
 import type { PlanningReviewItem } from "@/lib/planning-review";
 import { companionEventsForTransition, companionIdleAction, createCompanionEventController, shouldShowCompanion, type CompanionReaction } from "@/lib/companion-events";
+import { accountSyncLabel, type CloudSyncStatus } from "@/lib/account-sync-status";
+import { getCloudSetupEnabled } from "@/lib/cloud-setup-feature";
+import {
+  ADDITIONAL_NOTE_LABEL,
+  DEFAULT_REFLECTION_PROMPTS,
+  REFLECTION_PRIVACY_TEXT,
+  shouldOpenAdditionalNote,
+} from "@/lib/reflection-presentation";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -86,6 +94,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
   const [activeView, setActiveView] = useState<AppView>("first-moves");
   const [dailyPlan, setDailyPlan] = useState<DailyPlanRecord>();
   const [reviewingPlan, setReviewingPlan] = useState(false);
+  const [cloudSetupStatus, setCloudSetupStatus] = useState<CloudSyncStatus>("not-initialized");
   const [companionReaction, setCompanionReaction] = useState<CompanionReaction>();
   const companionController = useRef<ReturnType<typeof createCompanionEventController> | undefined>(undefined);
 
@@ -134,23 +143,28 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
 
   function reviewPlan() { setReviewingPlan(true); navigate("first-moves"); }
   const plannerState = plannerPresentation(morningComplete, Boolean(dailyPlan), reviewingPlan);
+  const accountLabel = accountSyncLabel(Boolean(initialEmail), getCloudSetupEnabled() ? cloudSetupStatus : "not-initialized");
 
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-stone-900">
       <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-[#f7f4ee]/95 px-4 py-3 backdrop-blur sm:px-6">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="mx-auto grid max-w-5xl grid-cols-[auto_1fr] items-center gap-2 sm:flex sm:flex-wrap sm:justify-between sm:gap-3">
           <button type="button" onClick={() => navigate("first-moves")} className="font-bold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-600">
             First Move
           </button>
-          <nav aria-label="Main views" className="order-last w-full overflow-x-auto overscroll-x-contain sm:order-none sm:w-auto">
+          <nav aria-label="Main views" className="order-last col-span-2 w-full overflow-x-auto overscroll-x-contain sm:order-none sm:w-auto">
             <ul className="flex min-w-max gap-1 text-sm font-semibold text-stone-600">
               {APP_VIEWS.map((view) => <li key={view}><button type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => navigate(view)} className={`min-h-11 rounded-lg px-3 py-2 focus-visible:outline-2 focus-visible:outline-orange-600 ${activeView === view ? "bg-white text-stone-950 shadow-sm" : "hover:bg-white"}`}>{APP_VIEW_LABELS[view]}</button></li>)}
             </ul>
           </nav>
-          <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
-            <span aria-hidden="true">✦</span> {formatPoints(state.progress.points)} points
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 justify-self-end sm:flex-nowrap">
+            <div className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-bold shadow-sm" aria-live="polite">
+              <span aria-hidden="true">✦</span> {formatPoints(state.progress.points)} points
+            </div>
+            <button type="button" onClick={() => navigate("settings")} className="whitespace-nowrap rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 sm:text-sm">
+              {accountLabel}
+            </button>
           </div>
-          {initialEmail && <button type="button" onClick={() => navigate("settings")} className="max-w-52 truncate rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" title={initialEmail}>{initialEmail}</button>}
         </div>
       </header>
 
@@ -214,7 +228,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
         </section>}
 
         {activeView === "cat" && <CatRoom state={state} today={today} update={update} />}
-        {activeView === "settings" && <AuthSettings initialEmail={initialEmail} />}
+        {activeView === "settings" && <AuthSettings initialEmail={initialEmail} onCloudStatusChange={setCloudSetupStatus} />}
       </main>
       {shouldShowCompanion(activeView) && <FloatingCompanion key={companionReaction?.id ?? "idle"} reaction={companionReaction} focusActive={Boolean(openSession)} onOpenStore={() => navigate("cat")} />}
     </div>
@@ -304,12 +318,12 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
     {phase === "loading" && <p className="mt-5 rounded-xl bg-white p-4 text-sm" role="status">{message || "Preparing the photo…"}</p>}
     {(phase === "failure" || phase === "unsupported") && <div className="mt-5 rounded-xl border border-sky-200 bg-white p-4" role="alert"><p className="text-sm">{message || (phase === "unsupported" ? "Camera capture is not supported in this browser. Choose an image from this device instead." : "The check did not pass.")}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-sky-300 px-3 py-2 text-sm font-semibold" onClick={retry}>Retry</button><UploadButton onFile={chooseFile} /><button type="button" className="rounded-xl px-3 py-2 text-sm font-semibold text-stone-600" onClick={skip}>Skip without reward</button></div></div>}
     {message && phase === "idle" && <p className="mt-3 text-sm text-stone-600" role="status">{message}</p>}
-    {process.env.NODE_ENV === "development" && <label className="mt-5 block border-t border-sky-200 pt-4 text-xs font-semibold text-stone-600">Development mock result <select className="ml-2 rounded-lg border border-sky-200 bg-white px-2 py-1" value={mockOutcome} onChange={(event) => setMockOutcome(event.target.value as "pass" | "fail")}><option value="pass">Simulate pass</option><option value="fail">Simulate fail</option></select></label>}
+    {process.env.NODE_ENV === "development" && <label htmlFor="morning-mock-result" className="mt-5 block border-t border-sky-200 pt-4 text-xs font-semibold text-stone-600">Development mock result <select id="morning-mock-result" name="morning-mock-result" className="ml-2 rounded-lg border border-sky-200 bg-white px-2 py-1" value={mockOutcome} onChange={(event) => setMockOutcome(event.target.value as "pass" | "fail")}><option value="pass">Simulate pass</option><option value="fail">Simulate fail</option></select></label>}
     <p className="mt-3 text-xs text-stone-500">{attempts} of {MAX_MORNING_ATTEMPTS} verification attempts used today. Mock mode is the safe server default unless live vision is explicitly configured.</p>
   </section>;
 }
 
-function UploadButton({ onFile }: { onFile: (file?: File) => void }) { return <label className="cursor-pointer rounded-xl border border-sky-300 bg-white px-4 py-2.5 text-sm font-semibold">Choose image<input className="sr-only" type="file" accept="image/*" onChange={(event) => { onFile(event.target.files?.[0]); event.target.value = ""; }} /></label>; }
+function UploadButton({ onFile }: { onFile: (file?: File) => void }) { const id = useId(); return <label htmlFor={id} className="cursor-pointer rounded-xl border border-sky-300 bg-white px-4 py-2.5 text-sm font-semibold">Choose image<input id={id} name={id} className="sr-only" type="file" accept="image/*" onChange={(event) => { onFile(event.target.files?.[0]); event.target.value = ""; }} /></label>; }
 
 function FirstMovePicker({
   tasks,
@@ -409,19 +423,19 @@ function FirstMovePicker({
         <SelectField label="Right now, I am…" value={stuckState} options={STUCK_STATES} onChange={(value) => choose(value as StuckState, direction)} />
         <SelectField label="Direction" value={direction} options={DIRECTIONS} onChange={(value) => choose(stuckState, value as Direction)} />
       </div>
-      <label className="mt-4 block text-sm font-semibold">Link to a task or habit <span className="font-normal text-stone-500">(optional)</span>
-        <select className="mt-2 block w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" value={linkedValue} onChange={(event) => chooseLink(event.target.value)}>
+      <label htmlFor="first-move-link" className="mt-4 block text-sm font-semibold">Link to a task or habit <span className="font-normal text-stone-500">(optional)</span>
+        <select id="first-move-link" name="first-move-link" className="mt-2 block w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" value={linkedValue} onChange={(event) => chooseLink(event.target.value)}>
           <option value="">No linked item</option>
           {tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
           {habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
         </select>
       </label>
       <label className="mt-5 block text-sm font-semibold" htmlFor="first-move-text">Your small move</label>
-      <textarea id="first-move-text" className="mt-2 min-h-24 w-full rounded-2xl border border-violet-200 bg-white p-3 text-sm leading-6 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" value={moveText} maxLength={160} onChange={(event) => { setMoveText(event.target.value); setTemplateId(undefined); }} />
+      <textarea id="first-move-text" name="first-move-text" className="mt-2 min-h-24 w-full rounded-2xl border border-violet-200 bg-white p-3 text-sm leading-6 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" value={moveText} maxLength={160} onChange={(event) => { setMoveText(event.target.value); setTemplateId(undefined); }} />
       <fieldset className="mt-5">
         <legend className="text-sm font-semibold">Intended duration</legend>
         <div className="mt-2 grid grid-cols-4 gap-2">
-          {INTENDED_DURATIONS.map((minutes) => <label key={minutes} className={`cursor-pointer rounded-xl border px-2 py-2.5 text-center text-sm font-semibold ${duration === minutes ? "border-violet-600 bg-violet-700 text-white" : "border-violet-200 bg-white"}`}><input className="sr-only" type="radio" name="duration" value={minutes} checked={duration === minutes} onChange={() => setDuration(minutes)} />{minutes} min</label>)}
+          {INTENDED_DURATIONS.map((minutes) => <label key={minutes} htmlFor={`first-move-duration-${minutes}`} className={`cursor-pointer rounded-xl border px-2 py-2.5 text-center text-sm font-semibold ${duration === minutes ? "border-violet-600 bg-violet-700 text-white" : "border-violet-200 bg-white"}`}><input id={`first-move-duration-${minutes}`} className="sr-only" type="radio" name="duration" value={minutes} checked={duration === minutes} onChange={() => setDuration(minutes)} />{minutes} min</label>)}
         </div>
       </fieldset>
       {notice && <p className="mt-3 text-sm text-violet-800" aria-live="polite">{notice}</p>}
@@ -533,13 +547,13 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
                   <legend className="text-sm font-semibold">Duration</legend>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {[2, 5, 10, 25, 50].map((minutes) => (
-                      <label key={minutes} className={`cursor-pointer rounded-xl border px-3 py-2 text-sm font-semibold ${countdownDuration === minutes && !customDuration ? "border-sky-700 bg-sky-700 text-white" : "border-sky-200"}`}>
-                        <input className="sr-only" type="radio" name="countdown-duration" checked={countdownDuration === minutes && !customDuration} onChange={() => { setCountdownDuration(minutes); setCustomDuration(""); }} />{minutes} min
+                      <label key={minutes} htmlFor={`countdown-duration-${minutes}`} className={`cursor-pointer rounded-xl border px-3 py-2 text-sm font-semibold ${countdownDuration === minutes && !customDuration ? "border-sky-700 bg-sky-700 text-white" : "border-sky-200"}`}>
+                        <input id={`countdown-duration-${minutes}`} className="sr-only" type="radio" name="countdown-duration" checked={countdownDuration === minutes && !customDuration} onChange={() => { setCountdownDuration(minutes); setCustomDuration(""); }} />{minutes} min
                       </label>
                     ))}
                   </div>
-                  <label className="mt-3 block text-sm font-semibold">Custom minutes
-                    <input className="mt-2 block w-32 rounded-xl border border-sky-200 px-3 py-2 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="number" min="1" max="720" value={customDuration} onChange={(event) => setCustomDuration(event.target.value)} />
+                  <label htmlFor="countdown-custom-minutes" className="mt-3 block text-sm font-semibold">Custom minutes
+                    <input id="countdown-custom-minutes" name="countdown-custom-minutes" className="mt-2 block w-32 rounded-xl border border-sky-200 px-3 py-2 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="number" min="1" max="720" value={customDuration} onChange={(event) => setCustomDuration(event.target.value)} />
                   </label>
                 </fieldset>
                 <button type="button" disabled={!validUiDuration(customDuration ? Number(customDuration) : countdownDuration)} className="mt-5 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={() => update((current) => startCountdown(current, { linkedIntentId: pendingIntent.id, direction: pendingIntent.direction, durationMinutes: customDuration ? Number(customDuration) : countdownDuration }))}>Start countdown</button>
@@ -550,16 +564,16 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
           <div className="rounded-2xl border border-sky-200 bg-white p-5">
             <h3 className="text-xl font-bold">Stopwatch</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">Track open-ended time with or without a linked item.</p>
-            <label className="mt-4 block text-sm font-semibold">Link <span className="font-normal text-stone-500">(optional)</span>
-              <select className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={stopwatchLink} onChange={(event) => chooseStopwatchLink(event.target.value)}>
+            <label htmlFor="stopwatch-link" className="mt-4 block text-sm font-semibold">Link <span className="font-normal text-stone-500">(optional)</span>
+              <select id="stopwatch-link" name="stopwatch-link" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={stopwatchLink} onChange={(event) => chooseStopwatchLink(event.target.value)}>
                 <option value="">No linked item</option>
                 {pendingIntent && <option value={`intent:${pendingIntent.id}`}>Intent: {pendingIntent.moveText}</option>}
                 {state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
                 {state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
               </select>
             </label>
-            <label className="mt-4 block text-sm font-semibold">Label <span className="font-normal text-stone-500">(optional)</span>
-              <input className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" maxLength={160} placeholder="Tracked time" value={stopwatchLabel} onChange={(event) => setStopwatchLabel(event.target.value)} />
+            <label htmlFor="stopwatch-label" className="mt-4 block text-sm font-semibold">Label <span className="font-normal text-stone-500">(optional)</span>
+              <input id="stopwatch-label" name="stopwatch-label" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" maxLength={160} placeholder="Tracked time" value={stopwatchLabel} onChange={(event) => setStopwatchLabel(event.target.value)} />
             </label>
             <div className="mt-4"><SelectField label="Direction" value={stopwatchDirection} options={DIRECTIONS} onChange={(value) => setStopwatchDirection(value as Direction)} /></div>
             <button type="button" className="mt-5 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900" onClick={beginStopwatch}>Start tracking</button>
@@ -596,7 +610,7 @@ function SessionReview({ session, state, update }: { session: ActivitySession; s
         <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={save}>
           <TextField id={`session-title-${session.id}`} label="Activity title" value={label} onChange={setLabel} placeholder="What did you do?" />
           <SelectField label="Category" value={direction} options={DIRECTIONS} onChange={(value) => setDirection(value as Direction)} />
-          <label className="block text-sm font-semibold sm:col-span-2">Linked Task <span className="font-normal text-stone-500">(optional)</span><select className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={linkedTaskId} onChange={(event) => setLinkedTaskId(event.target.value)}><option value="">Standalone — no Task</option>{state.tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>
+          <label htmlFor={`session-linked-task-${session.id}`} className="block text-sm font-semibold sm:col-span-2">Linked Task <span className="font-normal text-stone-500">(optional)</span><select id={`session-linked-task-${session.id}`} name={`session-linked-task-${session.id}`} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={linkedTaskId} onChange={(event) => setLinkedTaskId(event.target.value)}><option value="">Standalone — no Task</option>{state.tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>
           <div className="flex gap-2 sm:col-span-2"><PrimaryButton>Save session</PrimaryButton>{session.reviewedAt && <SecondaryButton onClick={() => setEditing(false)}>Cancel</SecondaryButton>}</div>
         </form>
       ) : <p className="mt-3 font-semibold">{session.label} <span className="font-normal text-stone-500">· {session.direction}{session.linkedTaskId ? ` · ${state.tasks.find((task) => task.id === session.linkedTaskId)?.title ?? "Linked Task"}` : " · Standalone"}</span></p>}
@@ -608,15 +622,18 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
   const existing = state.journalEntries.find((entry) => entry.dateKey === today);
   const [mood, setMood] = useState(existing?.mood ? String(existing.mood) : "");
   const [energy, setEnergy] = useState(existing?.energy ? String(existing.energy) : "");
+  const [whatHelped, setWhatHelped] = useState(existing?.whatHelped ?? "");
   const [completed, setCompleted] = useState(existing?.completed ?? "");
   const [difficult, setDifficult] = useState(existing?.difficult ?? "");
   const [nextStep, setNextStep] = useState(existing?.nextStep ?? "");
   const [freeText, setFreeText] = useState(existing?.freeText ?? "");
+  const [additionalNoteOpen, setAdditionalNoteOpen] = useState(shouldOpenAdditionalNote(existing?.freeText));
   const [notice, setNotice] = useState("");
 
   const input: ReflectionInput = {
     mood: mood ? Number(mood) as 1 | 2 | 3 | 4 | 5 : undefined,
     energy: energy ? Number(energy) as 1 | 2 | 3 | 4 | 5 : undefined,
+    whatHelped,
     completed,
     difficult,
     nextStep,
@@ -627,12 +644,12 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
     event.preventDefault();
     if (!hasReflectionContent(input)) return;
     update((current) => saveReflection(current, today, input));
-    setNotice(existing ? "Mini Journal updated." : "Mini Journal saved privately in this browser.");
+    setNotice(existing ? "Mini Journal updated." : "Mini Journal saved on this device.");
   }
 
   function remove() {
     update((current) => deleteReflection(current, today));
-    setMood(""); setEnergy(""); setCompleted(""); setDifficult(""); setNextStep(""); setFreeText("");
+    setMood(""); setEnergy(""); setWhatHelped(""); setCompleted(""); setDifficult(""); setNextStep(""); setFreeText("");
     setNotice("Mini Journal entry removed. There is no penalty.");
   }
 
@@ -645,27 +662,33 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
       <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
         <RatingField label="Mood" value={mood} onChange={setMood} />
         <RatingField label="Energy" value={energy} onChange={setEnergy} />
-        <ReflectionField id="reflection-completed" label="One thing I did" value={completed} onChange={setCompleted} />
-        <ReflectionField id="reflection-difficult" label="What felt hard" value={difficult} onChange={setDifficult} />
-        <ReflectionField id="reflection-next" label="My next small step" value={nextStep} onChange={setNextStep} />
-        <ReflectionField id="reflection-notes" label="Anything else" value={freeText} onChange={setFreeText} />
+        <ReflectionField id="reflection-helped" label={DEFAULT_REFLECTION_PROMPTS[0].label} value={whatHelped} onChange={setWhatHelped} />
+        <ReflectionField id="reflection-difficult" label={DEFAULT_REFLECTION_PROMPTS[1].label} value={difficult} onChange={setDifficult} />
+        <ReflectionField id="reflection-next" label={DEFAULT_REFLECTION_PROMPTS[2].label} value={nextStep} onChange={setNextStep} />
+        <details className="rounded-xl border border-stone-200 bg-stone-50 p-3 sm:col-span-2" open={additionalNoteOpen} onToggle={(event) => setAdditionalNoteOpen(event.currentTarget.open)}>
+          <summary className="cursor-pointer text-sm font-semibold">Add another note</summary>
+          <div className="mt-3">
+            <ReflectionField id="reflection-notes" label={ADDITIONAL_NOTE_LABEL} value={freeText} onChange={setFreeText} />
+          </div>
+        </details>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <button disabled={!hasReflectionContent(input)} className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900">{existing ? "Update journal" : "Save journal"}</button>
           {existing && <SecondaryButton onClick={remove}>Delete today&apos;s entry</SecondaryButton>}
         </div>
       </form>
-      <p className="mt-4 text-xs text-stone-500">Private: entries remain in this browser and are not analyzed or sent to AI.</p>
+      <p className="mt-4 text-xs text-stone-500">{REFLECTION_PRIVACY_TEXT}</p>
       {notice && <p className="mt-2 text-sm font-semibold text-emerald-700" role="status">{notice}</p>}
     </section>
   );
 }
 
 function RatingField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><select className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)}><option value="">Not selected</option>{[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}</option>)}</select></label>;
+  const id = useId();
+  return <label htmlFor={id} className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><select id={id} name={id} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)}><option value="">Not selected</option>{[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}</option>)}</select></label>;
 }
 
 function ReflectionField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
-  return <label htmlFor={id} className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><textarea id={id} rows={2} maxLength={1000} className="mt-2 block w-full resize-y rounded-xl border border-stone-200 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+  return <label htmlFor={id} className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><textarea id={id} name={id} rows={2} maxLength={1000} className="mt-2 block w-full resize-y rounded-xl border border-stone-200 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onReviewPlan }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void; dailyPlan?: DailyPlanRecord; pendingIntent?: ActivityIntent; onReviewPlan: () => void }) {
@@ -702,7 +725,7 @@ const chartColors: Record<(typeof HISTORY_CATEGORIES)[number], string> = { "Work
 function TrendsPanel({ state, today }: { state: AppState; today: string }) {
   const [period, setPeriod] = useState<7 | 30>(7);
   const trend = getTrendSummary(state, today, period);
-  return <div className="mt-5" role="tabpanel"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-bold">Trends</h3><label className="text-sm font-semibold">Period <select className="ml-2 rounded-lg border border-amber-200 bg-white px-3 py-2 font-normal" value={period} onChange={(event) => setPeriod(Number(event.target.value) as 7 | 30)}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select></label></div>
+  return <div className="mt-5" role="tabpanel"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-bold">Trends</h3><label htmlFor="history-period" className="text-sm font-semibold">Period <select id="history-period" name="history-period" className="ml-2 rounded-lg border border-amber-200 bg-white px-3 py-2 font-normal" value={period} onChange={(event) => setPeriod(Number(event.target.value) as 7 | 30)}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select></label></div>
     <dl className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Total tracked time" value={formatDuration(trend.totalTrackedMs)} /><Metric label="Active days" value={String(trend.activeDays)} /><Metric label="Completed First Moves" value={String(trend.completedFirstMoves)} /><Metric label="Completed sessions" value={String(trend.completedSessions)} /></dl>
     {trend.totalTrackedMs === 0 ? <div className="mt-5"><EmptyState>No tracked sessions in this period. Rest, entertainment, and every direction are shown neutrally when recorded.</EmptyState></div> : <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[1.35fr_0.65fr]"><LineChart trend={trend} /><CategoryChart trend={trend} /></div>}
   </div>;
@@ -743,7 +766,7 @@ function CalendarPanel({ state, today, onShowToday }: { state: AppState; today: 
 function DayDetailPanel({ detail, isToday, onShowToday }: { detail: ReturnType<typeof getDayDetail>; isToday: boolean; onShowToday: () => void }) {
   const hasAnything = detail.totalTrackedMs > 0 || detail.completedTasks.length > 0 || detail.habitCheckIns.length > 0 || detail.journalEntry;
   return <section className="mt-5 rounded-2xl bg-white p-5" aria-live="polite"><h4 className="text-lg font-bold">{formatLongDate(detail.dateKey)}</h4><p className="mt-1 text-sm text-stone-600">Total tracked: <strong>{formatDuration(detail.totalTrackedMs)}</strong></p>
-    {!hasAnything ? <p className="mt-4 text-sm text-stone-500">No recorded activity for this date.</p> : <><dl className="mt-4 grid gap-2 sm:grid-cols-2">{HISTORY_CATEGORIES.map((category) => detail.byCategory[category] > 0 && <div key={category} className="flex justify-between gap-3 text-sm"><dt>{category}</dt><dd className="font-semibold">{formatDuration(detail.byCategory[category])}</dd></div>)}</dl><DetailList title="Completed tasks" items={detail.completedTasks.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Habit check-ins" items={detail.habitCheckIns.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Sessions" items={detail.sessions.map((session) => `${session.label} · ${session.direction} · ${session.status === "stopped" ? "Stopped intentionally" : "Completed"} · ${formatDuration(session.actualElapsedMs ?? 0)}`)} />{detail.journalEntry && <div className="mt-4"><h5 className="text-sm font-bold">Mini Journal</h5><ul className="mt-1 space-y-1 text-sm text-stone-600">{detail.journalEntry.completed && <li>One thing I did: {detail.journalEntry.completed}</li>}{detail.journalEntry.difficult && <li>What felt hard: {detail.journalEntry.difficult}</li>}{detail.journalEntry.nextStep && <li>My next small step: {detail.journalEntry.nextStep}</li>}{detail.journalEntry.freeText && <li>Anything else: {detail.journalEntry.freeText}</li>}{detail.journalEntry.mood && <li>Mood: {detail.journalEntry.mood}/5</li>}{detail.journalEntry.energy && <li>Energy: {detail.journalEntry.energy}/5</li>}</ul></div>}</>}
+    {!hasAnything ? <p className="mt-4 text-sm text-stone-500">No recorded activity for this date.</p> : <><dl className="mt-4 grid gap-2 sm:grid-cols-2">{HISTORY_CATEGORIES.map((category) => detail.byCategory[category] > 0 && <div key={category} className="flex justify-between gap-3 text-sm"><dt>{category}</dt><dd className="font-semibold">{formatDuration(detail.byCategory[category])}</dd></div>)}</dl><DetailList title="Completed tasks" items={detail.completedTasks.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Habit check-ins" items={detail.habitCheckIns.map((item) => `${item.title} · ${item.direction}`)} /><DetailList title="Sessions" items={detail.sessions.map((session) => `${session.label} · ${session.direction} · ${session.status === "stopped" ? "Stopped intentionally" : "Completed"} · ${formatDuration(session.actualElapsedMs ?? 0)}`)} />{detail.journalEntry && <div className="mt-4"><h5 className="text-sm font-bold">Mini Journal</h5><ul className="mt-1 space-y-1 text-sm text-stone-600">{detail.journalEntry.whatHelped && <li>What helped: {detail.journalEntry.whatHelped}</li>}{detail.journalEntry.difficult && <li>What drained me: {detail.journalEntry.difficult}</li>}{detail.journalEntry.freeText && <li>Body or feelings: {detail.journalEntry.freeText}</li>}{detail.journalEntry.completed && <li>What I did: {detail.journalEntry.completed}</li>}{detail.journalEntry.nextStep && <li>Tomorrow&apos;s support: {detail.journalEntry.nextStep}</li>}{detail.journalEntry.mood && <li>Mood: {detail.journalEntry.mood}/5</li>}{detail.journalEntry.energy && <li>Energy: {detail.journalEntry.energy}/5</li>}</ul></div>}</>}
     {isToday && <nav className="mt-5 flex flex-wrap gap-2 text-sm font-semibold" aria-label="Edit today's activity"><a className="rounded-lg border border-stone-200 px-3 py-2" href="#focus">Focus</a><a className="rounded-lg border border-stone-200 px-3 py-2" href="#tasks">Tasks</a><a className="rounded-lg border border-stone-200 px-3 py-2" href="#habits">Habits</a><button type="button" className="rounded-lg border border-stone-200 px-3 py-2" onClick={onShowToday}>Mini Journal</button></nav>}
   </section>;
 }
@@ -834,7 +857,7 @@ function TaskEditor({ state, today, update }: { state: AppState; today: string; 
               return (
                 <li key={task.id} className="rounded-2xl border border-stone-200 p-4">
                   <div className="flex items-start gap-3">
-                    <input className="mt-1 size-5 accent-emerald-700" type="checkbox" checked={complete} aria-label={`Complete ${task.title}`} onChange={() => update((state) => toggleTask(state, task.id, today))} />
+                    <input id={`task-complete-${task.id}`} name={`task-complete-${task.id}`} className="mt-1 size-5 accent-emerald-700" type="checkbox" checked={complete} aria-label={`Complete ${task.title}`} onChange={() => update((state) => toggleTask(state, task.id, today))} />
                     <div className="min-w-0 flex-1">
                       <p className={`font-semibold ${complete ? "text-stone-400 line-through" : ""}`}>{task.title}</p>
                       <p className="mt-1 text-xs text-stone-500">{task.direction} · Tracked {formatDuration(getTaskTrackedMs(state, task.id))}</p>
@@ -886,12 +909,12 @@ function HabitEditor({ habits, today, update }: { habits: Habit[]; today: string
         <fieldset className="mt-4">
           <legend className="text-sm font-semibold">Schedule</legend>
           <div className="mt-2 flex gap-4 text-sm">
-            <label className="flex items-center gap-2"><input type="radio" name="schedule" checked={scheduleKind === "daily"} onChange={() => setScheduleKind("daily")} /> Daily</label>
-            <label className="flex items-center gap-2"><input type="radio" name="schedule" checked={scheduleKind === "weekdays"} onChange={() => setScheduleKind("weekdays")} /> Selected days</label>
+            <label htmlFor="habit-schedule-daily" className="flex items-center gap-2"><input id="habit-schedule-daily" type="radio" name="schedule" checked={scheduleKind === "daily"} onChange={() => setScheduleKind("daily")} /> Daily</label>
+            <label htmlFor="habit-schedule-weekdays" className="flex items-center gap-2"><input id="habit-schedule-weekdays" type="radio" name="schedule" checked={scheduleKind === "weekdays"} onChange={() => setScheduleKind("weekdays")} /> Selected days</label>
           </div>
           {scheduleKind === "weekdays" && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {WEEKDAYS.map((day) => <label key={day} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs"><input type="checkbox" checked={weekdays.includes(day)} onChange={() => setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])} /> {weekdayLabels[day]}</label>)}
+              {WEEKDAYS.map((day) => <label key={day} htmlFor={`habit-weekday-${day}`} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs"><input id={`habit-weekday-${day}`} name={`habit-weekday-${day}`} type="checkbox" checked={weekdays.includes(day)} onChange={() => setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])} /> {weekdayLabels[day]}</label>)}
             </div>
           )}
           {scheduleKind === "weekdays" && weekdays.length === 0 && <p className="mt-2 text-xs font-medium text-red-700">Choose at least one day.</p>}
@@ -911,7 +934,7 @@ function HabitEditor({ habits, today, update }: { habits: Habit[]; today: string
               return (
                 <li key={habit.id} className={`rounded-2xl border p-4 ${scheduled ? "border-stone-200" : "border-dashed border-stone-200 bg-stone-50/70"}`}>
                   <div className="flex items-start gap-3">
-                    <input className="mt-1 size-5 accent-sky-700" type="checkbox" checked={complete} disabled={!scheduled} aria-label={`Complete ${habit.title}`} onChange={() => update((state) => toggleHabit(state, habit.id, today))} />
+                    <input id={`habit-complete-${habit.id}`} name={`habit-complete-${habit.id}`} className="mt-1 size-5 accent-sky-700" type="checkbox" checked={complete} disabled={!scheduled} aria-label={`Complete ${habit.title}`} onChange={() => update((state) => toggleHabit(state, habit.id, today))} />
                     <div className="min-w-0 flex-1">
                       <p className={`font-semibold ${complete ? "text-stone-400 line-through" : ""}`}>{habit.title}</p>
                       <p className="mt-1 text-xs text-stone-500">{habit.direction} · {scheduleLabel}{!scheduled ? " · Not scheduled today" : ""}</p>
@@ -1240,11 +1263,12 @@ function formatRoomDate(dateKey: string): string {
 }
 
 function TextField({ id, label, value, onChange, placeholder }: { id: string; label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
-  return <label className="mt-4 block text-sm font-semibold" htmlFor={id}>{label}<input id={id} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" value={value} maxLength={160} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
+  return <label className="mt-4 block text-sm font-semibold" htmlFor={id}>{label}<input id={id} name={id} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" value={value} maxLength={160} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function SelectField({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
-  return <label className="block text-sm font-semibold">{label}<select className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
+  const id = useId();
+  return <label htmlFor={id} className="block text-sm font-semibold">{label}<select id={id} name={id} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
 }
 
 function PrimaryButton({ children }: { children: React.ReactNode }) { return <button className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900">{children}</button>; }

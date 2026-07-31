@@ -64,10 +64,24 @@ const alternateMoves: Record<Direction, TemplateSeed> = {
   Rest: { text: "Make one small change that helps rest feel deliberate.", durationMinutes: 2 },
 };
 
+const waterResetStates: StuckState[] = [
+  "scrolling and unable to stop",
+  "in bed and unable to get up",
+  "unsure what is needed",
+];
+
+const waterReset: TemplateSeed = {
+  text: "Put the phone down, stand up, and drink one glass of water.",
+  durationMinutes: 2,
+};
+
 export const FIRST_MOVE_TEMPLATES: FirstMoveTemplate[] = STUCK_STATES.flatMap((stuckState) =>
   DIRECTIONS.flatMap((direction) => [
     { id: `${slug(stuckState)}-${slug(direction)}-1`, stuckState, direction, ...specificMoves[stuckState][direction] },
     { id: `${slug(stuckState)}-${slug(direction)}-2`, stuckState, direction, ...alternateMoves[direction] },
+    ...(waterResetStates.includes(stuckState)
+      ? [{ id: `${slug(stuckState)}-${slug(direction)}-water`, stuckState, direction, ...waterReset }]
+      : []),
   ]),
 );
 
@@ -89,8 +103,8 @@ export function easierTemplateFor(
   currentTemplateId?: string,
 ): FirstMoveTemplate {
   const options = templatesFor(stuckState, direction);
-  const different = options.find((template) => template.id !== currentTemplateId);
-  return different ?? options[0];
+  const currentIndex = options.findIndex((template) => template.id === currentTemplateId);
+  return options[(currentIndex + 1) % options.length] ?? options[0];
 }
 
 function slug(value: string): string {

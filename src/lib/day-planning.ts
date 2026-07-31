@@ -45,7 +45,7 @@ export async function organizeWithOpenAI(client: ResponsesClient, brainDump: str
     store: false,
     reasoning: { effort: "none" },
     max_output_tokens: 800,
-    instructions: `Organize only the supplied brain dump into a gentle, editable day plan. Return exactly one very small First Move, no more than 3 priority tasks, and no more than 3 optional tasks. Use only these categories: ${DIRECTIONS.join(", ")}. Use only 2, 5, 10, or 25 minutes. Every item needs a concrete first physical or visible step. Treat Rest and Intentional Entertainment as normal options. Do not infer private context or add obligations not supported by the text.`,
+    instructions: `Organize only the supplied brain dump into a gentle, editable day plan. Narration order is not priority order. Prioritize explicit deadlines, appointments, external commitments, prerequisites, and high-impact tasks; when those signals are absent, keep items neutral for manual review. Return exactly one smallest concrete First Move, no more than 3 priority tasks, and no more than 3 optional tasks. Use only these categories: ${DIRECTIONS.join(", ")}. Use only 2, 5, 10, or 25 minutes. Every item needs a concrete first physical or visible step. If the user describes low energy, reduce task size and duration instead of removing valid tasks. Treat Rest and Intentional Entertainment as normal valid options. Do not infer private context, invent obligations, or add anything unsupported by the text.`,
     input: [{ role: "user", content: [{ type: "input_text", text: brainDump }] }],
     text: { format: { type: "json_schema", name: "daily_plan", strict: true, schema: dayPlanJsonSchema }, verbosity: "low" },
   });
@@ -55,13 +55,18 @@ export async function organizeWithOpenAI(client: ResponsesClient, brainDump: str
 export function createMockDayPlan(brainDump: string): DayPlan {
   const seeds = brainDump.split(/\n+|;/).map(cleanText).filter(Boolean).slice(0, 6);
   const titles = seeds.length ? seeds : ["Choose one thing for today"];
-  const items = titles.map((title) => mockItem(title));
+  const lowEnergy = /\b(low energy|tired|exhausted|drained|fatigued)\b/i.test(brainDump);
+  const ranked = titles.map((title, index) => ({ item: mockItem(title, lowEnergy), index, score: priorityScore(title) }));
+  const priorities = ranked.filter(({ score }) => score > 0).sort((left, right) => right.score - left.score || left.index - right.index).slice(0, 3);
+  const priorityIndexes = new Set(priorities.map(({ index }) => index));
+  const optional = ranked.filter(({ index }) => !priorityIndexes.has(index)).slice(0, 3);
+  const startingItem = priorities[0]?.item ?? ranked[0].item;
   return {
-    firstMove: { ...items[0], durationMinutes: 2, firstStep: `Open or place one thing needed for “${shorten(items[0].title, 80)}”.` },
-    priorityTasks: items.slice(0, 3),
-    optionalTasks: items.slice(3, 6),
-    suggestedCategory: items[0].category,
-    suggestedDuration: items[0].durationMinutes,
+    firstMove: { ...startingItem, durationMinutes: 2, firstStep: `Open or place one thing needed for “${shorten(startingItem.title, 80)}”.` },
+    priorityTasks: priorities.map(({ item }) => item),
+    optionalTasks: optional.map(({ item }) => item),
+    suggestedCategory: startingItem.category,
+    suggestedDuration: lowEnergy ? 2 : startingItem.durationMinutes,
   };
 }
 
@@ -80,9 +85,19 @@ function isPlannedItem(value: unknown): value is PlannedItem {
   return isRecord(value) && validText(value.title) && isDirection(value.category) && isDuration(value.durationMinutes) && validText(value.firstStep);
 }
 
-function mockItem(title: string): PlannedItem {
+function mockItem(title: string, lowEnergy: boolean): PlannedItem {
   const category = inferCategory(title);
-  return { title: shorten(title, 120), category, durationMinutes: category === "Intentional Entertainment" ? 5 : 10, firstStep: `Prepare the first thing needed for “${shorten(title, 80)}”.` };
+  return { title: shorten(title, 120), category, durationMinutes: lowEnergy ? 2 : category === "Intentional Entertainment" ? 5 : 10, firstStep: lowEnergy ? `Put only one thing needed for “${shorten(title, 80)}” within reach.` : `Prepare the first thing needed for “${shorten(title, 80)}”.` };
+}
+
+function priorityScore(text: string): number {
+  const lower = text.toLowerCase();
+  let score = 0;
+  if (/\b(deadline|due|today|tomorrow|by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d|noon|midnight)|at \d{1,2}(?::\d{2})?)\b/.test(lower)) score += 4;
+  if (/\b(appointment|meeting|interview|flight|reservation|class|exam|client|doctor|dentist|pickup|pick up|dropoff|drop off)\b/.test(lower)) score += 3;
+  if (/\b(blocks?|blocking|prerequisite|before I can|depends? on|required for)\b/.test(lower)) score += 2;
+  if (/\b(urgent|critical|important|high[- ]impact|must)\b/.test(lower)) score += 2;
+  return score;
 }
 
 function inferCategory(text: string): Direction {

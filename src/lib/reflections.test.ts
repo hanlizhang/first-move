@@ -13,9 +13,10 @@ const firstClock = () => "2026-07-20T18:00:00.000Z";
 const laterClock = () => "2026-07-20T19:00:00.000Z";
 
 test("saves a partial daily reflection and awards its first-save reward", () => {
-  const state = saveReflection(createEmptyState(), dateKey, { mood: 4, completed: "I opened the draft" }, firstClock);
+  const state = saveReflection(createEmptyState(), dateKey, { mood: 4, whatHelped: "A quiet room", completed: "I opened the draft" }, firstClock);
   assert.equal(state.journalEntries.length, 1);
   assert.equal(state.journalEntries[0].energy, undefined);
+  assert.equal(state.journalEntries[0].whatHelped, "A quiet room");
   assert.equal(state.progress.points, REFLECTION_REWARD_POINTS);
   assert.equal(state.rewardEvents[0].id, `reflection:${dateKey}`);
   assert.deepEqual(state.progress.activeDateKeys, [dateKey]);
@@ -40,9 +41,10 @@ test("reflection survives repository persistence and appears once in Today", () 
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => { values.set(key, value); },
   };
-  const state = saveReflection(createEmptyState(), dateKey, { freeText: "A private note" }, firstClock);
+  const state = saveReflection(createEmptyState(), dateKey, { whatHelped: "A private helpful detail", freeText: "A private note" }, firstClock);
   assert.equal(saveAppState(storage, state), true);
   const loaded = loadAppState(storage);
+  assert.equal(loaded.journalEntries[0].whatHelped, "A private helpful detail");
   const entries = getTodayTimeline(loaded, dateKey).filter((entry) => entry.kind === "reflection");
   assert.equal(entries.length, 1);
   assert.equal(entries[0].points, REFLECTION_REWARD_POINTS);
@@ -59,6 +61,48 @@ test("malformed reflections are discarded and duplicate dates recover to one ent
   });
   assert.equal(recovered.journalEntries.length, 1);
   assert.equal(recovered.journalEntries[0].completed, "Latest");
+});
+
+test("schema-v8 normalization preserves legacy completed and free-text journal fields", () => {
+  const recovered = normalizeAppState({
+    schemaVersion: 8,
+    journalEntries: [{
+      dateKey,
+      whatHelped: "A walk",
+      completed: "Legacy completed note",
+      difficult: "Interruptions",
+      nextStep: "Put water nearby",
+      freeText: "Legacy body and feelings note",
+      updatedAt: firstClock(),
+    }],
+  });
+
+  assert.deepEqual(recovered.journalEntries[0], {
+    dateKey,
+    whatHelped: "A walk",
+    completed: "Legacy completed note",
+    difficult: "Interruptions",
+    nextStep: "Put water nearby",
+    freeText: "Legacy body and feelings note",
+    updatedAt: firstClock(),
+  });
+});
+
+test("editing visible journal fields can preserve hidden compatible fields", () => {
+  const saved = saveReflection(createEmptyState(), dateKey, {
+    completed: "Existing activity note",
+    freeText: "Existing additional note",
+  }, firstClock);
+  const edited = saveReflection(saved, dateKey, {
+    whatHelped: "A clear desk",
+    difficult: "Noise",
+    nextStep: "Prepare headphones",
+    completed: saved.journalEntries[0].completed,
+    freeText: saved.journalEntries[0].freeText,
+  }, laterClock);
+
+  assert.equal(edited.journalEntries[0].completed, "Existing activity note");
+  assert.equal(edited.journalEntries[0].freeText, "Existing additional note");
 });
 
 test("an empty reflection is not stored or rewarded", () => {

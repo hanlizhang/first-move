@@ -7,9 +7,22 @@ import { MAX_BRAIN_DUMP_LENGTH, createMockDayPlan, organizeWithOpenAI, parseDayP
 test("mock planning is the safe default and returns bounded concrete items", () => {
   assert.equal(planningMode({}), "mock");
   const plan = createMockDayPlan("write report\nrest\nwalk\nwatch a film");
-  assert.equal(plan.priorityTasks.length, 3); assert.equal(plan.optionalTasks.length, 1);
+  assert.equal(plan.priorityTasks.length, 0); assert.equal(plan.optionalTasks.length, 3);
   assert.ok(plan.firstMove.firstStep.length > 0);
   for (const item of [...plan.priorityTasks, ...plan.optionalTasks]) assert.ok(item.firstStep.length > 0);
+});
+
+test("mock priorities use explicit signals instead of narration order", () => {
+  const plan = createMockDayPlan("tidy desk\nread a book\nsubmit client report by noon");
+  assert.deepEqual(plan.priorityTasks.map((item) => item.title), ["submit client report by noon"]);
+  assert.deepEqual(plan.optionalTasks.map((item) => item.title), ["tidy desk", "read a book"]);
+  assert.equal(plan.firstMove.title, "submit client report by noon");
+});
+
+test("mock planning reduces task size when low energy is explicit", () => {
+  const plan = createMockDayPlan("I have low energy\nwrite report");
+  assert.equal(plan.suggestedDuration, 2);
+  assert.ok([...plan.priorityTasks, ...plan.optionalTasks].every((item) => item.durationMinutes === 2));
 });
 
 test("client validates input and makes exactly one explicit request", async () => {
@@ -28,6 +41,11 @@ test("OpenAI planning uses structured bounded Responses parameters", async () =>
   const plan = await organizeWithOpenAI(client as never, "work");
   assert.deepEqual(plan, expected); assert.equal(captured?.model, "gpt-5.6-luna"); assert.equal(captured?.store, false);
   assert.deepEqual(captured?.reasoning, { effort: "none" }); assert.equal(captured?.max_output_tokens, 800);
+  const instructions = String(captured?.instructions);
+  assert.match(instructions, /Narration order is not priority order/);
+  assert.match(instructions, /deadlines, appointments, external commitments, prerequisites, and high-impact tasks/);
+  assert.match(instructions, /exactly one smallest concrete First Move/);
+  assert.match(instructions, /invent obligations/);
 });
 
 test("planning parser rejects malformed, excessive, and invalid-category output", () => {

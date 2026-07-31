@@ -419,10 +419,17 @@ test("selected-weekday habits appear only on selected weekdays", () => {
 });
 
 test("the local library covers every stuck-state and direction pair", () => {
-  assert.equal(FIRST_MOVE_TEMPLATES.length, STUCK_STATES.length * DIRECTIONS.length * 2);
+  assert.ok(FIRST_MOVE_TEMPLATES.length >= STUCK_STATES.length * DIRECTIONS.length * 2);
   for (const stuckState of STUCK_STATES) {
     for (const direction of DIRECTIONS) {
       assert.ok(templatesFor(stuckState, direction).length >= 2);
     }
+  }
+});
+
+test("phone, standing, and water reset is available for the three approved stuck states", () => {
+  const text = "Put the phone down, stand up, and drink one glass of water.";
+  for (const stuckState of ["scrolling and unable to stop", "in bed and unable to get up", "unsure what is needed"] as const) {
+    for (const direction of DIRECTIONS) assert.ok(templatesFor(stuckState, direction).some((template) => template.text === text));
   }
 });
