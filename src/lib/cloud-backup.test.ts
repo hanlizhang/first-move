@@ -21,6 +21,12 @@ function memoryStore(): CloudBackupStore & { backups: Map<string, CloudBackup> }
       mappings.set(hash, structuredClone(value));
       return value;
     },
+    async mergeMappings(hash, value) {
+      const existing = mappings.get(hash) ?? [];
+      const merged = [...existing, ...value.filter((addition) => !existing.some((mapping) => mapping.entityType === addition.entityType && mapping.localId === addition.localId))];
+      mappings.set(hash, structuredClone(merged));
+      return merged;
+    },
     async getMappings(hash) { return mappings.get(hash); },
   };
 }

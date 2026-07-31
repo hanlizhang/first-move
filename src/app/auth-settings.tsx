@@ -8,13 +8,17 @@ import type { CloudSyncStatus } from "@/lib/account-sync-status";
 import { getCloudSetupEnabled } from "@/lib/cloud-setup-feature";
 import {
   browserCloudSetupDependencies,
+  cloudSetupErrorMessage,
+  copySafeCloudImportDiagnostic,
   detectAccountCloudState,
   importThisDevice,
   startFresh,
   hydrateCloudProgress,
+  safeCloudImportDiagnostic,
   type AccountCloudState,
   type CloudSetupPhase,
 } from "@/lib/cloud-setup";
+import type { SafeCloudImportDiagnostic } from "@/lib/cloud-import";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AuthSettings({ initialEmail, onCloudStatusChange }: { initialEmail: string | null; onCloudStatusChange?: (status: CloudSyncStatus) => void }) {
@@ -26,6 +30,8 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
   const [accountCloudState, setAccountCloudState] = useState<AccountCloudState>();
   const [phase, setPhase] = useState<CloudSetupPhase>("set-up");
   const [confirmCloudHydration, setConfirmCloudHydration] = useState(false);
+  const [safeDiagnostic, setSafeDiagnostic] = useState<SafeCloudImportDiagnostic>();
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const setupClient = useRef<ReturnType<typeof createClient> | undefined>(undefined);
   const setupEnabled = getCloudSetupEnabled();
 
@@ -35,7 +41,17 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
     setupClient.current = client;
     let active = true;
     detectAccountCloudState(client).then((state) => {
-      if (active) setAccountCloudState(state);
+      if (!active) return;
+      setAccountCloudState(state);
+      if (state === "unauthenticated") {
+        setPhase("failed");
+        setMessage("Your sign-in session is not available. Sign in again before checking cloud progress.");
+        onCloudStatusChange?.("error");
+      } else if (state === "request-failed") {
+        setPhase("failed");
+        setMessage("Could not check cloud progress. Your local progress is unchanged.");
+        onCloudStatusChange?.("error");
+      }
     }).catch(() => {
       if (active) {
         setPhase("failed");
@@ -61,6 +77,8 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
     setupClient.current = client;
     setPending(true);
     setMessage("");
+    setSafeDiagnostic(undefined);
+    setDiagnosticCopied(false);
     try {
       const dependencies = browserCloudSetupDependencies(client);
       if (action === "import") {
@@ -76,10 +94,17 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
       setAccountCloudState("existing");
     } catch (error) {
       updatePhase("failed");
-      setMessage(error instanceof Error ? error.message : "Cloud setup failed. Your local progress and backup are unchanged.");
+      setSafeDiagnostic(safeCloudImportDiagnostic(error));
+      setMessage(cloudSetupErrorMessage(error, process.env.NODE_ENV === "development"));
     } finally {
       setPending(false);
     }
+  }
+
+  async function copyDiagnostics() {
+    if (!safeDiagnostic) return;
+    await copySafeCloudImportDiagnostic(safeDiagnostic, (value) => navigator.clipboard.writeText(value));
+    setDiagnosticCopied(true);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -149,6 +174,7 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
               )}
               {accountCloudState === "existing" && phase !== "cloud-copy-ready" && (
                 <div className="mt-3 rounded-xl bg-white p-4">
+                  <p className="text-sm font-bold text-stone-900">Cloud copy needs loading</p>
                   <p className="text-sm text-stone-600">This account already has a cloud copy. Your current device progress will be backed up and will not be uploaded or merged.</p>
                   {!confirmCloudHydration ? (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -175,6 +201,7 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
           <label className="block text-sm font-bold" htmlFor="sync-email">Email</label>
           <input
             id="sync-email"
+            name="sync-email"
             type="email"
             autoComplete="email"
             required
@@ -194,6 +221,11 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
       )}
 
       <p className="mt-4 text-sm text-stone-600" aria-live="polite">{message}</p>
+      {process.env.NODE_ENV === "development" && phase === "failed" && safeDiagnostic && (
+        <button type="button" onClick={copyDiagnostics} className="mt-2 min-h-11 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-bold">
+          {diagnosticCopied ? "Diagnostics copied" : "Copy safe diagnostics"}
+        </button>
+      )}
       <div className="mt-6 rounded-xl bg-stone-50 p-4 text-sm leading-6 text-stone-600">
         <strong className="text-stone-900">Guest Mode remains active.</strong> Local changes continue
         saving on this device whether you sign in or not. Ongoing cloud writes come in a later phase.

@@ -32,6 +32,44 @@ test("invalid balance prevents hydration", () => {
   assert.throws(() => validateCanonicalWorkspace({ ...canonical, inventory_balances: [{ item_id: "kitten-milk", quantity: 3 }] }), /inventory/);
 });
 
+test("tombstoned historical completion does not reappear in completedOn", () => {
+  const workspace = validateCanonicalWorkspace({
+    ...canonical,
+    task_completions: [{ ...canonical.task_completions[0], deleted_at: "2026-07-30T08:00:00Z" }],
+  });
+  assert.deepEqual(workspace.state.tasks[0].completedOn, []);
+  assert.equal(workspace.state.rewardEvents.length, 1);
+});
+
+test("placeholder intent stays hidden while the historical session keeps its relationship", () => {
+  const intentId = "15000000-0000-4000-8000-000000000001";
+  const workspace = validateCanonicalWorkspace({
+    ...canonical,
+    activity_intents: [{ id: intentId, status: "consumed", deleted_at: "2026-07-29T09:02:00Z" }],
+    activity_sessions: [{ id: "16000000-0000-4000-8000-000000000001", mode: "countdown", status: "completed", direction: "Daily Life", label: "Historical", target_duration_minutes: 2, linked_intent_id: intentId, started_at: "2026-07-29T09:00:00Z", accumulated_elapsed_ms: 120000, ended_at: "2026-07-29T09:02:00Z", actual_elapsed_ms: 120000 }],
+  });
+  assert.equal(workspace.state.activityIntents.length, 0);
+  assert.equal(workspace.state.sessions[0].linkedIntentId, intentId);
+});
+
+test("tombstoned task and habit parents validate history but stay out of active lists", () => {
+  const deletedTaskId = "17000000-0000-4000-8000-000000000001";
+  const deletedHabitId = "18000000-0000-4000-8000-000000000001";
+  const historicalSession = { id: "19000000-0000-4000-8000-000000000001", mode: "stopwatch", status: "stopped", direction: "Daily Life", label: "Historical", started_at: "2026-07-29T09:00:00Z", accumulated_elapsed_ms: 0, ended_at: "2026-07-29T09:00:00Z", actual_elapsed_ms: 0 };
+  const value = {
+    ...canonical,
+    tasks: [...canonical.tasks, { id: deletedTaskId, title: "Deleted task", direction: "Daily Life", rank: "1", created_at: "2026-07-29T08:00:00Z", updated_at: "2026-07-29T08:00:00Z", deleted_at: "2026-07-29T09:00:00Z" }],
+    habits: [{ id: deletedHabitId, title: "Deleted habit", direction: "Daily Life", schedule_kind: "daily", created_at: "2026-07-29T08:00:00Z", updated_at: "2026-07-29T08:00:00Z", deleted_at: "2026-07-29T09:00:00Z" }],
+    activity_sessions: [{ ...historicalSession, linked_task_id: deletedTaskId }, { ...historicalSession, id: "19100000-0000-4000-8000-000000000001", linked_habit_id: deletedHabitId }],
+  };
+  const workspace = validateCanonicalWorkspace(value);
+  assert.equal(workspace.state.tasks.some((task) => task.id === deletedTaskId), false);
+  assert.equal(workspace.state.habits.length, 0);
+  assert.equal(workspace.state.sessions[0].linkedTaskId, deletedTaskId);
+  assert.equal(workspace.state.sessions[1].linkedHabitId, deletedHabitId);
+  assert.throws(() => validateCanonicalWorkspace({ ...value, tasks: canonical.tasks }), /task reference/);
+});
+
 test("Use cloud progress replaces both stores only after validation and never deletes keys", () => {
   const values = new Map([[STORAGE_KEY, "guest"], [DAILY_PLAN_STORAGE_KEY, "guest-plans"], ["first-move:other", "keep"]]);
   let removals = 0;

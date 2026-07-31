@@ -11,10 +11,12 @@ export interface CanonicalWorkspace {
 export function validateCanonicalWorkspace(value: unknown): CanonicalWorkspace {
   if (!isRecord(value)) throw new Error("Cloud workspace response is invalid.");
   const tasks = array(value.tasks);
-  const taskCompletions = array(value.task_completions);
+  const activeTasks = tasks.filter((task) => !record(task).deleted_at);
+  const taskCompletions = array(value.task_completions).filter((completion) => !record(completion).deleted_at);
   const habits = array(value.habits);
+  const activeHabits = habits.filter((habit) => !record(habit).deleted_at);
   const habitWeekdays = array(value.habit_schedule_weekdays);
-  const habitCompletions = array(value.habit_completions);
+  const habitCompletions = array(value.habit_completions).filter((completion) => !record(completion).deleted_at);
   const intents = array(value.activity_intents);
   const sessions = array(value.activity_sessions);
   const plans = array(value.daily_plans);
@@ -30,7 +32,7 @@ export function validateCanonicalWorkspace(value: unknown): CanonicalWorkspace {
 
   const state = normalizeAppState({
     schemaVersion: 8,
-    tasks: tasks.map((task, order) => {
+    tasks: activeTasks.map((task, order) => {
       const row = record(task);
       return {
         id: text(row.id), title: text(row.title), direction: direction(row.direction), order,
@@ -38,7 +40,7 @@ export function validateCanonicalWorkspace(value: unknown): CanonicalWorkspace {
         completedOn: taskCompletions.filter((completion) => record(completion).task_id === row.id).map((completion) => date(record(completion).local_date)),
       };
     }),
-    habits: habits.map((habit) => {
+    habits: activeHabits.map((habit) => {
       const row = record(habit);
       const scheduleKind = row.schedule_kind === "weekdays" ? "weekdays" : "daily";
       return {
@@ -50,7 +52,10 @@ export function validateCanonicalWorkspace(value: unknown): CanonicalWorkspace {
         completedOn: habitCompletions.filter((completion) => record(completion).habit_id === row.id).map((completion) => date(record(completion).local_date)),
       };
     }),
-    activityIntents: intents.filter((intent) => record(intent).status === "pending").map((intent) => {
+    activityIntents: intents.filter((intent) => {
+      const row = record(intent);
+      return !row.deleted_at && row.status === "pending";
+    }).map((intent) => {
       const row = record(intent);
       return {
         id: text(row.id), stuckState: text(row.stuck_state), direction: direction(row.direction),
@@ -126,7 +131,7 @@ export function validateCanonicalWorkspace(value: unknown): CanonicalWorkspace {
       }),
     };
   });
-  verifyCanonicalWorkspace(value, state, dailyPlans);
+  verifyCanonicalWorkspace(value, state, dailyPlans, tasks, habits, intents);
   return { state, dailyPlans };
 }
 
@@ -146,8 +151,8 @@ export function replaceLocalWorkspace(
   }
 }
 
-function verifyCanonicalWorkspace(raw: Record<string, unknown>, state: AppState, dailyPlans: DailyPlanRecord[]) {
-  if (state.tasks.length !== array(raw.tasks).length || state.habits.length !== array(raw.habits).length ||
+function verifyCanonicalWorkspace(raw: Record<string, unknown>, state: AppState, dailyPlans: DailyPlanRecord[], taskParents: unknown[], habitParents: unknown[], intentParents: unknown[]) {
+  if (state.tasks.length !== taskParents.filter((task) => !record(task).deleted_at).length || state.habits.length !== habitParents.filter((habit) => !record(habit).deleted_at).length ||
       state.sessions.length !== array(raw.activity_sessions).length || state.journalEntries.length !== array(raw.journal_entries).length ||
       dailyPlans.length !== array(raw.daily_plans).length) {
     throw new Error("Cloud record count verification failed.");
@@ -163,8 +168,9 @@ function verifyCanonicalWorkspace(raw: Record<string, unknown>, state: AppState,
     if ((eventQuantities.get(item.itemId) ?? 0) !== item.quantity) throw new Error("Cloud inventory verification failed.");
   }
   for (const session of state.sessions) {
-    if (session.linkedTaskId && !state.tasks.some((task) => task.id === session.linkedTaskId)) throw new Error("Cloud task reference is invalid.");
-    if (session.linkedHabitId && !state.habits.some((habit) => habit.id === session.linkedHabitId)) throw new Error("Cloud habit reference is invalid.");
+    if (session.linkedTaskId && !taskParents.some((task) => record(task).id === session.linkedTaskId)) throw new Error("Cloud task reference is invalid.");
+    if (session.linkedHabitId && !habitParents.some((habit) => record(habit).id === session.linkedHabitId)) throw new Error("Cloud habit reference is invalid.");
+    if (session.linkedIntentId && !intentParents.some((intent) => record(intent).id === session.linkedIntentId)) throw new Error("Cloud intent reference is invalid.");
   }
 }
 

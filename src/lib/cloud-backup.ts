@@ -28,6 +28,7 @@ export interface CloudBackupStore {
   addBackup(backup: CloudBackup): Promise<CloudBackup>;
   getBackup(hash: string): Promise<CloudBackup | undefined>;
   addMappings(hash: string, mappings: EntityMapping[]): Promise<EntityMapping[]>;
+  mergeMappings(hash: string, mappings: EntityMapping[]): Promise<EntityMapping[]>;
   getMappings(hash: string): Promise<EntityMapping[] | undefined>;
 }
 
@@ -90,10 +91,39 @@ export function createIndexedDbBackupStore(indexedDBFactory: IDBFactory = indexe
       await addRecord(open, "mappings", { hash, mappings });
       return mappings;
     },
+    async mergeMappings(hash, mappings) {
+      const existing = await readRecord<{ hash: string; mappings: EntityMapping[] }>(open, "mappings", hash);
+      const merged = mergeEntityMappings(existing?.mappings ?? [], mappings);
+      if (!existing) {
+        await addRecord(open, "mappings", { hash, mappings: merged });
+      } else if (merged.length !== existing.mappings.length) {
+        await putRecord(open, "mappings", { hash, mappings: merged });
+      }
+      return merged;
+    },
     async getMappings(hash) {
       return (await readRecord<{ hash: string; mappings: EntityMapping[] }>(open, "mappings", hash))?.mappings;
     },
   };
+}
+
+export function mergeEntityMappings(existing: EntityMapping[], additions: EntityMapping[]): EntityMapping[] {
+  const merged = [...existing];
+  for (const addition of additions) {
+    const sameIdentity = merged.find((mapping) =>
+      mapping.entityType === addition.entityType && mapping.localId === addition.localId);
+    if (sameIdentity) {
+      if (sameIdentity.cloudId !== addition.cloudId || sameIdentity.payloadHash !== addition.payloadHash) {
+        throw new Error("Saved import mapping conflicts with this snapshot.");
+      }
+      continue;
+    }
+    if (merged.some((mapping) => mapping.cloudId === addition.cloudId)) {
+      throw new Error("Saved import mapping reuses a cloud ID.");
+    }
+    merged.push(addition);
+  }
+  return merged;
 }
 
 async function readRecord<T>(
@@ -124,6 +154,23 @@ async function addRecord(
       const request = database.transaction(storeName, "readwrite").objectStore(storeName).add(value);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error ?? new Error("Could not save local backup."));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function putRecord(
+  open: () => Promise<IDBDatabase>,
+  storeName: string,
+  value: unknown,
+): Promise<void> {
+  const database = await open();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const request = database.transaction(storeName, "readwrite").objectStore(storeName).put(value);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error ?? new Error("Could not extend local import mappings."));
     });
   } finally {
     database.close();
