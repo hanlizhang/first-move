@@ -539,7 +539,8 @@ function cleanTitle(value: string): string {
 }
 
 function makeId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`;
+  void prefix;
+  return crypto.randomUUID();
 }
 
 function now(): string {

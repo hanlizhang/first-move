@@ -15,8 +15,10 @@ test("account chip exposes every explicit cloud-sync state", () => {
     importing: "Importing",
     verifying: "Verifying",
     "cloud-copy-ready": "Cloud copy ready",
+    syncing: "Syncing",
+    synced: "Synced",
     offline: "Offline · saved locally",
-    error: "Setup failed",
+    error: "Sync needs attention",
   };
   for (const [status, label] of Object.entries(labels) as [CloudSyncStatus, string][]) {
     assert.equal(accountSyncLabel(true, status), label);
@@ -27,7 +29,7 @@ test("guest mode never claims a cloud-sync state", () => {
   assert.equal(accountSyncLabel(false, "cloud-copy-ready"), "Sign in to sync");
 });
 
-test("Phase B2 account labels never claim synchronization", () => {
+test("setup and failure labels never claim synchronization", () => {
   for (const status of ["not-initialized", "preparing-backup", "importing", "verifying", "cloud-copy-ready", "offline", "error"] as const) {
     assert.notEqual(accountSyncLabel(true, status), "Synced");
   }

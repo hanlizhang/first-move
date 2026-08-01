@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   ADDITIONAL_NOTE_LABEL,
+  CLOUD_REFLECTION_PRIVACY_TEXT,
   DEFAULT_REFLECTION_PROMPTS,
   REFLECTION_PRIVACY_TEXT,
+  reflectionPrivacyText,
   shouldOpenAdditionalNote,
 } from "./reflection-presentation.ts";
 
@@ -28,5 +30,8 @@ test("additional note disclosure opens for previously saved free text", () => {
 
 test("journal privacy copy is device-neutral and limited to the AI boundary", () => {
   assert.equal(REFLECTION_PRIVACY_TEXT, "Saved only on this device. Not sent to AI.");
+  assert.equal(reflectionPrivacyText(false), REFLECTION_PRIVACY_TEXT);
+  assert.equal(reflectionPrivacyText(true), CLOUD_REFLECTION_PRIVACY_TEXT);
   assert.doesNotMatch(REFLECTION_PRIVACY_TEXT, /browser|medical|treat/i);
+  assert.doesNotMatch(CLOUD_REFLECTION_PRIVACY_TEXT, /browser|medical|treat/i);
 });

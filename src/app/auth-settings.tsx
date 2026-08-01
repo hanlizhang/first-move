@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { AUTH_UNAVAILABLE_MESSAGE, requestMagicLink, signOut } from "@/lib/auth-flow";
 import type { CloudSyncStatus } from "@/lib/account-sync-status";
+import { accountSyncLabel } from "@/lib/account-sync-status";
 import { getCloudSetupEnabled } from "@/lib/cloud-setup-feature";
 import {
   browserCloudSetupDependencies,
@@ -21,7 +22,21 @@ import {
 import type { SafeCloudImportDiagnostic } from "@/lib/cloud-import";
 import { createClient } from "@/lib/supabase/client";
 
-export default function AuthSettings({ initialEmail, onCloudStatusChange }: { initialEmail: string | null; onCloudStatusChange?: (status: CloudSyncStatus) => void }) {
+interface AuthSettingsProps {
+  initialEmail: string | null;
+  onCloudStatusChange?: (status: CloudSyncStatus) => void;
+  cloudModeActive?: boolean;
+  runtimeStatus?: CloudSyncStatus;
+  lastSuccessfulSyncAt?: string;
+  onRefreshCloud?: () => Promise<void>;
+  onRetryCloud?: () => Promise<void>;
+  onActivateCloud?: (workspace: Awaited<ReturnType<typeof hydrateCloudProgress>>, replaceCache: boolean) => Promise<void>;
+}
+
+export default function AuthSettings({
+  initialEmail, onCloudStatusChange, cloudModeActive = false, runtimeStatus = "not-initialized",
+  lastSuccessfulSyncAt, onRefreshCloud, onRetryCloud, onActivateCloud,
+}: AuthSettingsProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [authenticatedEmail, setAuthenticatedEmail] = useState(initialEmail);
@@ -36,7 +51,7 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
   const setupEnabled = getCloudSetupEnabled();
 
   useEffect(() => {
-    if (!setupEnabled || !authenticatedEmail) return;
+    if (!setupEnabled || !authenticatedEmail || cloudModeActive) return;
     const client = createClient();
     setupClient.current = client;
     let active = true;
@@ -59,7 +74,7 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
       }
     });
     return () => { active = false; };
-  }, [authenticatedEmail, onCloudStatusChange, setupEnabled]);
+  }, [authenticatedEmail, cloudModeActive, onCloudStatusChange, setupEnabled]);
 
   function updatePhase(next: CloudSetupPhase) {
     setPhase(next);
@@ -83,13 +98,14 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
       const dependencies = browserCloudSetupDependencies(client);
       if (action === "import") {
         await importThisDevice(dependencies, updatePhase);
-        setMessage("Cloud copy ready. Ongoing edits still stay on this device until the next sync phase.");
+        setMessage("Cloud copy ready. Load the verified cloud copy once to activate continuous sync on this device.");
       } else if (action === "fresh") {
         await startFresh(dependencies, updatePhase);
         setMessage("Empty cloud workspace ready. Your current device progress remains local and backed up.");
       } else {
-        await hydrateCloudProgress(dependencies, updatePhase);
-        window.location.reload();
+        const workspace = await hydrateCloudProgress(dependencies, updatePhase);
+        await onActivateCloud?.(workspace, true);
+        setMessage("Cloud progress loaded. Continuous sync is active on this device.");
       }
       setAccountCloudState("existing");
     } catch (error) {
@@ -140,8 +156,8 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Optional account</p>
       <h1 id="sync-heading" className="mt-2 text-3xl font-bold tracking-tight">Sync across devices</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600">
-        Sign in with a secure email link. Guest Mode stays available, and this phase does not upload,
-        merge, or delete any tasks, journal entries, rewards, or other local progress.
+        Sign in with a secure email link. Guest Mode stays available. After cloud mode is activated,
+        Supabase is the canonical account copy and this device keeps an immediate local cache.
       </p>
 
       {authenticatedEmail ? (
@@ -156,7 +172,20 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
           >
             {pending ? "Signing out…" : "Sign out"}
           </button>
-          {setupEnabled && (
+          {setupEnabled && cloudModeActive && (
+            <div className="mt-5 border-t border-emerald-200 pt-5">
+              <p className="text-sm font-bold text-stone-900">{accountSyncLabel(true, runtimeStatus)}</p>
+              <p className="mt-2 text-sm text-stone-600">
+                {lastSuccessfulSyncAt ? `Last successful sync: ${formatSyncTime(lastSuccessfulSyncAt)}` : "Waiting for the first successful cloud operation."}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" disabled={pending || runtimeStatus === "syncing"} onClick={() => void onRefreshCloud?.()} className="min-h-11 rounded-lg bg-violet-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">Refresh cloud data</button>
+                {(runtimeStatus === "error" || runtimeStatus === "offline") && <button type="button" disabled={pending} onClick={() => void onRetryCloud?.()} className="min-h-11 rounded-lg border border-violet-300 px-4 py-2 text-sm font-bold text-violet-900 disabled:opacity-60">Retry sync</button>}
+              </div>
+              <p className="mt-3 text-xs text-stone-500">Cloud data is authoritative. Network failures keep this device’s cache and pending changes intact.</p>
+            </div>
+          )}
+          {setupEnabled && !cloudModeActive && (
             <div className="mt-5 border-t border-emerald-200 pt-5">
               <p className="text-sm font-bold text-stone-900">{phase === "set-up" ? "Set up your cloud copy" : phaseLabel(phase)}</p>
               {!accountCloudState && phase !== "failed" && <p className="mt-2 text-sm text-stone-600">Checking this account…</p>}
@@ -192,7 +221,7 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
                   )}
                 </div>
               )}
-              <p className="mt-3 text-xs text-stone-500">This prepares or loads one cloud copy. Ongoing edits are not synchronized yet.</p>
+              <p className="mt-3 text-xs text-stone-500">Cloud sync activates only after a complete verified cloud workspace is loaded.</p>
             </div>
           )}
         </div>
@@ -227,8 +256,9 @@ export default function AuthSettings({ initialEmail, onCloudStatusChange }: { in
         </button>
       )}
       <div className="mt-6 rounded-xl bg-stone-50 p-4 text-sm leading-6 text-stone-600">
-        <strong className="text-stone-900">Guest Mode remains active.</strong> Local changes continue
-        saving on this device whether you sign in or not. Ongoing cloud writes come in a later phase.
+        <strong className="text-stone-900">Guest Mode remains available.</strong> {cloudModeActive
+          ? "Cloud mode saves locally first, then sends authenticated owner-scoped changes to the canonical cloud workspace."
+          : "Local changes continue saving on this device whether you sign in or not."}
       </div>
     </section>
   );
@@ -241,4 +271,9 @@ function phaseLabel(phase: CloudSetupPhase): string {
   if (phase === "cloud-copy-ready") return "Cloud copy ready";
   if (phase === "failed") return "Setup failed";
   return "Set up sync";
+}
+
+function formatSyncTime(value: string): string {
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? "Unknown" : timestamp.toLocaleString();
 }

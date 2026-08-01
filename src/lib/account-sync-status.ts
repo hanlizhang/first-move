@@ -4,6 +4,8 @@ export type CloudSyncStatus =
   | "importing"
   | "verifying"
   | "cloud-copy-ready"
+  | "syncing"
+  | "synced"
   | "offline"
   | "error";
 
@@ -13,7 +15,9 @@ export function accountSyncLabel(authenticated: boolean, cloudStatus: CloudSyncS
   if (cloudStatus === "importing") return "Importing";
   if (cloudStatus === "verifying") return "Verifying";
   if (cloudStatus === "cloud-copy-ready") return "Cloud copy ready";
+  if (cloudStatus === "syncing") return "Syncing";
+  if (cloudStatus === "synced") return "Synced";
   if (cloudStatus === "offline") return "Offline · saved locally";
-  if (cloudStatus === "error") return "Setup failed";
+  if (cloudStatus === "error") return "Sync needs attention";
   return "Set up sync";
 }

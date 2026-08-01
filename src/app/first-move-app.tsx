@@ -63,15 +63,16 @@ import { getCalendarMonth, getDayDetail, getTrendSummary, HISTORY_CATEGORIES, ty
 import { captureVideoFrame, compressImageToJpeg } from "@/lib/image-compression";
 import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, recordMorningAttempt, resetMorningCheck, verifyToothbrushPhoto } from "@/lib/morning-check";
 import { APP_VIEWS, APP_VIEW_LABELS, plannerPresentation, type AppView } from "@/lib/app-navigation";
-import { loadDailyPlan, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-plan-state";
+import { loadDailyPlan, loadDailyPlans, saveDailyPlan, type DailyPlanRecord } from "@/lib/daily-plan-state";
 import type { PlanningReviewItem } from "@/lib/planning-review";
 import { companionEventsForTransition, companionIdleAction, createCompanionEventController, shouldShowCompanion, type CompanionReaction } from "@/lib/companion-events";
 import { accountSyncLabel, type CloudSyncStatus } from "@/lib/account-sync-status";
 import { getCloudSetupEnabled } from "@/lib/cloud-setup-feature";
+import { useCloudRuntime } from "@/lib/cloud-runtime";
 import {
   ADDITIONAL_NOTE_LABEL,
   DEFAULT_REFLECTION_PROMPTS,
-  REFLECTION_PRIVACY_TEXT,
+  reflectionPrivacyText,
   shouldOpenAdditionalNote,
 } from "@/lib/reflection-presentation";
 
@@ -97,6 +98,15 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
   const [cloudSetupStatus, setCloudSetupStatus] = useState<CloudSyncStatus>("not-initialized");
   const [companionReaction, setCompanionReaction] = useState<CompanionReaction>();
   const companionController = useRef<ReturnType<typeof createCompanionEventController> | undefined>(undefined);
+  const todayRef = useRef(today);
+  useEffect(() => {
+    todayRef.current = today;
+  }, [today]);
+  const acceptCloudWorkspace = useCallback((workspace: { dailyPlans: DailyPlanRecord[] }) => {
+    setDailyPlan(workspace.dailyPlans.find((plan) => plan.dateKey === todayRef.current));
+    setReviewingPlan(false);
+  }, [setDailyPlan, setReviewingPlan]);
+  const cloudRuntime = useCloudRuntime(initialEmail, acceptCloudWorkspace, getCloudSetupEnabled());
 
   const emitCompanionEvents = useCallback((events: ReturnType<typeof companionEventsForTransition>) => {
     companionController.current ??= createCompanionEventController({
@@ -139,11 +149,13 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
     saveDailyPlan(window.localStorage, record);
     setDailyPlan(record);
     setReviewingPlan(false);
+    cloudRuntime.queueDailyPlan(loadDailyPlans(window.localStorage));
   }
 
   function reviewPlan() { setReviewingPlan(true); navigate("first-moves"); }
   const plannerState = plannerPresentation(morningComplete, Boolean(dailyPlan), reviewingPlan);
-  const accountLabel = accountSyncLabel(Boolean(initialEmail), getCloudSetupEnabled() ? cloudSetupStatus : "not-initialized");
+  const effectiveCloudStatus = cloudRuntime.active ? cloudRuntime.status : cloudSetupStatus;
+  const accountLabel = accountSyncLabel(Boolean(initialEmail), getCloudSetupEnabled() ? effectiveCloudStatus : "not-initialized");
 
   return (
     <div className="min-h-screen bg-[#f7f4ee] text-stone-900">
@@ -178,7 +190,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
             Name what is happening, choose a direction, and make one move small enough to begin. Everything here works locally without AI.
           </p>
           <p className="mt-3 text-sm text-stone-500" aria-live="polite">
-            Local changes save automatically.
+            {cloudRuntime.active ? "Changes save locally first and sync to your cloud account." : "Local changes save automatically."}
           </p>
         </div>
 
@@ -200,14 +212,14 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-700">This task only</p>
             <h2 id="foundation-heading" className="mt-3 text-2xl font-bold tracking-tight">A calm local starting point</h2>
             <p className="mt-3 text-sm leading-6 text-orange-950/70">
-              Choose a small move, track the time you spend, and keep the outcome neutral. Your activity stays on this device.
+              Choose a small move, track the time you spend, and keep the outcome neutral. Guest progress stays local; cloud-mode progress uses this device as an immediate cache.
             </p>
           </section>
         </div>
         </>}
 
         {activeView === "focus" && <FocusPanel key={pendingIntent?.id ?? "focus"} state={state} update={update} />}
-        {activeView === "today" && <TodayOverview state={state} today={today} update={update} dailyPlan={dailyPlan} pendingIntent={pendingIntent} onReviewPlan={reviewPlan} />}
+        {activeView === "today" && <TodayOverview state={state} today={today} update={update} dailyPlan={dailyPlan} pendingIntent={pendingIntent} onReviewPlan={reviewPlan} cloudModeActive={cloudRuntime.active} />}
 
         {activeView === "tasks" && <section id="tasks" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="tasks-heading">
           <div className="max-w-2xl">
@@ -228,7 +240,16 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
         </section>}
 
         {activeView === "cat" && <CatRoom state={state} today={today} update={update} />}
-        {activeView === "settings" && <AuthSettings initialEmail={initialEmail} onCloudStatusChange={setCloudSetupStatus} />}
+        {activeView === "settings" && <AuthSettings
+          initialEmail={initialEmail}
+          onCloudStatusChange={setCloudSetupStatus}
+          cloudModeActive={cloudRuntime.active}
+          runtimeStatus={cloudRuntime.status}
+          lastSuccessfulSyncAt={cloudRuntime.lastSuccessfulSyncAt}
+          onRefreshCloud={cloudRuntime.refresh}
+          onRetryCloud={cloudRuntime.retry}
+          onActivateCloud={cloudRuntime.activate}
+        />}
       </main>
       {shouldShowCompanion(activeView) && <FloatingCompanion key={companionReaction?.id ?? "idle"} reaction={companionReaction} focusActive={Boolean(openSession)} onOpenStore={() => navigate("cat")} />}
     </div>
@@ -618,7 +639,7 @@ function SessionReview({ session, state, update }: { session: ActivitySession; s
   );
 }
 
-function DailyReflection({ state, today, update }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void }) {
+function DailyReflection({ state, today, update, cloudModeActive }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void; cloudModeActive: boolean }) {
   const existing = state.journalEntries.find((entry) => entry.dateKey === today);
   const [mood, setMood] = useState(existing?.mood ? String(existing.mood) : "");
   const [energy, setEnergy] = useState(existing?.energy ? String(existing.energy) : "");
@@ -629,6 +650,23 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
   const [freeText, setFreeText] = useState(existing?.freeText ?? "");
   const [additionalNoteOpen, setAdditionalNoteOpen] = useState(shouldOpenAdditionalNote(existing?.freeText));
   const [notice, setNotice] = useState("");
+  const journalDirty = useRef(false);
+
+  useEffect(() => {
+    if (journalDirty.current) return;
+    const timer = window.setTimeout(() => {
+      if (journalDirty.current) return;
+      setMood(existing?.mood ? String(existing.mood) : "");
+      setEnergy(existing?.energy ? String(existing.energy) : "");
+      setWhatHelped(existing?.whatHelped ?? "");
+      setCompleted(existing?.completed ?? "");
+      setDifficult(existing?.difficult ?? "");
+      setNextStep(existing?.nextStep ?? "");
+      setFreeText(existing?.freeText ?? "");
+      setAdditionalNoteOpen(shouldOpenAdditionalNote(existing?.freeText));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [existing]);
 
   const input: ReflectionInput = {
     mood: mood ? Number(mood) as 1 | 2 | 3 | 4 | 5 : undefined,
@@ -644,12 +682,14 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
     event.preventDefault();
     if (!hasReflectionContent(input)) return;
     update((current) => saveReflection(current, today, input));
-    setNotice(existing ? "Mini Journal updated." : "Mini Journal saved on this device.");
+    journalDirty.current = false;
+    setNotice(existing ? "Mini Journal updated." : cloudModeActive ? "Mini Journal saved locally and queued for sync." : "Mini Journal saved on this device.");
   }
 
   function remove() {
     update((current) => deleteReflection(current, today));
     setMood(""); setEnergy(""); setWhatHelped(""); setCompleted(""); setDifficult(""); setNextStep(""); setFreeText("");
+    journalDirty.current = false;
     setNotice("Mini Journal entry removed. There is no penalty.");
   }
 
@@ -660,15 +700,15 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
         {existing && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Saved today</span>}
       </div>
       <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
-        <RatingField label="Mood" value={mood} onChange={setMood} />
-        <RatingField label="Energy" value={energy} onChange={setEnergy} />
-        <ReflectionField id="reflection-helped" label={DEFAULT_REFLECTION_PROMPTS[0].label} value={whatHelped} onChange={setWhatHelped} />
-        <ReflectionField id="reflection-difficult" label={DEFAULT_REFLECTION_PROMPTS[1].label} value={difficult} onChange={setDifficult} />
-        <ReflectionField id="reflection-next" label={DEFAULT_REFLECTION_PROMPTS[2].label} value={nextStep} onChange={setNextStep} />
+        <RatingField label="Mood" value={mood} onChange={(value) => { journalDirty.current = true; setMood(value); }} />
+        <RatingField label="Energy" value={energy} onChange={(value) => { journalDirty.current = true; setEnergy(value); }} />
+        <ReflectionField id="reflection-helped" label={DEFAULT_REFLECTION_PROMPTS[0].label} value={whatHelped} onChange={(value) => { journalDirty.current = true; setWhatHelped(value); }} />
+        <ReflectionField id="reflection-difficult" label={DEFAULT_REFLECTION_PROMPTS[1].label} value={difficult} onChange={(value) => { journalDirty.current = true; setDifficult(value); }} />
+        <ReflectionField id="reflection-next" label={DEFAULT_REFLECTION_PROMPTS[2].label} value={nextStep} onChange={(value) => { journalDirty.current = true; setNextStep(value); }} />
         <details className="rounded-xl border border-stone-200 bg-stone-50 p-3 sm:col-span-2" open={additionalNoteOpen} onToggle={(event) => setAdditionalNoteOpen(event.currentTarget.open)}>
           <summary className="cursor-pointer text-sm font-semibold">Add another note</summary>
           <div className="mt-3">
-            <ReflectionField id="reflection-notes" label={ADDITIONAL_NOTE_LABEL} value={freeText} onChange={setFreeText} />
+            <ReflectionField id="reflection-notes" label={ADDITIONAL_NOTE_LABEL} value={freeText} onChange={(value) => { journalDirty.current = true; setFreeText(value); }} />
           </div>
         </details>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
@@ -676,7 +716,7 @@ function DailyReflection({ state, today, update }: { state: AppState; today: str
           {existing && <SecondaryButton onClick={remove}>Delete today&apos;s entry</SecondaryButton>}
         </div>
       </form>
-      <p className="mt-4 text-xs text-stone-500">{REFLECTION_PRIVACY_TEXT}</p>
+      <p className="mt-4 text-xs text-stone-500">{reflectionPrivacyText(cloudModeActive)}</p>
       {notice && <p className="mt-2 text-sm font-semibold text-emerald-700" role="status">{notice}</p>}
     </section>
   );
@@ -691,7 +731,7 @@ function ReflectionField({ id, label, value, onChange }: { id: string; label: st
   return <label htmlFor={id} className="block text-sm font-semibold">{label} <span className="font-normal text-stone-500">(optional)</span><textarea id={id} name={id} rows={2} maxLength={1000} className="mt-2 block w-full resize-y rounded-xl border border-stone-200 px-3 py-2.5 font-normal outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onReviewPlan }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void; dailyPlan?: DailyPlanRecord; pendingIntent?: ActivityIntent; onReviewPlan: () => void }) {
+function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onReviewPlan, cloudModeActive }: { state: AppState; today: string; update: (recipe: (current: AppState) => AppState) => void; dailyPlan?: DailyPlanRecord; pendingIntent?: ActivityIntent; onReviewPlan: () => void; cloudModeActive: boolean }) {
   const [tab, setTab] = useState<"today" | "trends" | "calendar">("today");
   const summary = getTodaySummary(state, today);
   const timeline = getTodayTimeline(state, today);
@@ -703,7 +743,7 @@ function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onRevie
       <div className="mt-5 flex gap-1 rounded-xl bg-amber-100 p-1" role="tablist" aria-label="Today views">{(["today", "trends", "calendar"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={tab === value} className={`min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-amber-700 ${tab === value ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:bg-white/60"}`} onClick={() => setTab(value)}>{value}</button>)}</div>
       {tab === "today" && <div role="tabpanel">
         <div className="mt-5 rounded-2xl bg-white p-4 sm:p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction} className="min-w-0"><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
-        <DailyReflection state={state} today={today} update={update} />
+        <DailyReflection state={state} today={today} update={update} cloudModeActive={cloudModeActive} />
         <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
         {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{timelineDescription(entry)}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
       </div>}

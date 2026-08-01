@@ -262,5 +262,5 @@ function cleanLabel(value: string): string {
 }
 
 function makeSessionId(): string {
-  return `session-${crypto.randomUUID()}`;
+  return crypto.randomUUID();
 }
