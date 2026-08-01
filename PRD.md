@@ -169,6 +169,14 @@ Each direction uses neutral language and can be changed before or after a sessio
 - RevenueCat is authoritative for the `pro` entitlement, using the Supabase Auth UUID as RevenueCat App User ID. Clients cannot authorize paid AI calls.
 - OpenAI keys and other secret credentials remain server-side. Toothbrush photos are never persisted.
 
+### Web Sync v1 implementation status
+
+Web Sync v1 is implemented behind `NEXT_PUBLIC_CLOUD_SETUP_ENABLED`. Email magic-link authentication, immutable guest backup, Import this device, Start fresh, Use cloud progress, canonical startup/focus/manual hydration, authenticated continuous writes, soft deletion, a durable local retry queue, and server-authoritative economic commands are present. All repository migrations, including `20260731180000_continuous_cloud_sync.sql`, are applied remotely. Phase B2 setup/import/hydration and two-browser task creation, task update, and habit convergence are manually verified. Start fresh with a second empty account, offline edit/retry convergence, and a remote user-A/user-B isolation smoke test remain pending; automated coverage exists for these boundaries, including database RLS isolation.
+
+The v1 runtime sends complete validated schema-v8 workspace snapshots through an idempotent authenticated RPC. Supabase is authoritative after activation, while localStorage remains the immediate UI cache and durable small retry queue. This is deliberately smaller than the designed normalized IndexedDB outbox/change-cursor architecture, realtime, and long-offline conflict recovery, which remain deferred.
+
+This is a frozen Web Sync v1 MVP checkpoint with documented pending smoke tests, not a claim of production-perfect or fully QA-complete synchronization. The remaining Web manual checks do not block Mobile M0 architecture and authentication work.
+
 ## Free and Pro
 
 | Capability | Free | Pro |

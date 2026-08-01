@@ -198,13 +198,18 @@
 ## TASK-09: Optional account and cross-device sync foundation
 
 - [x] Add email OTP under **Sync across devices** while preserving complete guest mode.
-- [x] Implement the smallest continuous-sync MVP: normalized owner-scoped snapshots, UUIDs, tombstones, canonical startup/focus hydration, a durable local retry queue, idempotent economic commands, and confirmed second-device hydration.
+- [x] Implement the smallest continuous-sync MVP: normalized owner-scoped database records, UUIDs, tombstones, canonical startup/focus/manual hydration, a durable local retry queue, idempotent economic commands, and automated second-client hydration coverage.
 - [ ] Replace the MVP full-snapshot queue with the planned normalized IndexedDB cache/outbox, change cursor, and long-offline conflict recovery before a broad production rollout.
 - [x] Implement development-gated Phase B2 Start fresh, Import this device, immutable local backup, retry-safe UUID mapping, and canonical initial hydration without automatic local deletion.
-- [ ] Add logout, export, cache choice, account deletion, and private Mini Journal handling.
+- [x] Add sign out while retaining local data.
+- [x] Protect and continuously synchronize private Mini Journal rows without sending their content to AI or logs.
+- [ ] Add export, logout cache choice, account deletion, and explicit backup/cache management.
 - [ ] Verify web/iOS/Android identity and secure token-storage adapters.
+- [x] Apply `20260731180000_continuous_cloud_sync.sql` remotely and manually verify two-browser task creation, task updates, and habits.
+- [x] Verify owner isolation through automated database RLS and cross-user tests.
+- [ ] Manually verify Start fresh with a second empty account, offline edit/retry/second-browser convergence, and a remote user-A/user-B isolation smoke test.
 
-**Cloud-sync status:** Phase B2 is applied and manually verified. The continuous-sync MVP and its new RPC migration are tested locally but remain development-gated and must not be pushed remotely without explicit approval.
+**Cloud-sync status:** Frozen Web Sync v1 MVP checkpoint. All migrations are remotely applied; Phase B2 setup/import/hydration and core two-browser task/habit convergence are manually verified. Automated application/database suites, including RLS isolation, are recorded as passing. The three remaining manual smoke checks are tracked above and do not block Mobile M0 architecture work, but Web Sync v1 is not production-perfect or fully QA-complete.
 
 ## TASK-10: RevenueCat subscriptions and product access
 
