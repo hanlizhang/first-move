@@ -229,6 +229,23 @@
 - [ ] Launch only in an approved supported-international-market allowlist; exclude Mainland China initially.
 - [ ] Test entitlement forgery, quota races, timezone abuse, provider/RevenueCat outages, privacy boundaries, and absence of secrets from clients.
 
+## TASK-12: Mobile v1
+
+### M0 — Expo foundation and authentication
+
+- [x] Create an independent Expo React Native/TypeScript project under `/mobile` without moving Web or creating a workspace.
+- [x] Add basic mobile design tokens and Expo Router placeholders for First Moves, Today, Focus, Cat, and Settings.
+- [x] Implement loading, signed-out, Guest Mode, authenticated, and privacy-safe error states.
+- [x] Add public Expo Supabase configuration, email magic links, and the `firstmove://auth/callback` development route.
+- [x] Persist Supabase sessions through a chunked Keychain/Keystore-backed Expo SecureStore adapter.
+- [x] Keep schema-v8 guest storage separate from account-scoped validated cloud caches; sign out deletes neither.
+- [x] Detect existing workspaces with `cloud_workspace_status` and hydrate them read-only with `get_cloud_workspace_v2`.
+- [x] Stop empty accounts before any setup write and show that cloud setup is unavailable until M1.
+- [x] Cover config, auth transitions, callback handling, session restore, secure storage, local separation, and read-only hydration with focused tests.
+- [ ] Complete the manual iOS/Android M0 acceptance checklist in `/mobile/README.md` after adding the redirect URL in Supabase.
+
+**M0 status:** Implementation and automated checks complete on `mobile/expo-v1`; manual device acceptance and the user-owned Supabase redirect allow-list change remain pending. M1 is not started.
+
 ## Explicitly excluded
 
 - Advertising or consumable real-money purchases

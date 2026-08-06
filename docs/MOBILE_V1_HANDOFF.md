@@ -166,7 +166,9 @@ Remaining manual checks are known verification items and do not block Mobile M0 
 
 ### M0 — Foundation and authentication
 
-Status: **not started**. Choose the native/cross-platform stack; establish repository/module boundaries; implement schema-v8-compatible local repository and migrations; add Supabase email-link authentication with iOS/Android deep links; store sessions securely; implement feature flags, privacy-safe logging, and guest/cloud mode separation.
+Status: **implemented on `mobile/expo-v1`; automated checks pass, manual device acceptance pending**. An independent Expo SDK 57/React Native/TypeScript project now lives under `/mobile` without moving Web or creating a workspace. Expo Router provides First Moves, Today, Focus, Cat, and Settings placeholders. The app implements loading, signed-out, Guest Mode, authenticated, and privacy-safe error states; email magic links use `firstmove://auth/callback`; Supabase session values use a chunked `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage.
+
+M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate. Authentication restores the existing Supabase Auth UUID. An initialized account is detected with `cloud_workspace_status` and hydrated read-only with the exact existing `get_cloud_workspace_v2` canonical payload, including UUID/reference, tombstone, balance, date, and captured timezone validation. An empty account receives a clear M1 setup boundary. No initialization, import, merge, continuous-sync, or other business-data write RPC exists in mobile M0. See `/mobile/README.md` for environment names, local commands, the manual acceptance checklist, and the exact redirect URL that the user must add manually.
 
 ### M1 — Core features
 
