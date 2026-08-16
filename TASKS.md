@@ -244,7 +244,28 @@
 - [x] Cover config, auth transitions, callback handling, session restore, secure storage, local separation, and read-only hydration with focused tests.
 - [ ] Complete the manual iOS/Android M0 acceptance checklist in `/mobile/README.md` after adding the redirect URL in Supabase.
 
-**M0 status:** Implementation and automated checks complete on `mobile/expo-v1`; manual device acceptance and the user-owned Supabase redirect allow-list change remain pending. M1 is not started.
+**M0 status:** Implementation and automated checks complete on `mobile/expo-v1`; manual device acceptance and the user-owned Supabase redirect allow-list change remain pending. The narrow M1A increment is tracked below.
+
+### M1A — Local I’m Stuck intent builder
+
+- [x] Normalize and migrate schema-v8-compatible guest state through the existing Mobile AsyncStorage repository.
+- [x] Port all six stuck states, the exact five PRD directions, and the existing offline First Move template matrix.
+- [x] Support another suggestion, editable wording, manual entry, and 2/5/10/25-minute shortening before saving.
+- [x] Create at most one validated pending `ActivityIntent` and show it in Focus without starting a timer.
+- [x] Keep authenticated cloud data read-only and Guest Mode fully local; add focused domain, migration, and serialized-write tests.
+
+**M1A status:** Implemented on `mobile/expo-v1`; automated checks pass. Running timers are tracked separately in M1B below; Tasks/Habits UI, cloud business-data writes, Cat, Morning Start, and AI remain outside M1A.
+
+### M1B — Local Focus countdown
+
+- [x] Separate Guest local state from per-Supabase-UUID local state while retaining both and keeping the canonical cloud cache independent.
+- [x] Start the pending `ActivityIntent` as one local schema-v8 countdown `ActivitySession` restricted to 2/5/10/25 minutes.
+- [x] Derive elapsed and remaining time from persisted timestamps; restore running/paused state and reconcile elapsed countdowns after restart.
+- [x] Add pause, resume, automatic completion, neutral early stop, and cancellation without rewards or punishment.
+- [x] Persist actual elapsed time and prevent duplicate open sessions or duplicate completion.
+- [x] Add Focus ready, running, paused, completed, and stopped states with focused ownership/timing/persistence tests.
+
+**M1B status:** Implemented on `mobile/expo-v1`; focused and full Mobile tests, lint, strict TypeScript, Expo dependency validation, and iOS/Android exports pass. Rewards, post-session choices, Today/history, Tasks/Habits UI, cloud writes, notifications/background services, and later M1 features remain out of scope.
 
 ## Explicitly excluded
 

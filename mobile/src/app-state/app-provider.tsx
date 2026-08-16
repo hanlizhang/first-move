@@ -28,18 +28,32 @@ import {
   type CloudHydrationState,
   type CloudRpcClient,
 } from "../cloud/read-only-hydration.ts";
-import { createMobileRepository } from "../local/repository.ts";
+import { createEmptyState, type AppState } from "../domain/models.ts";
+import { reconcileRunningCountdown } from "../domain/sessions.ts";
+import {
+  createMobileRepository,
+  localWorkspaceKey,
+} from "../local/repository.ts";
 import { getSupabaseClient } from "../supabase/client.ts";
+import { localWorkspaceOwnerForAuth } from "./local-workspace-owner.ts";
+
+type LocalWorkspaceStatus = "loading" | "ready" | "error";
 
 interface AppContextValue {
   auth: AuthState;
   cloud: CloudHydrationState;
+  localWorkspace: AppState;
+  localWorkspaceStatus: LocalWorkspaceStatus;
+  localWorkspaceMessage?: string;
   continueAsGuest(): void;
   openSignIn(): void;
   sendMagicLink(email: string): Promise<void>;
   signOut(): Promise<void>;
   retryAuthRestore(): Promise<void>;
   refreshCloud(): Promise<void>;
+  updateLocalWorkspace(
+    recipe: (current: AppState) => AppState,
+  ): Promise<AppState | undefined>;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -48,7 +62,41 @@ const repository = createMobileRepository();
 export function AppProvider({ children }: { children: ReactNode }) {
   const [auth, dispatch] = useReducer(reduceAuthState, initialAuthState);
   const [cloud, setCloud] = useState<CloudHydrationState>({ status: "idle" });
+  const [localWorkspace, setLocalWorkspace] = useState<AppState>(createEmptyState);
+  const [loadedLocalOwnerKey, setLoadedLocalOwnerKey] = useState<
+    string | undefined
+  >();
+  const [localWorkspaceStatus, setLocalWorkspaceStatus] =
+    useState<LocalWorkspaceStatus>("loading");
+  const [localWorkspaceMessage, setLocalWorkspaceMessage] = useState<
+    string | undefined
+  >();
   const clientRef = useRef<SupabaseClient | undefined>(undefined);
+  const authenticatedUserId =
+    auth.status === "authenticated" ? auth.user.id : undefined;
+  const localOwner = useMemo(
+    () => localWorkspaceOwnerForAuth(auth.status, authenticatedUserId),
+    [auth.status, authenticatedUserId],
+  );
+  const activeLocalOwnerKey = localOwner
+    ? localWorkspaceKey(localOwner)
+    : undefined;
+  const activeLocalOwnerKeyRef = useRef(activeLocalOwnerKey);
+  const visibleLocalWorkspace = useMemo(
+    () =>
+      activeLocalOwnerKey && loadedLocalOwnerKey === activeLocalOwnerKey
+        ? localWorkspace
+        : createEmptyState(),
+    [activeLocalOwnerKey, loadedLocalOwnerKey, localWorkspace],
+  );
+  const visibleLocalWorkspaceStatus: LocalWorkspaceStatus =
+    activeLocalOwnerKey && loadedLocalOwnerKey === activeLocalOwnerKey
+      ? localWorkspaceStatus
+      : "loading";
+  const visibleLocalWorkspaceMessage =
+    activeLocalOwnerKey && loadedLocalOwnerKey === activeLocalOwnerKey
+      ? localWorkspaceMessage
+      : undefined;
 
   const resolveClient = useCallback(() => {
     const client = clientRef.current ?? getSupabaseClient();
@@ -59,7 +107,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const restore = useCallback(async () => {
     dispatch({ type: "RESTORE_STARTED" });
     try {
-      await repository.loadGuestWorkspace();
       const client = resolveClient();
       dispatch(await restoreAuthSession(client.auth));
     } catch {
@@ -71,8 +118,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [resolveClient]);
 
   useEffect(() => {
-    void restore();
+    const timer = setTimeout(() => void restore(), 0);
+    return () => clearTimeout(timer);
   }, [restore]);
+
+  useEffect(() => {
+    activeLocalOwnerKeyRef.current = activeLocalOwnerKey;
+  }, [activeLocalOwnerKey]);
+
+  useEffect(() => {
+    if (!localOwner || !activeLocalOwnerKey) return;
+    let active = true;
+    const owner = localOwner;
+    const ownerKey = activeLocalOwnerKey;
+    const timer = setTimeout(() => {
+      void loadSelectedWorkspace();
+    }, 0);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+
+    async function loadSelectedWorkspace() {
+      try {
+        const loaded = await repository.loadLocalWorkspace(owner);
+        const reconciled = reconcileRunningCountdown(loaded, Date.now());
+        if (reconciled !== loaded) {
+          await repository.saveLocalWorkspace(owner, reconciled);
+        }
+        if (!active || activeLocalOwnerKeyRef.current !== ownerKey) return;
+        setLocalWorkspace(reconciled);
+        setLoadedLocalOwnerKey(ownerKey);
+        setLocalWorkspaceStatus("ready");
+        setLocalWorkspaceMessage(undefined);
+      } catch {
+        if (!active || activeLocalOwnerKeyRef.current !== ownerKey) return;
+        setLocalWorkspace(createEmptyState());
+        setLoadedLocalOwnerKey(ownerKey);
+        setLocalWorkspaceStatus("error");
+        setLocalWorkspaceMessage(
+          "Local progress could not be loaded. Nothing was deleted; try again before saving a First Move.",
+        );
+      }
+    }
+  }, [activeLocalOwnerKey, localOwner]);
 
   useEffect(() => {
     let client: SupabaseClient;
@@ -186,26 +275,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (auth.status === "authenticated") await hydrate(auth.user.id);
   }, [auth, hydrate]);
 
+  const updateLocalWorkspace = useCallback(
+    async (recipe: (current: AppState) => AppState) => {
+      if (!localOwner || !activeLocalOwnerKey) return undefined;
+      const owner = localOwner;
+      const ownerKey = activeLocalOwnerKey;
+      try {
+        const next = await repository.updateLocalWorkspace(owner, recipe);
+        if (activeLocalOwnerKeyRef.current !== ownerKey) return next;
+        setLocalWorkspace(next);
+        setLoadedLocalOwnerKey(ownerKey);
+        setLocalWorkspaceStatus("ready");
+        setLocalWorkspaceMessage(undefined);
+        return next;
+      } catch {
+        if (activeLocalOwnerKeyRef.current !== ownerKey) return undefined;
+        setLocalWorkspaceStatus("error");
+        setLocalWorkspaceMessage(
+          "This local change could not be saved on this device. Your existing progress was not deleted.",
+        );
+        return undefined;
+      }
+    },
+    [activeLocalOwnerKey, localOwner],
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       auth,
       cloud,
+      localWorkspace: visibleLocalWorkspace,
+      localWorkspaceStatus: visibleLocalWorkspaceStatus,
+      localWorkspaceMessage: visibleLocalWorkspaceMessage,
       continueAsGuest,
       openSignIn,
       sendMagicLink,
       signOut,
       retryAuthRestore: restore,
       refreshCloud,
+      updateLocalWorkspace,
     }),
     [
       auth,
       cloud,
+      visibleLocalWorkspace,
+      visibleLocalWorkspaceStatus,
+      visibleLocalWorkspaceMessage,
       continueAsGuest,
       openSignIn,
       sendMagicLink,
       signOut,
       restore,
       refreshCloud,
+      updateLocalWorkspace,
     ],
   );
 

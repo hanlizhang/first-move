@@ -33,7 +33,7 @@ export async function hydrateInitializedWorkspace(
       return {
         status: "setup-unavailable",
         message:
-          "This account has no cloud workspace yet. Cloud setup is not available until M1; keep using Guest Mode on this device.",
+          "This account has no cloud workspace yet. Cloud setup is not available in Mobile M1B; keep using local progress on this device.",
       };
     }
 

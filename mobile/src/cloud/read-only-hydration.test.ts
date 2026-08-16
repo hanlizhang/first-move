@@ -13,10 +13,22 @@ import type { MobileRepository } from "../local/repository.ts";
 function repository() {
   const saves: { userId: string; hydratedAt: string }[] = [];
   const value: MobileRepository = {
+    async loadLocalWorkspace() {
+      throw new Error("not used");
+    },
+    async saveLocalWorkspace() {
+      throw new Error("not used");
+    },
+    async updateLocalWorkspace() {
+      throw new Error("not used");
+    },
     async loadGuestWorkspace() {
       throw new Error("not used");
     },
     async saveGuestWorkspace() {
+      throw new Error("not used");
+    },
+    async updateGuestWorkspace() {
       throw new Error("not used");
     },
     async loadCloudWorkspace() {

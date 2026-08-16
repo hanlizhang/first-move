@@ -1,9 +1,16 @@
 import { validateCanonicalWorkspace, type CanonicalWorkspace } from "../cloud/canonical-workspace.ts";
+import { normalizeAppState } from "../domain/app-state.ts";
 import { createEmptyState, type AppState } from "../domain/models.ts";
 
 export const GUEST_WORKSPACE_KEY = "first-move:mobile:guest:v1";
+export const ACCOUNT_LOCAL_WORKSPACE_KEY_PREFIX =
+  "first-move:mobile:account-local:v1:";
 export const CLOUD_CACHE_KEY_PREFIX = "first-move:mobile:cloud-cache:v1:";
 export const LOCAL_REPOSITORY_VERSION = 1 as const;
+
+export type LocalWorkspaceOwner =
+  | { kind: "guest" }
+  | { kind: "account"; userId: string };
 
 export interface AsyncKeyValueStore {
   getItem(key: string): Promise<string | null>;
@@ -23,24 +30,92 @@ interface CloudCacheEnvelope {
 }
 
 export interface MobileRepository {
+  loadLocalWorkspace(owner: LocalWorkspaceOwner): Promise<AppState>;
+  saveLocalWorkspace(owner: LocalWorkspaceOwner, state: AppState): Promise<void>;
+  updateLocalWorkspace(
+    owner: LocalWorkspaceOwner,
+    recipe: (current: AppState) => AppState,
+  ): Promise<AppState>;
   loadGuestWorkspace(): Promise<AppState>;
   saveGuestWorkspace(state: AppState): Promise<void>;
+  updateGuestWorkspace(recipe: (current: AppState) => AppState): Promise<AppState>;
   loadCloudWorkspace(userId: string): Promise<CanonicalWorkspace | undefined>;
   saveCloudWorkspace(userId: string, workspace: CanonicalWorkspace, hydratedAt: string): Promise<void>;
 }
 
 export function createMobileRepositoryWithStore(store: AsyncKeyValueStore): MobileRepository {
+  const mutationQueues = new Map<string, Promise<void>>();
+
+  async function loadLocalWorkspace(owner: LocalWorkspaceOwner): Promise<AppState> {
+    const key = localWorkspaceKey(owner);
+    let raw: string | null;
+    try {
+      raw = await store.getItem(key);
+    } catch {
+      return createEmptyState();
+    }
+    const envelope = migrateGuestEnvelope(parseJson(raw));
+    try {
+      await store.setItem(key, JSON.stringify(envelope));
+    } catch {
+      // A readable workspace remains usable in memory even if repair persistence fails.
+    }
+    return envelope.state;
+  }
+
+  async function saveLocalWorkspace(
+    owner: LocalWorkspaceOwner,
+    state: AppState,
+  ): Promise<void> {
+    const envelope: GuestEnvelope = {
+      version: LOCAL_REPOSITORY_VERSION,
+      state: normalizeAppState(state),
+    };
+    await store.setItem(localWorkspaceKey(owner), JSON.stringify(envelope));
+  }
+
+  async function updateLocalWorkspace(
+    owner: LocalWorkspaceOwner,
+    recipe: (current: AppState) => AppState,
+  ): Promise<AppState> {
+    const key = localWorkspaceKey(owner);
+    let result = createEmptyState();
+    const previous = mutationQueues.get(key) ?? Promise.resolve();
+    const mutation = previous.then(async () => {
+      const current = await loadLocalWorkspace(owner);
+      result = normalizeAppState(recipe(current));
+      await saveLocalWorkspace(owner, result);
+    });
+    mutationQueues.set(
+      key,
+      mutation.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    await mutation;
+    return result;
+  }
+
+  const guestOwner: LocalWorkspaceOwner = { kind: "guest" };
+
   return {
-    async loadGuestWorkspace() {
-      const raw = await store.getItem(GUEST_WORKSPACE_KEY);
-      const envelope = migrateGuestEnvelope(parseJson(raw));
-      await store.setItem(GUEST_WORKSPACE_KEY, JSON.stringify(envelope));
-      return envelope.state;
+    loadLocalWorkspace,
+
+    saveLocalWorkspace,
+
+    updateLocalWorkspace,
+
+    loadGuestWorkspace() {
+      return loadLocalWorkspace(guestOwner);
     },
 
-    async saveGuestWorkspace(state) {
-      const envelope = migrateGuestEnvelope({ version: LOCAL_REPOSITORY_VERSION, state });
-      await store.setItem(GUEST_WORKSPACE_KEY, JSON.stringify(envelope));
+    saveGuestWorkspace(state) {
+      return saveLocalWorkspace(guestOwner, state);
+    },
+
+    async updateGuestWorkspace(recipe) {
+      return updateLocalWorkspace(guestOwner, recipe);
     },
 
     async loadCloudWorkspace(userId) {
@@ -71,32 +146,30 @@ export function cloudCacheKey(userId: string): string {
   return `${CLOUD_CACHE_KEY_PREFIX}${userId}`;
 }
 
-export function migrateGuestEnvelope(value: unknown): GuestEnvelope {
-  if (isRecord(value) && value.version === LOCAL_REPOSITORY_VERSION && isSchemaV8State(value.state)) {
-    return { version: LOCAL_REPOSITORY_VERSION, state: structuredClone(value.state) };
-  }
-  if (isSchemaV8State(value)) {
-    return { version: LOCAL_REPOSITORY_VERSION, state: structuredClone(value) };
-  }
-  return { version: LOCAL_REPOSITORY_VERSION, state: createEmptyState() };
+export function accountLocalWorkspaceKey(userId: string): string {
+  return `${ACCOUNT_LOCAL_WORKSPACE_KEY_PREFIX}${userId}`;
 }
 
-function isSchemaV8State(value: unknown): value is AppState {
-  return (
-    isRecord(value) &&
-    value.schemaVersion === 8 &&
-    Array.isArray(value.tasks) &&
-    Array.isArray(value.habits) &&
-    Array.isArray(value.activityIntents) &&
-    Array.isArray(value.sessions) &&
-    Array.isArray(value.rewardEvents) &&
-    Array.isArray(value.journalEntries) &&
-    Array.isArray(value.morningChecks) &&
-    Array.isArray(value.morningAttempts) &&
-    isRecord(value.inventory) &&
-    Array.isArray(value.inventory.items) &&
-    isRecord(value.progress)
-  );
+export function localWorkspaceKey(owner: LocalWorkspaceOwner): string {
+  return owner.kind === "guest"
+    ? GUEST_WORKSPACE_KEY
+    : accountLocalWorkspaceKey(owner.userId);
+}
+
+export function migrateGuestEnvelope(value: unknown): GuestEnvelope {
+  if (isRecord(value) && value.version === LOCAL_REPOSITORY_VERSION) {
+    return {
+      version: LOCAL_REPOSITORY_VERSION,
+      state: normalizeAppState(value.state),
+    };
+  }
+  if (isRecord(value)) {
+    return {
+      version: LOCAL_REPOSITORY_VERSION,
+      state: normalizeAppState(value),
+    };
+  }
+  return { version: LOCAL_REPOSITORY_VERSION, state: createEmptyState() };
 }
 
 function parseJson(value: string | null): unknown {

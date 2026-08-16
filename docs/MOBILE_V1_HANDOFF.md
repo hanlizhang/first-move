@@ -172,11 +172,15 @@ M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate
 
 ### M1 — Core features
 
-Status: **not started**. Port the I'm Stuck flow, local templates, tasks, habits, timers/session recovery, daily plans, Morning metadata, Mini Journal, history, cat/inventory presentation, Phase B2 choices, canonical hydration, retry-safe continuous writes, and all server-authoritative economy RPCs. Run web/mobile same-account acceptance.
+Status: **M1A and M1B implemented; later M1 work not started**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
+
+Focus turns that intent into a local 2/5/10/25-minute countdown `ActivitySession`. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic zero completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention. Guest local state and each Supabase Auth UUID’s local state use separate namespaces; switching owners exposes only that owner without deleting or merging data. Validated canonical cloud caches remain separate and all cloud business data remains read-only.
+
+Remaining M1 work includes Tasks/Habits UI, post-session choices, rewards/Today/history, daily plans, Morning metadata, Mini Journal, cat/inventory presentation, Phase B2 choices, retry-safe continuous writes, and server-authoritative economy RPCs. Run Web/Mobile same-account acceptance only when the corresponding write path exists.
 
 ### M2 — Native capabilities
 
-Status: **not started**. Add camera/photo-picker permission flows with memory-only toothbrush images, haptics, optional local notifications where platform rules permit, background/foreground timer recovery, accessibility, reduced motion, secure storage recovery, deep-link hardening, and offline lifecycle tests. Do not promise guaranteed background alarms or app blocking.
+Status: **not started**. Add camera/photo-picker permission flows with memory-only toothbrush images, haptics, optional local notifications where platform rules permit, background/foreground lifecycle hardening, accessibility, reduced motion, secure storage recovery, deep-link hardening, and offline lifecycle tests. Do not promise guaranteed background alarms or app blocking.
 
 ### M3 — RevenueCat and AI access
 

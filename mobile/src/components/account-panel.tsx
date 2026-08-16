@@ -47,7 +47,7 @@ export function AccountPanel() {
         <Label>Guest Mode</Label>
         <Heading>Local and account data stay separate</Heading>
         <Body>
-          This M0 shell keeps guest progress on this device. Signing in never uploads, merges, or deletes it.
+          Guest progress and each account’s local progress use separate device storage. Signing in never uploads, merges, or deletes either side.
         </Body>
         <PrimaryButton title="Sync across devices" onPress={openSignIn} />
       </Card>
@@ -133,7 +133,7 @@ export function AccountPanel() {
       return (
         <Card tone="warning">
           <Label>Cloud setup unavailable</Label>
-          <Heading>Available in M1</Heading>
+          <Heading>Not available in M1B</Heading>
           <Body>{cloud.message}</Body>
         </Card>
       );
@@ -160,7 +160,7 @@ export function AccountPanel() {
             <Metric label="Points" value={state.progress.points} />
           </View>
           <Body muted>
-            M0 can read this initialized workspace. It cannot create, edit, import, merge, purchase, or sync business data.
+            Mobile can read this initialized workspace. It cannot create, edit, import, merge, purchase, or sync cloud business data yet.
           </Body>
           <SecondaryButton title="Refresh cloud data" onPress={onRefresh} />
         </Card>
