@@ -38,16 +38,21 @@
 
 ## TASK-03A: Countdown timers, stopwatch tracking, and persisted ActivitySessions
 
-- [x] Start a timestamp-based countdown from a pending intent with 2/5/10/25/50-minute presets and a validated custom duration.
-- [x] Add an independent stopwatch with optional Task, Habit, or ActivityIntent linking and editable inherited direction.
+> **Cross-platform Focus rule:** Focus can be entered directly without “I'm Stuck.” Quick Countdown and Stopwatch remain normal standalone tools with an optional title, one of five directions, and an optional existing Task or Habit link, even when “I'm Stuck” has supplied a separate prefilled pending First Move card. Ordinary Focus does not create an `ActivityIntent`.
+
+- [x] Start a timestamp-based Quick Countdown with 2/5/10/25/50-minute presets or a validated custom duration, or start the pending First Move at its intended duration.
+- [x] Add an independent stopwatch with an optional Task or Habit link, or no link, and editable inherited direction.
+- [x] Start the separate pending First Move through the shared countdown engine while retaining its historical Intent and existing Task/Habit relationship.
 - [x] Persist running and paused ActivitySessions with refresh-safe elapsed-time recovery.
-- [x] Support pause, resume, stop early, and idempotent completion while saving actual elapsed time.
+- [x] Support pause, resume, cancel, stop early, and idempotent completion while saving actual elapsed time.
+- [x] Clear only the matching active pending Intent after completion or intentional stop; keep it ready after Session cancellation.
 - [x] Add neutral unfinished feedback plus tests for recovery, inheritance, malformed data, and duplicate prevention.
 
 ### Acceptance criteria
 
 - Refreshing cannot reset a running timer because elapsed time is derived from persisted timestamps.
-- A session may link to one Task, Habit, or ActivityIntent, or remain unlinked; direction inherits when available and can be edited before start.
+- A standalone session may link to one Task or Habit or remain unlinked; an assisted countdown retains its pending ActivityIntent link and inherits its prefilled values.
+- A pending First Move never hides or preselects Quick Countdown, and its historical Intent relationship remains after the active pending state is cleared.
 - Completing or starting repeatedly cannot create duplicate completed or simultaneously open sessions.
 - Early stop saves elapsed time without a failure, penalty, reward, chart, or statistic.
 
@@ -55,15 +60,15 @@
 
 ## TASK-03B: Post-session review, Today timeline, rewards, and daily summaries
 
-- [x] Add a compact review for completed and intentionally stopped sessions with editable title, category, and optional Task link.
-- [x] Keep sessions standalone by default and support linking, relinking, or removing a Task link without creating Tasks.
+- [x] Persist completed and intentionally stopped Sessions immediately, show the saved result without confirmation, and offer optional `Edit details` for title, category, and Task/Habit link while retaining assisted ActivityIntent relationships.
+- [x] Keep sessions standalone by default and support linking, relinking, or removing a Task/Habit link without creating either item.
 - [x] Add duplicate-safe session rewards at 0.1 point per completed minute and 30% of that rate when intentionally stopped; sessions under one minute receive no time reward.
 - [x] Show Today tracked-time totals, five-category totals, and a chronological timeline of sessions, task completions, and habit check-ins.
 - [x] Show total tracked time per Task while retaining every linked Session as a separate record.
 
 ### Acceptance criteria
 
-- A closed Session can be reviewed and saved without a Task, including a neutral stopped-early outcome and actual duration.
+- A closed Session is already saved without review or a Task, including a neutral stopped-early outcome and actual duration; optional edits persist through `reviewSession`.
 - Today totals derive from persisted closed Sessions; timeline entries remain distinct and have clear empty states.
 - Each Session creates at most one reward rounded to one decimal; less than 60 seconds earns zero time points.
 - Linking changes only Session metadata and never creates, completes, or merges Tasks.

@@ -41,15 +41,17 @@ test("tombstoned historical completion does not reappear in completedOn", () => 
   assert.equal(workspace.state.rewardEvents.length, 1);
 });
 
-test("placeholder intent stays hidden while the historical session keeps its relationship", () => {
+test("tombstoned intent stays hidden while the historical session keeps its relationship", () => {
   const intentId = "15000000-0000-4000-8000-000000000001";
-  const workspace = validateCanonicalWorkspace({
-    ...canonical,
-    activity_intents: [{ id: intentId, status: "consumed", deleted_at: "2026-07-29T09:02:00Z" }],
-    activity_sessions: [{ id: "16000000-0000-4000-8000-000000000001", mode: "countdown", status: "completed", direction: "Daily Life", label: "Historical", target_duration_minutes: 2, linked_intent_id: intentId, started_at: "2026-07-29T09:00:00Z", accumulated_elapsed_ms: 120000, ended_at: "2026-07-29T09:02:00Z", actual_elapsed_ms: 120000 }],
-  });
-  assert.equal(workspace.state.activityIntents.length, 0);
-  assert.equal(workspace.state.sessions[0].linkedIntentId, intentId);
+  for (const status of ["consumed", "cancelled"]) {
+    const workspace = validateCanonicalWorkspace({
+      ...canonical,
+      activity_intents: [{ id: intentId, status, deleted_at: "2026-07-29T09:02:00Z" }],
+      activity_sessions: [{ id: "16000000-0000-4000-8000-000000000001", mode: "countdown", status: "completed", direction: "Daily Life", label: "Historical", target_duration_minutes: 2, linked_intent_id: intentId, started_at: "2026-07-29T09:00:00Z", accumulated_elapsed_ms: 120000, ended_at: "2026-07-29T09:02:00Z", actual_elapsed_ms: 120000 }],
+    });
+    assert.equal(workspace.state.activityIntents.length, 0);
+    assert.equal(workspace.state.sessions[0].linkedIntentId, intentId);
+  }
 });
 
 test("tombstoned task and habit parents validate history but stay out of active lists", () => {
@@ -68,6 +70,52 @@ test("tombstoned task and habit parents validate history but stay out of active 
   assert.equal(workspace.state.sessions[0].linkedTaskId, deletedTaskId);
   assert.equal(workspace.state.sessions[1].linkedHabitId, deletedHabitId);
   assert.throws(() => validateCanonicalWorkspace({ ...value, tasks: canonical.tasks }), /task reference/);
+});
+
+test("canonical hydration preserves standalone, Task-linked, and Habit-linked Focus sessions", () => {
+  const taskId = canonical.tasks[0].id;
+  const habitId = "1a000000-0000-4000-8000-000000000001";
+  const closedSession = {
+    mode: "countdown",
+    status: "stopped",
+    direction: "Daily Life",
+    label: "Focus time",
+    target_duration_minutes: 25,
+    started_at: "2026-07-29T10:00:00Z",
+    accumulated_elapsed_ms: 0,
+    ended_at: "2026-07-29T10:00:00Z",
+    actual_elapsed_ms: 0,
+  };
+  const workspace = validateCanonicalWorkspace({
+    ...canonical,
+    habits: [{
+      id: habitId,
+      title: "Stretch",
+      direction: "Exercise & Movement",
+      schedule_kind: "daily",
+      created_at: "2026-07-29T08:00:00Z",
+      updated_at: "2026-07-29T08:00:00Z",
+    }],
+    activity_sessions: [
+      { ...closedSession, id: "1b000000-0000-4000-8000-000000000001" },
+      { ...closedSession, id: "1c000000-0000-4000-8000-000000000001", label: "Cloud task", linked_task_id: taskId },
+      {
+        ...closedSession,
+        id: "1d000000-0000-4000-8000-000000000001",
+        mode: "stopwatch",
+        label: "Stretch",
+        target_duration_minutes: null,
+        linked_habit_id: habitId,
+      },
+    ],
+  });
+
+  assert.equal(workspace.state.sessions[0].linkedTaskId, undefined);
+  assert.equal(workspace.state.sessions[0].linkedHabitId, undefined);
+  assert.equal(workspace.state.sessions[0].linkedIntentId, undefined);
+  assert.equal(workspace.state.sessions[1].linkedTaskId, taskId);
+  assert.equal(workspace.state.sessions[2].linkedHabitId, habitId);
+  assert.equal(workspace.state.sessions[2].mode, "stopwatch");
 });
 
 test("Use cloud progress replaces both stores only after validation and never deletes keys", () => {
