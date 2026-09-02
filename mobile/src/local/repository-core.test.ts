@@ -5,6 +5,13 @@ import { validateCanonicalWorkspace } from "../cloud/canonical-workspace.ts";
 import { createPendingIntent, getPendingIntent } from "../domain/app-state.ts";
 import { createEmptyState } from "../domain/models.ts";
 import {
+  addHabit,
+  addTask,
+  softDeleteTask,
+  toggleHabitCompletion,
+  toggleTaskCompletion,
+} from "../domain/tasks-habits.ts";
+import {
   getOpenSession,
   pauseSession,
   reconcileRunningCountdown,
@@ -13,7 +20,7 @@ import {
   startStopwatch,
   stopSession,
 } from "../domain/sessions.ts";
-import { canonicalPayload, USER_ID } from "../test-fixtures/canonical.ts";
+import { canonicalPayload, TASK_ID, USER_ID } from "../test-fixtures/canonical.ts";
 import {
   accountLocalWorkspaceKey,
   GUEST_WORKSPACE_KEY,
@@ -312,4 +319,72 @@ test("standalone Stopwatch records stay isolated by local workspace owner", asyn
       .sessions.length,
     0,
   );
+});
+
+test("M1D Task and Habit writes stay serialized in their local owner namespace", async () => {
+  const store = memoryStore();
+  const repository = createMobileRepositoryWithStore(store);
+  const guestOwner = { kind: "guest" } as const;
+  const accountOwner = { kind: "account", userId: USER_ID } as const;
+  const taskId = "40000000-0000-4000-8000-000000000001";
+  const habitId = "50000000-0000-4000-8000-000000000001";
+
+  await repository.updateLocalWorkspace(guestOwner, (state) =>
+    toggleTaskCompletion(
+      addTask(
+        state,
+        { title: "Guest Task", direction: "Daily Life" },
+        () => "2026-09-02T08:00:00.000Z",
+        () => taskId,
+      ),
+      taskId,
+      "2026-09-02",
+      () => "2026-09-02T08:01:00.000Z",
+    ),
+  );
+  await repository.updateLocalWorkspace(accountOwner, (state) =>
+    toggleHabitCompletion(
+      addHabit(
+        state,
+        {
+          title: "Account Habit",
+          direction: "Exercise & Movement",
+          schedule: { kind: "daily" },
+        },
+        () => "2026-09-02T08:02:00.000Z",
+        () => habitId,
+      ),
+      habitId,
+      "2026-09-02",
+      () => "2026-09-02T08:03:00.000Z",
+    ),
+  );
+  await repository.saveCloudWorkspace(
+    USER_ID,
+    validateCanonicalWorkspace(canonicalPayload()),
+    "2026-09-02T08:04:00.000Z",
+  );
+
+  assert.deepEqual((await repository.loadLocalWorkspace(guestOwner)).tasks, [
+    {
+      id: taskId,
+      title: "Guest Task",
+      direction: "Daily Life",
+      order: 0,
+      createdAt: "2026-09-02T08:00:00.000Z",
+      updatedAt: "2026-09-02T08:01:00.000Z",
+      completedOn: ["2026-09-02"],
+    },
+  ]);
+  assert.equal((await repository.loadLocalWorkspace(guestOwner)).habits.length, 0);
+  assert.equal((await repository.loadLocalWorkspace(accountOwner)).tasks.length, 0);
+  assert.equal((await repository.loadLocalWorkspace(accountOwner)).habits[0]?.id, habitId);
+  assert.equal((await repository.loadCloudWorkspace(USER_ID))?.state.tasks[0]?.id, TASK_ID);
+
+  await repository.updateLocalWorkspace(guestOwner, (state) =>
+    softDeleteTask(state, taskId),
+  );
+  assert.equal((await repository.loadLocalWorkspace(guestOwner)).tasks.length, 0);
+  assert.equal((await repository.loadLocalWorkspace(accountOwner)).habits[0]?.id, habitId);
+  assert.equal((await repository.loadCloudWorkspace(USER_ID))?.state.tasks[0]?.id, TASK_ID);
 });

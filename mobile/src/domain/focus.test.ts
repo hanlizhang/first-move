@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildFocusLinkOptions,
+  filterFocusLinkOptions,
   focusLinkFields,
   focusLinkKey,
   parseFocusDurationInput,
@@ -117,4 +118,44 @@ test("custom countdown validation accepts only whole minutes from 1 through 720"
     assert.equal(parseFocusDurationInput(value), undefined);
   }
   assert.equal(focusLinkKey("habit", "habit:legacy"), "habit:habit:legacy");
+});
+
+test("Focus link search matches titles, kinds, and directions without changing identity", () => {
+  const state = createEmptyState();
+  state.tasks = [
+    {
+      id: "10000000-0000-4000-8000-000000000001",
+      title: "Apply to a few jobs",
+      direction: "Work & Study",
+      order: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [],
+    },
+  ];
+  state.habits = [
+    {
+      id: "20000000-0000-4000-8000-000000000001",
+      title: "Evening stretch",
+      direction: "Exercise & Movement",
+      schedule: { kind: "daily" },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [],
+    },
+  ];
+  const options = buildFocusLinkOptions(state);
+
+  assert.deepEqual(
+    filterFocusLinkOptions(options, " jobs ").map((option) => option.key),
+    ["task:10000000-0000-4000-8000-000000000001"],
+  );
+  assert.deepEqual(
+    filterFocusLinkOptions(options, "habit").map((option) => option.key),
+    ["habit:20000000-0000-4000-8000-000000000001"],
+  );
+  assert.deepEqual(
+    filterFocusLinkOptions(options, "movement").map((option) => option.key),
+    ["habit:20000000-0000-4000-8000-000000000001"],
+  );
 });

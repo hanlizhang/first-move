@@ -15,6 +15,8 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="tasks" />
+          <Stack.Screen name="habits" />
           <Stack.Screen name="auth/callback" options={{ gestureEnabled: false }} />
         </Stack>
       </AppProvider>

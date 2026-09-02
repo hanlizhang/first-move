@@ -1,4 +1,4 @@
-# First Move Mobile — M0 + M1A + M1B + M1C
+# First Move Mobile — M0 + M1A + M1B + M1C + M1D
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
@@ -11,7 +11,7 @@ This is an independent Expo React Native project. The Next.js Web app remains at
 - Supabase sessions persisted through an `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage. Long session values are safely chunked.
 - Schema-v8 Guest storage, per-account local storage, and validated account-scoped cloud caches remain separate.
 - Existing initialized accounts are read through `cloud_workspace_status` and then `get_cloud_workspace_v2` only.
-- Empty accounts show that cloud setup remains unavailable in M1C.
+- Empty accounts show that cloud setup remains unavailable until M1E.
 
 M0 does not import, merge, initialize, or write business data. It does not call `initialize_cloud_workspace`, `initialize_cloud_workspace_v2`, or `sync_cloud_workspace_v1`.
 
@@ -44,7 +44,28 @@ M0 does not import, merge, initialize, or write business data. It does not call 
 - Guest and per-Supabase-UUID local workspaces remain separate. Active canonical Tasks/Habits are offered only from the current UUID’s validated read-only cache and retain their UUID without being copied.
 - A later cloud writer must preserve ordered assisted start/close mutations and serialize only the active pending Intent view to the current snapshot RPC; retained local `consumed` history must never be sent back as pending.
 
-M1A/M1B/M1C do not implement full Tasks/Habits CRUD, cloud business writes, post-session choices, rewards, Today/history, Cat, Morning Start, AI, RevenueCat, notifications, background services, or SQL/RPC changes.
+## M1D boundary
+
+- Today opens dedicated Tasks and Habits screens backed only by the currently selected Guest or Supabase-UUID account-local AsyncStorage namespace.
+- Tasks use the schema-v8 `Task` shape and support UUID-v4 creation, title/direction edits, complete/uncomplete for the current local date, and removal from the active list.
+- Habits use the schema-v8 `Habit` and `HabitSchedule` shapes and support UUID-v4 creation, title/direction/schedule edits, current-date check/uncheck when scheduled, and removal from the active list.
+- Daily and non-empty selected-weekday schedules use the canonical `sun` through `sat` values. Titles normalize whitespace and remain bounded to 160 characters; timestamps remain ISO instants.
+- Active canonical Tasks/Habits from the current authenticated UUID are shown separately as read-only. They retain their canonical UUID and are never copied into account-local state.
+- Focus uses one compact linked-item field that opens a searchable modal with No linked item, Tasks, Habits, local/canonical source labels, and an explicit selected state.
+- Active-list deletion leaves historical `linkedTaskId` / `linkedHabitId` values intact. A later authenticated writer must translate deletion of an already-canonical row to the existing `deleted_at` tombstone contract.
+- M1D creates no rewards or history and calls no business-write RPC.
+
+M1A/M1B/M1C/M1D do not implement authenticated cloud business writes, Phase B2 setup choices, post-session choices, rewards/history, Cat, Morning Start, AI, RevenueCat, notifications, background services, or SQL/RPC changes.
+
+## M1E authenticated-write work remaining
+
+- Add explicit Start fresh, Import this device, and Use cloud progress choices without automatically merging or deleting Guest data.
+- Add an explicit activation choice for account-local M1D records that already coexist with an initialized canonical workspace. Never submit the account-local array as a full snapshot before reconciliation, because absent canonical rows would be tombstoned by `sync_cloud_workspace_v1`; after activation, expose canonical parents for editing under their same UUID rather than copying them to new IDs.
+- Add a stable device identity plus a durable, retry-safe, ordered local mutation/outbox pipeline. Assisted Focus delivery must create its Intent before closing its Session and serialize only the active pending Intent view.
+- Serialize UUID Task/Habit parents before relationships; materialize a referenced local parent that was deleted before the outbox existed before tombstoning it; map later active-list deletion to canonical tombstones; converge title, direction, Task rank, Habit schedule weekdays, and completion/uncompletion facts by local date and captured IANA timezone.
+- Treat acknowledged validated Supabase responses as canonical, keep the account-local cache and pending work on failure, and never expose one auth UUID’s cache or writes to another owner.
+- Let the server create idempotent Task/Habit completion rewards. Do not trust or synthesize a Mobile point total or client reward ledger.
+- Only after those paths exist, enable canonical Task/Habit editing and run Web/iOS/Android same-account create/edit/delete/schedule/check/offline-retry plus owner-isolation acceptance.
 
 ## Local setup
 
@@ -106,7 +127,7 @@ git diff --check
 - [ ] A valid email request says to check email and uses `firstmove://auth/callback`.
 - [ ] Opening a valid link reaches the callback screen, restores the same Supabase Auth UUID, and survives app restart.
 - [ ] An initialized account loads a verified read-only summary from `get_cloud_workspace_v2`.
-- [ ] An empty account shows that cloud setup is unavailable in M1C and makes no setup/import RPC.
+- [ ] An empty account shows that cloud setup is unavailable until M1E and makes no setup/import RPC.
 - [ ] Invalid/expired links and failed hydration show generic errors without exposing email, token, journal, or payload data.
 - [ ] Sign out returns to signed-out state while Guest Mode data and the account-scoped validated cache remain present.
 
@@ -147,3 +168,18 @@ git diff --check
 - [ ] With an initialized account, link a validated canonical Task and Habit; confirm the local Session stores their stable UUIDs, no parent is copied, and no business-write RPC occurs.
 - [ ] Switch between Guest, account A, and account B while Focus data exists; confirm local Sessions and canonical link choices never cross owners, including during hydration/loading.
 - [ ] Confirm stopped/completed Sessions add no rewards, points, Today/history entries, notifications, or background service behavior in M1C.
+
+## Manual M1D acceptance
+
+- [ ] In Guest Mode, open Today → Tasks, create a Task, and confirm its normalized title, chosen direction, UUID-v4 identity, created/updated ISO timestamps, order, and empty `completedOn` survive an app restart.
+- [ ] Edit that Task’s title and each of the five directions; complete and uncomplete it for the device’s current local date and confirm no reward/history record is created.
+- [ ] Delete the Task through the confirmation alert and confirm it leaves the active Task list and new Focus choices while any existing Session/Intent `linkedTaskId` remains unchanged.
+- [ ] Open Today → Habits, create one daily Habit and one selected-weekday Habit; confirm an empty selected-weekday set cannot be saved and stored weekday values use `sun`–`sat`.
+- [ ] Edit a Habit’s title, direction, and schedule in both directions; on a scheduled local date check and uncheck it, and confirm an unscheduled Habit is labeled and cannot be checked.
+- [ ] Delete the Habit through the confirmation alert and confirm it leaves the active Habit list and new Focus choices while historical `linkedHabitId` values remain unchanged.
+- [ ] In Focus Countdown, Stopwatch, and standalone Session review, confirm the old long inline list is replaced by one compact field showing `No linked item` or the selected `Task:` / `Habit:` label.
+- [ ] Open the linked-item modal, search by title and direction, inspect separate Tasks and Habits groups, choose and clear a relationship, and confirm the selected state is visible and the saved fields remain exactly `linkedTaskId` or `linkedHabitId`.
+- [ ] Sign in to initialized account A and confirm account-local Tasks/Habits are editable while canonical Tasks/Habits appear separately as read-only with no edit, check, or delete action; confirm canonical linking preserves the existing UUID.
+- [ ] Switch among Guest, account A, and account B and confirm Tasks, Habits, completions, schedules, and Focus choices never merge or cross owners. Sign out and back in to confirm no namespace was deleted.
+- [ ] Monitor Supabase requests while creating, editing, completing, scheduling, and deleting account-local items; confirm only auth/status/read hydration occurs and no business-write, setup, import, SQL, or new RPC path is invoked.
+- [ ] Confirm M1D adds no rewards, Today timeline/history, post-session choices, Cat/Morning/AI/RevenueCat behavior, notifications, or native dependency.
