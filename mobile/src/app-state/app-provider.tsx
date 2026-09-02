@@ -24,6 +24,7 @@ import {
 import { requestMagicLink } from "../auth/magic-link.ts";
 import { signOutWithoutDeletingLocalData } from "../auth/sign-out.ts";
 import {
+  cloudHydrationForUser,
   hydrateInitializedWorkspace,
   type CloudHydrationState,
   type CloudRpcClient,
@@ -72,8 +73,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     string | undefined
   >();
   const clientRef = useRef<SupabaseClient | undefined>(undefined);
+  const hydrationRequestRef = useRef(0);
   const authenticatedUserId =
     auth.status === "authenticated" ? auth.user.id : undefined;
+  const authenticatedUserIdRef = useRef(authenticatedUserId);
   const localOwner = useMemo(
     () => localWorkspaceOwnerForAuth(auth.status, authenticatedUserId),
     [auth.status, authenticatedUserId],
@@ -97,6 +100,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     activeLocalOwnerKey && loadedLocalOwnerKey === activeLocalOwnerKey
       ? localWorkspaceMessage
       : undefined;
+  const visibleCloud = useMemo<CloudHydrationState>(
+    () => cloudHydrationForUser(cloud, authenticatedUserId),
+    [authenticatedUserId, cloud],
+  );
 
   const resolveClient = useCallback(() => {
     const client = clientRef.current ?? getSupabaseClient();
@@ -116,6 +123,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     }
   }, [resolveClient]);
+
+  useEffect(() => {
+    authenticatedUserIdRef.current = authenticatedUserId;
+    hydrationRequestRef.current += 1;
+  }, [authenticatedUserId]);
 
   useEffect(() => {
     const timer = setTimeout(() => void restore(), 0);
@@ -197,6 +209,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const hydrate = useCallback(
     async (userId: string) => {
+      const requestId = hydrationRequestRef.current + 1;
+      hydrationRequestRef.current = requestId;
+      const isCurrent = () =>
+        hydrationRequestRef.current === requestId &&
+        authenticatedUserIdRef.current === userId;
       setCloud({ status: "loading" });
       try {
         const client = resolveClient();
@@ -206,8 +223,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return { data: response.data, error: response.error };
           },
         };
-        setCloud(await hydrateInitializedWorkspace(rpcClient, repository, userId));
+        const result = await hydrateInitializedWorkspace(
+          rpcClient,
+          repository,
+          userId,
+          undefined,
+          isCurrent,
+        );
+        if (isCurrent()) setCloud(result);
       } catch {
+        if (!isCurrent()) return;
         setCloud({
           status: "error",
           message:
@@ -303,7 +328,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => ({
       auth,
-      cloud,
+      cloud: visibleCloud,
       localWorkspace: visibleLocalWorkspace,
       localWorkspaceStatus: visibleLocalWorkspaceStatus,
       localWorkspaceMessage: visibleLocalWorkspaceMessage,
@@ -317,7 +342,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       auth,
-      cloud,
+      visibleCloud,
       visibleLocalWorkspace,
       visibleLocalWorkspaceStatus,
       visibleLocalWorkspaceMessage,
@@ -334,6 +359,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 
   function dispatchSession(session: Session | null): void {
+    hydrationRequestRef.current += 1;
+    authenticatedUserIdRef.current = session?.user.id;
     if (!session) {
       setCloud({ status: "idle" });
       dispatch({ type: "SIGNED_OUT" });

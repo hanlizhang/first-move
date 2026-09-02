@@ -172,11 +172,17 @@ M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate
 
 ### M1 — Core features
 
-Status: **M1A and M1B implemented; later M1 work not started**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
+Status: **M1A, M1B, and M1C implemented; later M1 work not started**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
 
-Focus turns that intent into a local 2/5/10/25-minute countdown `ActivitySession`. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic zero completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention. Guest local state and each Supabase Auth UUID’s local state use separate namespaces; switching owners exposes only that owner without deleting or merging data. Validated canonical cloud caches remain separate and all cloud business data remains read-only.
+Focus has three entries through the same local `ActivitySession` engine: the pending First Move at its 2/5/10/25-minute intended duration, standalone Countdown with 2/5/10/25/50-minute presets or validated 1–720 custom minutes, and standalone Stopwatch. Standalone tools accept an optional title, one of the five directions, and one existing Task or Habit link or no link; they do not create an `ActivityIntent`. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic countdown completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention.
 
-Remaining M1 work includes Tasks/Habits UI, post-session choices, rewards/Today/history, daily plans, Morning metadata, Mini Journal, cat/inventory presentation, Phase B2 choices, retry-safe continuous writes, and server-authoritative economy RPCs. Run Web/Mobile same-account acceptance only when the corresponding write path exists.
+Completed and intentionally stopped Sessions persist before optional review. Review can change title and direction; standalone Sessions can link, relink, or unlink an existing Task/Habit without creating a parent. An assisted Session retains `linkedIntentId`, while its full Intent record becomes historical/consumed and retains any Task/Habit relationship. Session cancellation removes the open Session and keeps the assisted Intent pending.
+
+Guest local state and each Supabase Auth UUID’s local state use separate namespaces; switching owners exposes only that owner without deleting or merging data. Active canonical Tasks/Habits may be selected only from the current UUID’s validated read-only cloud hydration and keep their existing UUID without being copied into local state. Validated canonical cloud caches remain separate and all cloud business data remains read-only.
+
+Future Mobile Focus writes must preserve the ordered start-before-close mutations. The existing snapshot RPC treats submitted Intent rows as pending, so a Mobile serializer must submit only the active pending view on close and must never reinterpret retained local `consumed` history as pending. Ordered delivery ensures an offline assisted start creates its Intent parent before the closed Session retains that foreign key; changing this contract requires a separately approved RPC/SQL milestone.
+
+Remaining M1 work includes Tasks/Habits CRUD, post-session choices, rewards/Today/history, daily plans, Morning metadata, Mini Journal, cat/inventory presentation, Phase B2 choices, retry-safe continuous writes, and server-authoritative economy RPCs. Run Web/Mobile same-account write acceptance only when the corresponding write path exists.
 
 ### M2 — Native capabilities
 

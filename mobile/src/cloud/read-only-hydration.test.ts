@@ -4,9 +4,11 @@ import test from "node:test";
 import {
   CLOUD_WORKSPACE_STATUS_RPC,
   GET_CLOUD_WORKSPACE_RPC,
+  cloudHydrationForUser,
   hydrateInitializedWorkspace,
   type CloudRpcClient,
 } from "./read-only-hydration.ts";
+import { validateCanonicalWorkspace } from "./canonical-workspace.ts";
 import { canonicalPayload, USER_ID } from "../test-fixtures/canonical.ts";
 import type { MobileRepository } from "../local/repository.ts";
 
@@ -77,6 +79,7 @@ test("initialized account uses the exact canonical v2 RPC and caches only after 
     () => "2026-08-02T12:00:00.000Z",
   );
   assert.equal(result.status, "ready");
+  assert.equal(result.status === "ready" ? result.userId : undefined, USER_ID);
   assert.deepEqual(calls, [CLOUD_WORKSPACE_STATUS_RPC, GET_CLOUD_WORKSPACE_RPC]);
   assert.deepEqual(local.saves, [
     { userId: USER_ID, hydratedAt: "2026-08-02T12:00:00.000Z" },
@@ -99,4 +102,43 @@ test("invalid canonical response is never cached and returns a privacy-safe erro
   assert.equal(result.status, "error");
   assert.equal(local.saves.length, 0);
   assert.doesNotMatch(JSON.stringify(result), /journal-private-text/);
+});
+
+test("a ready canonical workspace is visible only to its authenticated owner", () => {
+  const workspace = validateCanonicalWorkspace(canonicalPayload());
+  const ready = {
+    status: "ready" as const,
+    userId: USER_ID,
+    workspace,
+    hydratedAt: "2026-08-02T12:00:00.000Z",
+  };
+
+  assert.equal(cloudHydrationForUser(ready, USER_ID), ready);
+  assert.deepEqual(cloudHydrationForUser(ready, "another-account"), {
+    status: "loading",
+  });
+  assert.deepEqual(cloudHydrationForUser(ready), { status: "loading" });
+});
+
+test("an account switch aborts hydration before another owner can be cached", async () => {
+  const local = repository();
+  let current = true;
+  const result = await hydrateInitializedWorkspace(
+    {
+      async rpc(name) {
+        if (name === CLOUD_WORKSPACE_STATUS_RPC) {
+          return { data: { initialized: true }, error: null };
+        }
+        current = false;
+        return { data: canonicalPayload(), error: null };
+      },
+    },
+    local.value,
+    USER_ID,
+    () => "2026-08-02T12:00:00.000Z",
+    () => current,
+  );
+
+  assert.deepEqual(result, { status: "loading" });
+  assert.equal(local.saves.length, 0);
 });
