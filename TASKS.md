@@ -38,16 +38,21 @@
 
 ## TASK-03A: Countdown timers, stopwatch tracking, and persisted ActivitySessions
 
-- [x] Start a timestamp-based countdown from a pending intent with 2/5/10/25/50-minute presets and a validated custom duration.
-- [x] Add an independent stopwatch with optional Task, Habit, or ActivityIntent linking and editable inherited direction.
+> **Cross-platform Focus rule:** Focus can be entered directly without “I'm Stuck.” Quick Countdown and Stopwatch remain normal standalone tools with an optional title, one of five directions, and an optional existing Task or Habit link, even when “I'm Stuck” has supplied a separate prefilled pending First Move card. Ordinary Focus does not create an `ActivityIntent`.
+
+- [x] Start a timestamp-based Quick Countdown with 2/5/10/25/50-minute presets or a validated custom duration, or start the pending First Move at its intended duration.
+- [x] Add an independent stopwatch with an optional Task or Habit link, or no link, and editable inherited direction.
+- [x] Start the separate pending First Move through the shared countdown engine while retaining its historical Intent and existing Task/Habit relationship.
 - [x] Persist running and paused ActivitySessions with refresh-safe elapsed-time recovery.
-- [x] Support pause, resume, stop early, and idempotent completion while saving actual elapsed time.
+- [x] Support pause, resume, cancel, stop early, and idempotent completion while saving actual elapsed time.
+- [x] Clear only the matching active pending Intent after completion or intentional stop; keep it ready after Session cancellation.
 - [x] Add neutral unfinished feedback plus tests for recovery, inheritance, malformed data, and duplicate prevention.
 
 ### Acceptance criteria
 
 - Refreshing cannot reset a running timer because elapsed time is derived from persisted timestamps.
-- A session may link to one Task, Habit, or ActivityIntent, or remain unlinked; direction inherits when available and can be edited before start.
+- A standalone session may link to one Task or Habit or remain unlinked; an assisted countdown retains its pending ActivityIntent link and inherits its prefilled values.
+- A pending First Move never hides or preselects Quick Countdown, and its historical Intent relationship remains after the active pending state is cleared.
 - Completing or starting repeatedly cannot create duplicate completed or simultaneously open sessions.
 - Early stop saves elapsed time without a failure, penalty, reward, chart, or statistic.
 
@@ -55,15 +60,15 @@
 
 ## TASK-03B: Post-session review, Today timeline, rewards, and daily summaries
 
-- [x] Add a compact review for completed and intentionally stopped sessions with editable title, category, and optional Task link.
-- [x] Keep sessions standalone by default and support linking, relinking, or removing a Task link without creating Tasks.
+- [x] Persist completed and intentionally stopped Sessions immediately, show the saved result without confirmation, and offer optional `Edit details` for title, category, and Task/Habit link while retaining assisted ActivityIntent relationships.
+- [x] Keep sessions standalone by default and support linking, relinking, or removing a Task/Habit link without creating either item.
 - [x] Add duplicate-safe session rewards at 0.1 point per completed minute and 30% of that rate when intentionally stopped; sessions under one minute receive no time reward.
 - [x] Show Today tracked-time totals, five-category totals, and a chronological timeline of sessions, task completions, and habit check-ins.
 - [x] Show total tracked time per Task while retaining every linked Session as a separate record.
 
 ### Acceptance criteria
 
-- A closed Session can be reviewed and saved without a Task, including a neutral stopped-early outcome and actual duration.
+- A closed Session is already saved without review or a Task, including a neutral stopped-early outcome and actual duration; optional edits persist through `reviewSession`.
 - Today totals derive from persisted closed Sessions; timeline entries remain distinct and have clear empty states.
 - Each Session creates at most one reward rounded to one decimal; less than 60 seconds earns zero time points.
 - Linking changes only Session metadata and never creates, completes, or merges Tasks.
@@ -228,6 +233,44 @@
 - [ ] Preserve manual fallback for every AI feature and consume no usage when rejected before provider dispatch.
 - [ ] Launch only in an approved supported-international-market allowlist; exclude Mainland China initially.
 - [ ] Test entitlement forgery, quota races, timezone abuse, provider/RevenueCat outages, privacy boundaries, and absence of secrets from clients.
+
+## TASK-12: Mobile v1
+
+### M0 — Expo foundation and authentication
+
+- [x] Create an independent Expo React Native/TypeScript project under `/mobile` without moving Web or creating a workspace.
+- [x] Add basic mobile design tokens and Expo Router placeholders for First Moves, Today, Focus, Cat, and Settings.
+- [x] Implement loading, signed-out, Guest Mode, authenticated, and privacy-safe error states.
+- [x] Add public Expo Supabase configuration, email magic links, and the `firstmove://auth/callback` development route.
+- [x] Persist Supabase sessions through a chunked Keychain/Keystore-backed Expo SecureStore adapter.
+- [x] Keep schema-v8 guest storage separate from account-scoped validated cloud caches; sign out deletes neither.
+- [x] Detect existing workspaces with `cloud_workspace_status` and hydrate them read-only with `get_cloud_workspace_v2`.
+- [x] Stop empty accounts before any setup write and show that cloud setup is unavailable until M1.
+- [x] Cover config, auth transitions, callback handling, session restore, secure storage, local separation, and read-only hydration with focused tests.
+- [ ] Complete the manual iOS/Android M0 acceptance checklist in `/mobile/README.md` after adding the redirect URL in Supabase.
+
+**M0 status:** Implementation and automated checks complete on `mobile/expo-v1`; manual device acceptance and the user-owned Supabase redirect allow-list change remain pending. The narrow M1A increment is tracked below.
+
+### M1A — Local I’m Stuck intent builder
+
+- [x] Normalize and migrate schema-v8-compatible guest state through the existing Mobile AsyncStorage repository.
+- [x] Port all six stuck states, the exact five PRD directions, and the existing offline First Move template matrix.
+- [x] Support another suggestion, editable wording, manual entry, and 2/5/10/25-minute shortening before saving.
+- [x] Create at most one validated pending `ActivityIntent` and show it in Focus without starting a timer.
+- [x] Keep authenticated cloud data read-only and Guest Mode fully local; add focused domain, migration, and serialized-write tests.
+
+**M1A status:** Implemented on `mobile/expo-v1`; automated checks pass. Running timers are tracked separately in M1B below; Tasks/Habits UI, cloud business-data writes, Cat, Morning Start, and AI remain outside M1A.
+
+### M1B — Local Focus countdown
+
+- [x] Separate Guest local state from per-Supabase-UUID local state while retaining both and keeping the canonical cloud cache independent.
+- [x] Start the pending `ActivityIntent` as one local schema-v8 countdown `ActivitySession` restricted to 2/5/10/25 minutes.
+- [x] Derive elapsed and remaining time from persisted timestamps; restore running/paused state and reconcile elapsed countdowns after restart.
+- [x] Add pause, resume, automatic completion, neutral early stop, and cancellation without rewards or punishment.
+- [x] Persist actual elapsed time and prevent duplicate open sessions or duplicate completion.
+- [x] Add Focus ready, running, paused, completed, and stopped states with focused ownership/timing/persistence tests.
+
+**M1B status:** Implemented on `mobile/expo-v1`; focused and full Mobile tests, lint, strict TypeScript, Expo dependency validation, and iOS/Android exports pass. Rewards, post-session choices, Today/history, Tasks/Habits UI, cloud writes, notifications/background services, and later M1 features remain out of scope.
 
 ## Explicitly excluded
 

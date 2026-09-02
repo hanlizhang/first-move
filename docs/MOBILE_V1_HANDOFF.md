@@ -166,15 +166,21 @@ Remaining manual checks are known verification items and do not block Mobile M0 
 
 ### M0 — Foundation and authentication
 
-Status: **not started**. Choose the native/cross-platform stack; establish repository/module boundaries; implement schema-v8-compatible local repository and migrations; add Supabase email-link authentication with iOS/Android deep links; store sessions securely; implement feature flags, privacy-safe logging, and guest/cloud mode separation.
+Status: **implemented on `mobile/expo-v1`; automated checks pass, manual device acceptance pending**. An independent Expo SDK 57/React Native/TypeScript project now lives under `/mobile` without moving Web or creating a workspace. Expo Router provides First Moves, Today, Focus, Cat, and Settings placeholders. The app implements loading, signed-out, Guest Mode, authenticated, and privacy-safe error states; email magic links use `firstmove://auth/callback`; Supabase session values use a chunked `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage.
+
+M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate. Authentication restores the existing Supabase Auth UUID. An initialized account is detected with `cloud_workspace_status` and hydrated read-only with the exact existing `get_cloud_workspace_v2` canonical payload, including UUID/reference, tombstone, balance, date, and captured timezone validation. An empty account receives a clear M1 setup boundary. No initialization, import, merge, continuous-sync, or other business-data write RPC exists in mobile M0. See `/mobile/README.md` for environment names, local commands, the manual acceptance checklist, and the exact redirect URL that the user must add manually.
 
 ### M1 — Core features
 
-Status: **not started**. Port the I'm Stuck flow, local templates, tasks, habits, timers/session recovery, daily plans, Morning metadata, Mini Journal, history, cat/inventory presentation, Phase B2 choices, canonical hydration, retry-safe continuous writes, and all server-authoritative economy RPCs. Run web/mobile same-account acceptance.
+Status: **M1A and M1B implemented; later M1 work not started**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
+
+Focus turns that intent into a local 2/5/10/25-minute countdown `ActivitySession`. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic zero completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention. Guest local state and each Supabase Auth UUID’s local state use separate namespaces; switching owners exposes only that owner without deleting or merging data. Validated canonical cloud caches remain separate and all cloud business data remains read-only.
+
+Remaining M1 work includes Tasks/Habits UI, post-session choices, rewards/Today/history, daily plans, Morning metadata, Mini Journal, cat/inventory presentation, Phase B2 choices, retry-safe continuous writes, and server-authoritative economy RPCs. Run Web/Mobile same-account acceptance only when the corresponding write path exists.
 
 ### M2 — Native capabilities
 
-Status: **not started**. Add camera/photo-picker permission flows with memory-only toothbrush images, haptics, optional local notifications where platform rules permit, background/foreground timer recovery, accessibility, reduced motion, secure storage recovery, deep-link hardening, and offline lifecycle tests. Do not promise guaranteed background alarms or app blocking.
+Status: **not started**. Add camera/photo-picker permission flows with memory-only toothbrush images, haptics, optional local notifications where platform rules permit, background/foreground lifecycle hardening, accessibility, reduced motion, secure storage recovery, deep-link hardening, and offline lifecycle tests. Do not promise guaranteed background alarms or app blocking.
 
 ### M3 — RevenueCat and AI access
 

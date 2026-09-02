@@ -6,7 +6,9 @@ import { CloudRuntime, CLOUD_RUNTIME_STORAGE_KEY, useCloudRuntime, workspaceMatc
 import { validateCanonicalWorkspace, type CanonicalWorkspace } from "./cloud-hydration.ts";
 import { createEmptyState, type AppState } from "./models.ts";
 import { DAILY_PLAN_STORAGE_KEY } from "./daily-plan-state.ts";
-import { STORAGE_KEY } from "./repository.ts";
+import { saveAppState, STORAGE_KEY } from "./repository.ts";
+import { completeSession, reviewSession, startCountdown } from "./sessions.ts";
+import { replaceAppState, subscribeAppStateMutations, updateAppState } from "./store.ts";
 
 const USER_ID = "90000000-0000-4000-8000-000000000001";
 const DEVICE_ID = "90000000-0000-4000-8000-000000000002";
@@ -39,6 +41,7 @@ function dependencies(options: {
   uuid?: () => string;
   rpc?: CloudRuntimeDependencies["client"]["rpc"];
   apply?: (workspace: CanonicalWorkspace) => void;
+  signedOut?: boolean;
 } = {}): CloudRuntimeDependencies {
   return {
     storage: options.storage ?? memoryStorage(),
@@ -48,7 +51,7 @@ function dependencies(options: {
     uuid: options.uuid ?? (() => DEVICE_ID),
     applyWorkspace: options.apply ?? (() => undefined),
     client: {
-      auth: { async getSession() { return { data: { session: { access_token: "test", user: { id: USER_ID } } }, error: null }; } },
+      auth: { async getSession() { return { data: { session: options.signedOut ? null : { access_token: "test", user: { id: USER_ID } } }, error: null }; } },
       rpc: options.rpc ?? (async (name: string) => ({
         data: name === "cloud_workspace_status" ? { initialized: true } : canonicalRaw(),
         error: null,
@@ -125,6 +128,242 @@ test("a new browser hydrates the canonical workspace once Use cloud progress is 
   const runtime = new CloudRuntime(dependencies({ storage, apply: (value) => { hydrated = value; } }));
   await runtime.activate(workspace, true);
   assert.equal(hydrated?.state.tasks[0].title, "Shared task");
+  assert.equal(runtime.getSnapshot().status, "synced");
+});
+
+test("Guest session mutations stay in the normalized local repository without creating a cloud queue", async () => {
+  const storage = memoryStorage();
+  const calls: string[] = [];
+  const runtime = new CloudRuntime(dependencies({
+    storage,
+    signedOut: true,
+    rpc: (async (name: string) => {
+      calls.push(name);
+      return { data: canonicalRaw(), error: null };
+    }) as unknown as CloudRuntimeDependencies["client"]["rpc"],
+  }));
+  await runtime.start();
+  const previous = createEmptyState();
+  const next = startCountdown(
+    previous,
+    { direction: "Rest", durationMinutes: 2 },
+    Date.parse("2026-07-31T10:00:00.000Z"),
+    () => "94000000-0000-4000-8000-000000000001",
+  );
+
+  assert.equal(saveAppState(storage, next), true);
+  runtime.queueState(previous, next, []);
+  await runtime.refresh();
+
+  assert.equal(JSON.parse(storage.getItem(STORAGE_KEY) ?? "{}").sessions.length, 1);
+  assert.equal(storage.getItem(CLOUD_RUNTIME_STORAGE_KEY), null);
+  assert.deepEqual(calls, []);
+  assert.equal(runtime.getSnapshot().active, false);
+});
+
+test("an authenticated Focus session mutation enters the durable queue and applies its canonical link", async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const taskId = "95000000-0000-4000-8000-000000000001";
+  const sessionId = "96000000-0000-4000-8000-000000000001";
+  const task = {
+    id: taskId,
+    title: "Shared Focus task",
+    direction: "Work & Study" as const,
+    order: 0,
+    createdAt: "2026-07-31T08:00:00.000Z",
+    updatedAt: "2026-07-31T08:00:00.000Z",
+    completedOn: [],
+  };
+  const previous: AppState = { ...createEmptyState(), tasks: [task] };
+  const storage = memoryStorage(previous);
+  const taskRow = {
+    id: taskId,
+    title: task.title,
+    direction: task.direction,
+    rank: "0",
+    created_at: task.createdAt,
+    updated_at: task.updatedAt,
+  };
+  let serverWorkspace = canonicalRaw({ tasks: [taskRow] });
+  let syncedState: AppState | undefined;
+  let applied: CanonicalWorkspace | undefined;
+  const ids = ["97000000-0000-4000-8000-000000000001", "98000000-0000-4000-8000-000000000001"];
+  const rpc = (async (name: string, args?: Record<string, unknown>) => {
+    if (name === "sync_cloud_workspace_v1") {
+      syncedState = args?.p_state as AppState;
+      const session = syncedState.sessions[0];
+      serverWorkspace = canonicalRaw({
+        tasks: [taskRow],
+        activity_sessions: [{
+          id: session.id,
+          mode: session.mode,
+          status: session.status,
+          direction: session.direction,
+          label: session.label,
+          target_duration_minutes: session.targetDurationMinutes,
+          linked_task_id: session.linkedTaskId,
+          started_at: session.startedAt,
+          last_resumed_at: session.lastResumedAt,
+          accumulated_elapsed_ms: session.accumulatedElapsedMs,
+        }],
+      });
+    }
+    return { data: name === "cloud_workspace_status" ? { initialized: true } : serverWorkspace, error: null };
+  }) as unknown as CloudRuntimeDependencies["client"]["rpc"];
+  const runtime = new CloudRuntime(dependencies({
+    storage,
+    rpc,
+    uuid: () => ids.shift() ?? crypto.randomUUID(),
+    apply: (workspace) => { applied = workspace; },
+  }));
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { localStorage: storage } });
+  const unsubscribe = subscribeAppStateMutations((before, next) => runtime.queueState(before, next, []));
+  try {
+    replaceAppState(previous);
+    await runtime.activate(validateCanonicalWorkspace(serverWorkspace), false);
+    updateAppState((current) => startCountdown(
+      current,
+      { linkedTaskId: taskId, durationMinutes: 25 },
+      Date.parse("2026-07-31T10:00:00.000Z"),
+      () => sessionId,
+    ));
+    const queued = JSON.parse(storage.getItem(CLOUD_RUNTIME_STORAGE_KEY) ?? "{}") as { accounts: Record<string, { pending: unknown[] }> };
+    assert.equal(queued.accounts[USER_ID].pending.length, 1);
+    await runtime.refresh();
+  } finally {
+    unsubscribe();
+    restoreGlobal("window", previousWindow);
+  }
+
+  assert.equal(syncedState?.sessions[0].id, sessionId);
+  assert.equal(syncedState?.sessions[0].linkedTaskId, taskId);
+  assert.equal(syncedState?.activityIntents.length, 0);
+  assert.equal(applied?.state.sessions[0].id, sessionId);
+  assert.equal(applied?.state.sessions[0].linkedTaskId, taskId);
+  const flushed = JSON.parse(storage.getItem(CLOUD_RUNTIME_STORAGE_KEY) ?? "{}") as { accounts: Record<string, { pending: unknown[] }> };
+  assert.equal(flushed.accounts[USER_ID].pending.length, 0);
+  assert.equal(runtime.getSnapshot().status, "synced");
+});
+
+test("an auto-saved completion and optional review use the normal durable sync path", async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const taskId = "9a000000-0000-4000-8000-000000000001";
+  const sessionId = "9b000000-0000-4000-8000-000000000001";
+  const task = {
+    id: taskId,
+    title: "Review target",
+    direction: "Work & Study" as const,
+    order: 0,
+    createdAt: "2026-07-31T08:00:00.000Z",
+    updatedAt: "2026-07-31T08:00:00.000Z",
+    completedOn: [],
+  };
+  const initial: AppState = { ...createEmptyState(), tasks: [task] };
+  const storage = memoryStorage(initial);
+  let online = false;
+  let serverWorkspace = canonicalRaw({
+    tasks: [{
+      id: task.id,
+      title: task.title,
+      direction: task.direction,
+      rank: "0",
+      created_at: task.createdAt,
+      updated_at: task.updatedAt,
+    }],
+  });
+  const syncedStates: AppState[] = [];
+  let applied: CanonicalWorkspace | undefined;
+  const rpc = (async (name: string, args?: Record<string, unknown>) => {
+    if (name === "sync_cloud_workspace_v1") {
+      const synced = args?.p_state as AppState;
+      syncedStates.push(synced);
+      serverWorkspace = canonicalRaw({
+        tasks: synced.tasks.map((item) => ({
+          id: item.id,
+          title: item.title,
+          direction: item.direction,
+          rank: String(item.order),
+          created_at: item.createdAt,
+          updated_at: item.updatedAt,
+        })),
+        activity_sessions: synced.sessions.map((session) => ({
+          id: session.id,
+          mode: session.mode,
+          status: session.status,
+          direction: session.direction,
+          label: session.label,
+          target_duration_minutes: session.targetDurationMinutes,
+          linked_task_id: session.linkedTaskId,
+          linked_habit_id: session.linkedHabitId,
+          linked_intent_id: session.linkedIntentId,
+          started_at: session.startedAt,
+          last_resumed_at: session.lastResumedAt,
+          accumulated_elapsed_ms: session.accumulatedElapsedMs,
+          ended_at: session.endedAt,
+          actual_elapsed_ms: session.actualElapsedMs,
+          reviewed_at: session.reviewedAt,
+        })),
+        active_days: synced.progress.activeDateKeys,
+      });
+    }
+    return { data: name === "cloud_workspace_status" ? { initialized: true } : serverWorkspace, error: null };
+  }) as unknown as CloudRuntimeDependencies["client"]["rpc"];
+  const runtime = new CloudRuntime(dependencies({
+    storage,
+    online: () => online,
+    rpc,
+    uuid: () => crypto.randomUUID(),
+    apply: (workspace) => { applied = workspace; },
+  }));
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { localStorage: storage } });
+  const unsubscribe = subscribeAppStateMutations((before, next) => runtime.queueState(before, next, []));
+  try {
+    replaceAppState(initial);
+    await runtime.activate(validateCanonicalWorkspace(serverWorkspace), false);
+    updateAppState((current) => startCountdown(
+      current,
+      { direction: "Rest", label: "Automatically saved", durationMinutes: 2 },
+      Date.parse("2026-07-31T10:00:00.000Z"),
+      () => sessionId,
+    ));
+    updateAppState((current) => completeSession(
+      current,
+      sessionId,
+      Date.parse("2026-07-31T10:00:30.000Z"),
+    ));
+
+    const autoSaved = JSON.parse(storage.getItem(STORAGE_KEY) ?? "{}") as AppState;
+    assert.equal(autoSaved.sessions[0].status, "completed");
+    assert.equal(autoSaved.sessions[0].reviewedAt, undefined);
+    assert.equal(autoSaved.sessions[0].label, "Automatically saved");
+
+    updateAppState((current) => reviewSession(
+      current,
+      sessionId,
+      { label: "Edited after saving", direction: "Work & Study", linkedTaskId: taskId },
+      Date.parse("2026-07-31T10:01:00.000Z"),
+    ));
+    const queued = JSON.parse(storage.getItem(CLOUD_RUNTIME_STORAGE_KEY) ?? "{}") as { accounts: Record<string, { pending: Array<{ state: AppState }> }> };
+    assert.equal(queued.accounts[USER_ID].pending.length, 3);
+    assert.equal(queued.accounts[USER_ID].pending[1].state.sessions[0].reviewedAt, undefined);
+    assert.equal(queued.accounts[USER_ID].pending[2].state.sessions[0].label, "Edited after saving");
+
+    online = true;
+    await runtime.retry();
+  } finally {
+    unsubscribe();
+    restoreGlobal("window", previousWindow);
+  }
+
+  assert.equal(syncedStates.length, 3);
+  assert.equal(syncedStates[1].sessions[0].status, "completed");
+  assert.equal(syncedStates[1].sessions[0].reviewedAt, undefined);
+  assert.equal(syncedStates[2].sessions[0].label, "Edited after saving");
+  assert.equal(syncedStates[2].sessions[0].linkedTaskId, taskId);
+  assert.equal(applied?.state.sessions[0].label, "Edited after saving");
+  assert.equal(applied?.state.sessions[0].linkedTaskId, taskId);
+  const flushed = JSON.parse(storage.getItem(CLOUD_RUNTIME_STORAGE_KEY) ?? "{}") as { accounts: Record<string, { pending: unknown[] }> };
+  assert.equal(flushed.accounts[USER_ID].pending.length, 0);
   assert.equal(runtime.getSnapshot().status, "synced");
 });
 

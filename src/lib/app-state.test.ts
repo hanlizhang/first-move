@@ -18,6 +18,7 @@ import { loadAppState, saveAppState, type StorageLike } from "./repository.ts";
 import { calculateSessionReward } from "./rewards.ts";
 import { FIRST_MOVE_TEMPLATES, templatesFor } from "./templates.ts";
 import {
+  cancelSession,
   completeSession,
   elapsedMs,
   getOpenSession,
@@ -220,6 +221,257 @@ test("a running countdown recovers from persisted timestamps after refresh", () 
   assert.equal(remainingMs(running, Date.parse("2026-07-19T10:02:00.000Z")), 180_000);
 });
 
+test("a standalone countdown starts without creating or linking an ActivityIntent", () => {
+  const started = startCountdown(
+    createEmptyState(),
+    { direction: "Rest", label: "   ", durationMinutes: 2 },
+    1_000,
+    () => "session-countdown-standalone",
+  );
+
+  assert.equal(started.activityIntents.length, 0);
+  assert.deepEqual(started.sessions[0], {
+    id: "session-countdown-standalone",
+    mode: "countdown",
+    direction: "Rest",
+    label: "Focus time",
+    targetDurationMinutes: 2,
+    linkedTaskId: undefined,
+    linkedHabitId: undefined,
+    linkedIntentId: undefined,
+    status: "running",
+    startedAt: "1970-01-01T00:00:01.000Z",
+    lastResumedAt: "1970-01-01T00:00:01.000Z",
+    accumulatedElapsedMs: 0,
+  });
+});
+
+test("a Quick Countdown stays standalone while a pending First Move remains available", () => {
+  const withIntent = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "overwhelmed by a large task",
+      direction: "Work & Study",
+      moveText: "Open one note",
+      intendedDurationMinutes: 5,
+    },
+    clock,
+    () => "intent-still-pending",
+  );
+  const started = startCountdown(
+    withIntent,
+    { direction: "Rest", label: "Take a short pause", durationMinutes: 2 },
+    1_000,
+    () => "session-quick-with-pending",
+  );
+
+  assert.equal(started.sessions[0].linkedIntentId, undefined);
+  assert.equal(started.sessions[0].label, "Take a short pause");
+  assert.equal(getPendingIntent(started)?.id, "intent-still-pending");
+  assert.equal(
+    startCountdown(started, { direction: "Daily Life", durationMinutes: 2 }, 2_000),
+    started,
+  );
+  const completed = completeSession(started, "session-quick-with-pending", 121_000);
+  assert.equal(getPendingIntent(completed)?.id, "intent-still-pending");
+});
+
+test("a standalone countdown can inherit and preserve a Task link", () => {
+  const withTask = addTask(createEmptyState(), { title: "Draft one paragraph", direction: "Work & Study" }, clock);
+  const taskId = withTask.tasks[0].id;
+  const started = startCountdown(
+    withTask,
+    { linkedTaskId: taskId, durationMinutes: 25 },
+    1_000,
+    () => "session-countdown-task",
+  );
+
+  assert.equal(started.sessions[0].label, "Draft one paragraph");
+  assert.equal(started.sessions[0].direction, "Work & Study");
+  assert.equal(started.sessions[0].linkedTaskId, taskId);
+  assert.equal(started.sessions[0].linkedIntentId, undefined);
+});
+
+test("a standalone countdown can inherit and preserve a Habit link", () => {
+  const withHabit = addHabit(
+    createEmptyState(),
+    { title: "Stretch gently", direction: "Exercise & Movement", schedule: { kind: "daily" } },
+    clock,
+  );
+  const habitId = withHabit.habits[0].id;
+  const started = startCountdown(
+    withHabit,
+    { linkedHabitId: habitId, durationMinutes: 5 },
+    1_000,
+    () => "session-countdown-habit",
+  );
+
+  assert.equal(started.sessions[0].label, "Stretch gently");
+  assert.equal(started.sessions[0].direction, "Exercise & Movement");
+  assert.equal(started.sessions[0].linkedHabitId, habitId);
+  assert.equal(started.sessions[0].linkedIntentId, undefined);
+});
+
+test("a pending ActivityIntent uses the shared countdown engine and retains its parent relationship", () => {
+  const withTask = addTask(createEmptyState(), { title: "Review notes", direction: "Work & Study" }, clock);
+  const taskId = withTask.tasks[0].id;
+  const withIntent = createPendingIntent(
+    withTask,
+    {
+      stuckState: "knows what to do but cannot start",
+      moveText: "Open the notes",
+      intendedDurationMinutes: 5,
+      linkedTaskId: taskId,
+    },
+    clock,
+    () => "intent-assisted",
+  );
+  const started = startCountdown(
+    withIntent,
+    { linkedIntentId: "intent-assisted", durationMinutes: 5 },
+    1_000,
+    () => "session-assisted",
+  );
+
+  assert.equal(started.sessions[0].label, "Open the notes");
+  assert.equal(started.sessions[0].direction, "Work & Study");
+  assert.equal(started.sessions[0].targetDurationMinutes, 5);
+  assert.equal(started.sessions[0].linkedIntentId, "intent-assisted");
+  assert.equal(started.sessions[0].linkedTaskId, undefined);
+  assert.equal(started.activityIntents[0].linkedTaskId, taskId);
+});
+
+test("completing an assisted countdown clears only the matching active pending intent", () => {
+  const withIntent = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "knows what to do but cannot start",
+      direction: "Work & Study",
+      moveText: "Open the draft",
+      intendedDurationMinutes: 2,
+    },
+    clock,
+    () => "intent-complete",
+  );
+  const started = startCountdown(
+    withIntent,
+    { linkedIntentId: "intent-complete", durationMinutes: 2 },
+    0,
+    () => "session-intent-complete",
+  );
+  const completed = completeSession(started, "session-intent-complete", 120_000);
+
+  assert.equal(getPendingIntent(completed), undefined);
+  assert.equal(completed.sessions[0].status, "completed");
+  assert.equal(completed.sessions[0].linkedIntentId, "intent-complete");
+
+  const withoutOriginalIntent = cancelPendingIntent(started, "intent-complete");
+  const withReplacementIntent = createPendingIntent(
+    withoutOriginalIntent,
+    {
+      stuckState: "needs intentional rest",
+      direction: "Rest",
+      moveText: "Sit by the window",
+      intendedDurationMinutes: 5,
+    },
+    clock,
+    () => "intent-replacement",
+  );
+  const completedWithReplacement = completeSession(
+    withReplacementIntent,
+    "session-intent-complete",
+    120_000,
+  );
+  assert.equal(getPendingIntent(completedWithReplacement)?.id, "intent-replacement");
+});
+
+test("stopping an assisted countdown clears its active pending intent", () => {
+  const withIntent = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "unsure what is needed",
+      direction: "Daily Life",
+      moveText: "Put one thing away",
+      intendedDurationMinutes: 5,
+    },
+    clock,
+    () => "intent-stop",
+  );
+  const stopped = stopSession(
+    startCountdown(
+      withIntent,
+      { linkedIntentId: "intent-stop", durationMinutes: 5 },
+      0,
+      () => "session-intent-stop",
+    ),
+    "session-intent-stop",
+    30_000,
+  );
+
+  assert.equal(getPendingIntent(stopped), undefined);
+  assert.equal(stopped.sessions[0].status, "stopped");
+  assert.equal(stopped.sessions[0].linkedIntentId, "intent-stop");
+});
+
+test("cancelling an assisted countdown keeps its pending intent ready", () => {
+  const withIntent = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "in bed and unable to get up",
+      direction: "Daily Life",
+      moveText: "Put both feet on the floor",
+      intendedDurationMinutes: 2,
+    },
+    clock,
+    () => "intent-cancel-session",
+  );
+  const cancelled = cancelSession(
+    startCountdown(
+      withIntent,
+      { linkedIntentId: "intent-cancel-session", durationMinutes: 2 },
+      0,
+      () => "session-intent-cancel",
+    ),
+    "session-intent-cancel",
+    30_000,
+  );
+
+  assert.equal(cancelled.sessions.length, 0);
+  assert.equal(getPendingIntent(cancelled)?.id, "intent-cancel-session");
+  assert.equal(cancelled.rewardEvents.length, 0);
+});
+
+test("a completed standalone session persists before any optional review", () => {
+  const withTask = addTask(createEmptyState(), { title: "Read one page", direction: "Work & Study" }, clock);
+  const taskId = withTask.tasks[0].id;
+  const completed = completeSession(
+    startCountdown(
+      withTask,
+      { linkedTaskId: taskId, label: "Read the introduction", durationMinutes: 2 },
+      0,
+      () => "session-auto-saved",
+    ),
+    "session-auto-saved",
+    60_000,
+  );
+  let stored: string | null = null;
+  const storage: StorageLike = {
+    getItem: () => stored,
+    setItem: (_key, value) => { stored = value; },
+  };
+
+  assert.equal(completed.sessions[0].reviewedAt, undefined);
+  assert.equal(saveAppState(storage, completed), true);
+  const restored = loadAppState(storage);
+  assert.equal(restored.sessions[0].status, "completed");
+  assert.equal(restored.sessions[0].actualElapsedMs, 60_000);
+  assert.equal(restored.sessions[0].label, "Read the introduction");
+  assert.equal(restored.sessions[0].direction, "Work & Study");
+  assert.equal(restored.sessions[0].linkedTaskId, taskId);
+  assert.equal(restored.sessions[0].reviewedAt, undefined);
+  assert.equal(restored.rewardEvents.length, 1);
+});
+
 test("session completion is idempotent and saves actual elapsed time once", () => {
   const started = startStopwatch(
     createEmptyState(),
@@ -298,6 +550,51 @@ test("closed sessions can be reviewed, linked, unlinked, and kept standalone", (
   assert.equal(standalone.sessions[0].direction, "Rest");
 });
 
+test("session review preserves Habit and assisted ActivityIntent relationships", () => {
+  const withHabit = addHabit(
+    createEmptyState(),
+    { title: "Take a walk", direction: "Exercise & Movement", schedule: { kind: "daily" } },
+    clock,
+  );
+  const habitId = withHabit.habits[0].id;
+  const habitClosed = completeSession(
+    startStopwatch(withHabit, { linkedHabitId: habitId }, 0, () => "session-habit-review"),
+    "session-habit-review",
+    60_000,
+  );
+  const habitReviewed = reviewSession(
+    habitClosed,
+    "session-habit-review",
+    { label: "Walked outside", direction: "Exercise & Movement", linkedHabitId: habitId },
+    70_000,
+  );
+  assert.equal(habitReviewed.sessions[0].linkedHabitId, habitId);
+
+  const withIntent = createPendingIntent(
+    createEmptyState(),
+    {
+      stuckState: "unsure what is needed",
+      direction: "Rest",
+      moveText: "Sit somewhere comfortable",
+      intendedDurationMinutes: 2,
+    },
+    clock,
+    () => "intent-review",
+  );
+  const intentClosed = completeSession(
+    startCountdown(withIntent, { linkedIntentId: "intent-review", durationMinutes: 2 }, 0, () => "session-intent-review"),
+    "session-intent-review",
+    120_000,
+  );
+  const intentReviewed = reviewSession(
+    intentClosed,
+    "session-intent-review",
+    { label: "Sat comfortably", direction: "Rest" },
+    130_000,
+  );
+  assert.equal(intentReviewed.sessions[0].linkedIntentId, "intent-review");
+});
+
 test("daily summaries and timeline retain separate sessions while totaling task time", () => {
   let state = addTask(createEmptyState(), { title: "Study", direction: "Work & Study" }, clock);
   const taskId = state.tasks[0].id;
@@ -346,6 +643,26 @@ test("stopwatch supports no link, inheritance, pause, resume, and neutral early 
   );
   assert.equal(unlinked.sessions[0].linkedTaskId, undefined);
   assert.equal(unlinked.sessions[0].label, "Tracked time");
+});
+
+test("stopwatch supports a Habit link through the same session engine", () => {
+  const withHabit = addHabit(
+    createEmptyState(),
+    { title: "Tidy the desk", direction: "Daily Life", schedule: { kind: "daily" } },
+    clock,
+  );
+  const habitId = withHabit.habits[0].id;
+  const started = startStopwatch(
+    withHabit,
+    { linkedHabitId: habitId },
+    1_000,
+    () => "session-stopwatch-habit",
+  );
+
+  assert.equal(started.sessions[0].mode, "stopwatch");
+  assert.equal(started.sessions[0].label, "Tidy the desk");
+  assert.equal(started.sessions[0].direction, "Daily Life");
+  assert.equal(started.sessions[0].linkedHabitId, habitId);
 });
 
 test("malformed sessions are discarded and only one open session can start", () => {

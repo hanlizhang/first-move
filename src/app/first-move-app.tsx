@@ -41,6 +41,7 @@ import {
 import { updateAppState, useAppState } from "@/lib/store";
 import { easierTemplateFor, nextShorterDuration, templatesFor } from "@/lib/templates";
 import {
+  cancelSession,
   completeSession,
   elapsedMs,
   getOpenSession,
@@ -85,6 +86,8 @@ const weekdayLabels: Record<Weekday, string> = {
   fri: "Fri",
   sat: "Sat",
 };
+
+const COUNTDOWN_DURATIONS = [2, 5, 10, 25, 50] as const;
 
 export default function FirstMoveApp({ initialEmail }: { initialEmail: string | null }) {
   const state = useAppState();
@@ -478,8 +481,11 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
   const pendingIntent = getPendingIntent(state);
   const openSession = getOpenSession(state);
   const lastClosedSession = [...state.sessions].reverse().find((session) => session.status === "completed" || session.status === "stopped");
-  const [countdownDuration, setCountdownDuration] = useState<number>(pendingIntent?.intendedDurationMinutes ?? 25);
+  const [countdownDuration, setCountdownDuration] = useState<number>(25);
   const [customDuration, setCustomDuration] = useState("");
+  const [countdownLink, setCountdownLink] = useState("");
+  const [countdownDirection, setCountdownDirection] = useState<Direction>(DIRECTIONS[0]);
+  const [countdownLabel, setCountdownLabel] = useState("");
   const [stopwatchLink, setStopwatchLink] = useState("");
   const [stopwatchDirection, setStopwatchDirection] = useState<Direction>(DIRECTIONS[0]);
   const [stopwatchLabel, setStopwatchLabel] = useState("");
@@ -501,19 +507,50 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
     return () => window.clearInterval(tick);
   }, [openSession, update]);
 
+  function sourceForLink(value: string) {
+    const [kind, id] = value.split(":");
+    if (kind === "task") return state.tasks.find((task) => task.id === id);
+    if (kind === "habit") return state.habits.find((habit) => habit.id === id);
+    return undefined;
+  }
+
+  function chooseCountdownLink(value: string) {
+    setCountdownLink(value);
+    const source = sourceForLink(value);
+    if (source) {
+      setCountdownDirection(source.direction);
+      setCountdownLabel(source.title);
+    }
+  }
+
   function chooseStopwatchLink(value: string) {
     setStopwatchLink(value);
-    const [kind, id] = value.split(":");
-    const source =
-      kind === "task"
-        ? state.tasks.find((task) => task.id === id)
-        : kind === "habit"
-          ? state.habits.find((habit) => habit.id === id)
-          : state.activityIntents.find((intent) => intent.id === id);
+    const source = sourceForLink(value);
     if (source) {
       setStopwatchDirection(source.direction);
-      setStopwatchLabel("title" in source ? source.title : source.moveText);
+      setStopwatchLabel(source.title);
     }
+  }
+
+  function beginPendingIntent() {
+    if (!pendingIntent) return;
+    update((current) => startCountdown(current, {
+      linkedIntentId: pendingIntent.id,
+      durationMinutes: pendingIntent.intendedDurationMinutes,
+    }));
+  }
+
+  function beginCountdown() {
+    const [kind, id] = countdownLink.split(":");
+    update((current) =>
+      startCountdown(current, {
+        direction: countdownDirection,
+        label: countdownLabel || undefined,
+        durationMinutes: customDuration ? Number(customDuration) : countdownDuration,
+        linkedTaskId: kind === "task" ? id : undefined,
+        linkedHabitId: kind === "habit" ? id : undefined,
+      }),
+    );
   }
 
   function beginStopwatch() {
@@ -524,7 +561,6 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
         label: stopwatchLabel || undefined,
         linkedTaskId: kind === "task" ? id : undefined,
         linkedHabitId: kind === "habit" ? id : undefined,
-        linkedIntentId: kind === "intent" ? id : undefined,
       }),
     );
   }
@@ -539,6 +575,7 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
     <section id="focus" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm sm:p-6" aria-labelledby="focus-heading">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Focus</p>
       <h2 id="focus-heading" className="mt-2 text-3xl font-bold tracking-tight">Track this time</h2>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Start a countdown or stopwatch directly. A title and Task or Habit link are optional; the five directions stay available either way.</p>
 
       {openSession ? (
         <div className="mt-6 rounded-2xl border border-sky-300 bg-white p-5 text-center">
@@ -554,32 +591,49 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
             )}
             <button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" onClick={() => update((current) => completeSession(current, openSession.id))}>Complete</button>
             <button type="button" className="rounded-xl px-4 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700" onClick={() => update((current) => stopSession(current, openSession.id))}>Stop early</button>
+            <button type="button" className="rounded-xl px-4 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-700" onClick={() => update((current) => cancelSession(current, openSession.id))}>Cancel session</button>
           </div>
         </div>
       ) : (
-        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        <>
+          {pendingIntent && (
+            <div className="mt-5 rounded-2xl border border-violet-300 bg-violet-50 p-5" aria-labelledby="pending-first-move-heading">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-700">Pending First Move</p>
+              <h3 id="pending-first-move-heading" className="mt-2 text-xl font-bold">{pendingIntent.moveText}</h3>
+              <p className="mt-1 text-sm text-stone-600">{pendingIntent.direction} · {pendingIntent.intendedDurationMinutes} min{linkedItemLabel(pendingIntent, state.tasks, state.habits) ? ` · ${linkedItemLabel(pendingIntent, state.tasks, state.habits)}` : ""}</p>
+              <p className="mt-3 text-sm leading-6 text-stone-600">Start the assisted countdown with its existing ActivityIntent relationship.</p>
+              <button type="button" className="mt-4 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700" onClick={beginPendingIntent}>Start this First Move</button>
+            </div>
+          )}
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
           <div className="rounded-2xl border border-sky-200 bg-white p-5">
-            <h3 className="text-xl font-bold">Countdown</h3>
-            {pendingIntent ? (
-              <>
-                <p className="mt-2 font-semibold">{pendingIntent.moveText}</p>
-                <p className="mt-1 text-sm text-stone-500">{pendingIntent.direction}</p>
-                <fieldset className="mt-5">
-                  <legend className="text-sm font-semibold">Duration</legend>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {[2, 5, 10, 25, 50].map((minutes) => (
-                      <label key={minutes} htmlFor={`countdown-duration-${minutes}`} className={`cursor-pointer rounded-xl border px-3 py-2 text-sm font-semibold ${countdownDuration === minutes && !customDuration ? "border-sky-700 bg-sky-700 text-white" : "border-sky-200"}`}>
-                        <input id={`countdown-duration-${minutes}`} className="sr-only" type="radio" name="countdown-duration" checked={countdownDuration === minutes && !customDuration} onChange={() => { setCountdownDuration(minutes); setCustomDuration(""); }} />{minutes} min
-                      </label>
-                    ))}
-                  </div>
-                  <label htmlFor="countdown-custom-minutes" className="mt-3 block text-sm font-semibold">Custom minutes
-                    <input id="countdown-custom-minutes" name="countdown-custom-minutes" className="mt-2 block w-32 rounded-xl border border-sky-200 px-3 py-2 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="number" min="1" max="720" value={customDuration} onChange={(event) => setCustomDuration(event.target.value)} />
+            <h3 className="text-xl font-bold">Quick Countdown</h3>
+            <p className="mt-2 text-sm leading-6 text-stone-600">Use Focus on its own without creating or consuming an ActivityIntent.</p>
+            <label htmlFor="countdown-link" className="mt-4 block text-sm font-semibold">Link <span className="font-normal text-stone-500">(optional)</span>
+              <select id="countdown-link" name="countdown-link" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={countdownLink} onChange={(event) => chooseCountdownLink(event.target.value)}>
+                <option value="">No linked item</option>
+                {state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
+                {state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
+              </select>
+            </label>
+            <label htmlFor="countdown-label" className="mt-4 block text-sm font-semibold">Activity title <span className="font-normal text-stone-500">(optional)</span>
+              <input id="countdown-label" name="countdown-label" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" maxLength={160} placeholder="Focus time" value={countdownLabel} onChange={(event) => setCountdownLabel(event.target.value)} />
+            </label>
+            <div className="mt-4"><SelectField label="Direction" value={countdownDirection} options={DIRECTIONS} onChange={(value) => setCountdownDirection(value as Direction)} /></div>
+            <fieldset className="mt-5">
+              <legend className="text-sm font-semibold">Duration</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {COUNTDOWN_DURATIONS.map((minutes) => (
+                  <label key={minutes} htmlFor={`countdown-duration-${minutes}`} className={`cursor-pointer rounded-xl border px-3 py-2 text-sm font-semibold ${countdownDuration === minutes && !customDuration ? "border-sky-700 bg-sky-700 text-white" : "border-sky-200"}`}>
+                    <input id={`countdown-duration-${minutes}`} className="sr-only" type="radio" name="countdown-duration" checked={countdownDuration === minutes && !customDuration} onChange={() => { setCountdownDuration(minutes); setCustomDuration(""); }} />{minutes} min
                   </label>
-                </fieldset>
-                <button type="button" disabled={!validUiDuration(customDuration ? Number(customDuration) : countdownDuration)} className="mt-5 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={() => update((current) => startCountdown(current, { linkedIntentId: pendingIntent.id, direction: pendingIntent.direction, durationMinutes: customDuration ? Number(customDuration) : countdownDuration }))}>Start countdown</button>
-              </>
-            ) : <p className="mt-3 text-sm leading-6 text-stone-600">Choose “Start this move” in the I&apos;m Stuck area first. A countdown always begins from a pending ActivityIntent.</p>}
+                ))}
+              </div>
+              <label htmlFor="countdown-custom-minutes" className="mt-3 block text-sm font-semibold">Custom minutes
+                <input id="countdown-custom-minutes" name="countdown-custom-minutes" className="mt-2 block w-32 rounded-xl border border-sky-200 px-3 py-2 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" type="number" min="1" max="720" value={customDuration} onChange={(event) => setCustomDuration(event.target.value)} />
+              </label>
+            </fieldset>
+            <button type="button" disabled={!validUiDuration(customDuration ? Number(customDuration) : countdownDuration)} className="mt-5 rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:cursor-not-allowed disabled:opacity-40" onClick={beginCountdown}>Start countdown</button>
           </div>
 
           <div className="rounded-2xl border border-sky-200 bg-white p-5">
@@ -588,53 +642,71 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
             <label htmlFor="stopwatch-link" className="mt-4 block text-sm font-semibold">Link <span className="font-normal text-stone-500">(optional)</span>
               <select id="stopwatch-link" name="stopwatch-link" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={stopwatchLink} onChange={(event) => chooseStopwatchLink(event.target.value)}>
                 <option value="">No linked item</option>
-                {pendingIntent && <option value={`intent:${pendingIntent.id}`}>Intent: {pendingIntent.moveText}</option>}
                 {state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
                 {state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
               </select>
             </label>
-            <label htmlFor="stopwatch-label" className="mt-4 block text-sm font-semibold">Label <span className="font-normal text-stone-500">(optional)</span>
+            <label htmlFor="stopwatch-label" className="mt-4 block text-sm font-semibold">Activity title <span className="font-normal text-stone-500">(optional)</span>
               <input id="stopwatch-label" name="stopwatch-label" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" maxLength={160} placeholder="Tracked time" value={stopwatchLabel} onChange={(event) => setStopwatchLabel(event.target.value)} />
             </label>
             <div className="mt-4"><SelectField label="Direction" value={stopwatchDirection} options={DIRECTIONS} onChange={(value) => setStopwatchDirection(value as Direction)} /></div>
             <button type="button" className="mt-5 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900" onClick={beginStopwatch}>Start tracking</button>
           </div>
-        </div>
+          </div>
+        </>
       )}
 
-      {!openSession && lastClosedSession && <SessionReview session={lastClosedSession} state={state} update={update} />}
+      {!openSession && lastClosedSession && <SessionReview key={lastClosedSession.id} session={lastClosedSession} state={state} update={update} />}
     </section>
   );
 }
 
 function SessionReview({ session, state, update }: { session: ActivitySession; state: AppState; update: (recipe: (state: AppState) => AppState) => void }) {
-  const [editing, setEditing] = useState(!session.reviewedAt);
+  const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(session.label);
   const [direction, setDirection] = useState<Direction>(session.direction);
-  const [linkedTaskId, setLinkedTaskId] = useState(session.linkedTaskId ?? "");
+  const [linkedValue, setLinkedValue] = useState(session.linkedTaskId ? `task:${session.linkedTaskId}` : session.linkedHabitId ? `habit:${session.linkedHabitId}` : "");
   const points = state.rewardEvents.find((event) => event.source === "session" && event.sourceId === session.id)?.points ?? 0;
+  const relationship = sessionRelationshipLabel(session, state);
 
   function save(event: React.FormEvent) {
     event.preventDefault();
     if (!label.trim()) return;
-    update((current) => reviewSession(current, session.id, { label, direction, linkedTaskId: linkedTaskId || undefined }));
+    const [kind, id] = linkedValue.split(":");
+    update((current) => reviewSession(current, session.id, {
+      label,
+      direction,
+      linkedTaskId: kind === "task" ? id : undefined,
+      linkedHabitId: kind === "habit" ? id : undefined,
+    }));
+    setEditing(false);
+  }
+
+  function cancelEdit() {
+    setLabel(session.label);
+    setDirection(session.direction);
+    setLinkedValue(session.linkedTaskId ? `task:${session.linkedTaskId}` : session.linkedHabitId ? `habit:${session.linkedHabitId}` : "");
     setEditing(false);
   }
 
   return (
     <div className={`mt-5 rounded-2xl border p-5 ${session.status === "stopped" ? "border-stone-200 bg-stone-50" : "border-emerald-200 bg-emerald-50"}`} aria-live="polite">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><p className="text-sm font-bold">{session.status === "stopped" ? "Time saved — stopped when you chose" : "Session complete"}</p><p className="mt-1 text-sm text-stone-600">Actual time: {formatDuration(session.actualElapsedMs ?? 0)}{points ? ` · +${formatPoints(points)} points` : " · No time reward"}</p></div>
-        {!editing && <MiniButton onClick={() => setEditing(true)}>Edit review</MiniButton>}
+        <div><p className="text-sm font-bold">{session.status === "stopped" ? "Time saved — stopped when you chose" : "Session complete"}</p><p className="mt-1 text-sm text-stone-600">Saved automatically · Actual time: {formatDuration(session.actualElapsedMs ?? 0)}{points ? ` · +${formatPoints(points)} points` : " · No time reward"}</p></div>
+        {!editing && <MiniButton onClick={() => setEditing(true)}>Edit details</MiniButton>}
       </div>
       {editing ? (
         <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={save}>
           <TextField id={`session-title-${session.id}`} label="Activity title" value={label} onChange={setLabel} placeholder="What did you do?" />
           <SelectField label="Category" value={direction} options={DIRECTIONS} onChange={(value) => setDirection(value as Direction)} />
-          <label htmlFor={`session-linked-task-${session.id}`} className="block text-sm font-semibold sm:col-span-2">Linked Task <span className="font-normal text-stone-500">(optional)</span><select id={`session-linked-task-${session.id}`} name={`session-linked-task-${session.id}`} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={linkedTaskId} onChange={(event) => setLinkedTaskId(event.target.value)}><option value="">Standalone — no Task</option>{state.tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>
-          <div className="flex gap-2 sm:col-span-2"><PrimaryButton>Save session</PrimaryButton>{session.reviewedAt && <SecondaryButton onClick={() => setEditing(false)}>Cancel</SecondaryButton>}</div>
+          {session.linkedIntentId ? (
+            <div className="rounded-xl border border-violet-200 bg-white p-3 text-sm sm:col-span-2"><p className="font-semibold">Linked First Move retained</p><p className="mt-1 text-stone-500">{relationship ?? "This session keeps its existing ActivityIntent relationship."}</p></div>
+          ) : (
+            <label htmlFor={`session-linked-item-${session.id}`} className="block text-sm font-semibold sm:col-span-2">Linked Task or Habit <span className="font-normal text-stone-500">(optional)</span><select id={`session-linked-item-${session.id}`} name={`session-linked-item-${session.id}`} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={linkedValue} onChange={(event) => setLinkedValue(event.target.value)}><option value="">Standalone — no linked item</option>{state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}{state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}</select></label>
+          )}
+          <div className="flex gap-2 sm:col-span-2"><PrimaryButton>Save changes</PrimaryButton><SecondaryButton onClick={cancelEdit}>Cancel</SecondaryButton></div>
         </form>
-      ) : <p className="mt-3 font-semibold">{session.label} <span className="font-normal text-stone-500">· {session.direction}{session.linkedTaskId ? ` · ${state.tasks.find((task) => task.id === session.linkedTaskId)?.title ?? "Linked Task"}` : " · Standalone"}</span></p>}
+      ) : <p className="mt-3 font-semibold">{session.label} <span className="font-normal text-stone-500">· {session.direction} · {relationship ?? "Standalone"}</span></p>}
     </div>
   );
 }
@@ -817,9 +889,24 @@ function formatShortDate(dateKey: string): string { return new Intl.DateTimeForm
 function formatLongDate(dateKey: string): string { return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${dateKey}T12:00:00`)); }
 
 function sessionLinkedLabel(session: ActivitySession, state: AppState): string | undefined {
-  if (session.linkedTaskId) return state.tasks.find((task) => task.id === session.linkedTaskId)?.title;
-  if (session.linkedHabitId) return state.habits.find((habit) => habit.id === session.linkedHabitId)?.title;
-  if (session.linkedIntentId) return state.activityIntents.find((intent) => intent.id === session.linkedIntentId)?.moveText;
+  return sessionRelationshipLabel(session, state);
+}
+
+function sessionRelationshipLabel(session: ActivitySession, state: AppState): string | undefined {
+  if (session.linkedTaskId) {
+    const task = state.tasks.find((candidate) => candidate.id === session.linkedTaskId);
+    return task ? `Task: ${task.title}` : "Linked Task";
+  }
+  if (session.linkedHabitId) {
+    const habit = state.habits.find((candidate) => candidate.id === session.linkedHabitId);
+    return habit ? `Habit: ${habit.title}` : "Linked Habit";
+  }
+  if (session.linkedIntentId) {
+    const intent = state.activityIntents.find((candidate) => candidate.id === session.linkedIntentId);
+    if (!intent) return "Linked First Move";
+    const parent = linkedItemLabel(intent, state.tasks, state.habits);
+    return `First Move: ${intent.moveText}${parent ? ` · ${parent}` : ""}`;
+  }
   return undefined;
 }
 

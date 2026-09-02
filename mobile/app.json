@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "First Move",
+    "slug": "first-move-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "firstmove",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.firstmove.mobile",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "app.firstmove.mobile"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+      "expo-status-bar"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7ef52228-ecb5-4fa5-939a-fee14d231423"
+      }
+    }
+  }
+}

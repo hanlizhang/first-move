@@ -21,3 +21,22 @@ test("application form controls expose stable id and name attributes", () => {
   }
   assert.deepEqual(missing, []);
 });
+
+test("Focus keeps the pending First Move separate from Quick Countdown and optional review", () => {
+  const source = readFileSync("src/app/first-move-app.tsx", "utf8");
+  const focusPanel = source.slice(source.indexOf("function FocusPanel"), source.indexOf("function SessionReview"));
+  const sessionReview = source.slice(source.indexOf("function SessionReview"), source.indexOf("function DailyReflection"));
+
+  assert.match(focusPanel, /Pending First Move/);
+  assert.match(focusPanel, /Start this First Move/);
+  assert.match(focusPanel, /Quick Countdown/);
+  assert.match(focusPanel, /No linked item/);
+  assert.match(focusPanel, /onClick=\{beginCountdown\}>Start countdown/);
+  assert.ok(focusPanel.indexOf("Start this First Move") < focusPanel.indexOf("Quick Countdown"));
+  assert.doesNotMatch(focusPanel, /Pending First Move: \{pendingIntent\.moveText\}/);
+  assert.match(sessionReview, /useState\(false\)/);
+  assert.match(sessionReview, /Saved automatically/);
+  assert.match(sessionReview, /Edit details/);
+  assert.match(sessionReview, /Save changes/);
+  assert.doesNotMatch(sessionReview, />Save session</);
+});

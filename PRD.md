@@ -83,7 +83,11 @@ Each direction uses neutral language and can be changed before or after a sessio
 
 ## Bounded sessions and return choice
 
-- Offer 2, 5, 10, and 25 minute sessions with start, pause, resume, cancel, and finish states.
+- Focus can be entered directly without using “I'm Stuck.” Countdown and stopwatch are normal standalone Focus tools, each with an optional activity title, one of the five directions, and an optional link to one existing Task or Habit; no linked item is valid.
+- Keep the existing bounded countdown choices, including the Web 2/5/10/25/50-minute presets and validated custom duration, with start, pause, resume, cancel, and finish states.
+- “I'm Stuck” remains the prominent assisted-start path. It creates one pending `ActivityIntent` shown as its own optional prefilled First Move card; Quick Countdown and Stopwatch remain independently available, and ordinary standalone Focus never creates a placeholder or fake intent.
+- Completing or intentionally stopping the linked First Move clears only its active pending state while the Session retains the historical Intent relationship; cancelling the Session keeps the pending First Move ready.
+- Persist completed and intentionally stopped Sessions immediately. Show the saved result without confirmation and offer optional `Edit details` through the normal Session review mutation.
 - Use timestamp-based timing so tab throttling and reload recovery do not corrupt remaining time.
 - At completion or early stop, present neutral choices: continue, rest, intentional entertainment, or finish.
 - Use an in-page visual completion state and optional sound/vibration where supported; do not promise system alarms.
@@ -152,7 +156,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Make “I'm Stuck” the most prominent action throughout the responsive app.
 - Morning contains Morning Start and its toothbrush check.
 - Today contains the stuck entry, tasks, scheduled habits, reflection, points, and activity timeline.
-- Focus/session UI presents the current First Move, timer, and neutral return choice.
+- Focus/session UI keeps Quick Countdown and Stopwatch available beside an optional pending First Move card, then provides the shared timer, saved result, optional details edit, and neutral return choice.
 - Cat Store contains status, room, store, inventory, tricks, and milestones; the global companion links there from every other main view.
 - Minimize required typing and show one decision at a time during the stuck flow.
 - Use large touch targets, semantic controls, keyboard support, visible focus, reduced-motion support, sufficient contrast, and non-color status cues.
@@ -215,7 +219,7 @@ Initial production launch targets supported international markets and does not o
 - Guest mode is a complete local profile. Optional email-OTP accounts add Free cross-device sync.
 - “I'm Stuck” works independently and is the primary product path; Morning Start is a complementary entry.
 - Five fixed directions organize local templates, tasks, habits, and AI output.
-- Sessions use fixed 2, 5, 10, or 25 minute bounds; Intentional Entertainment uses 5 or 10 minutes.
+- Assisted First Moves choose and display an intended duration from fixed 2, 5, 10, or 25 minute bounds; independently, Web Quick Countdown retains its 50-minute preset and validated custom duration, while Intentional Entertainment uses 5 or 10 minutes.
 - Effort receives gentle feedback, while missed days and failed or cancelled sessions receive no punishment.
 - AI is optional and user-initiated; local templates and manual controls are always available.
 - RevenueCat is authoritative for Pro; Supabase Auth UUID is its App User ID.
