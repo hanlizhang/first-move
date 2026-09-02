@@ -6,6 +6,10 @@ const source = readFileSync(
   new URL("./app/(tabs)/focus.tsx", import.meta.url),
   "utf8",
 );
+const pickerSource = readFileSync(
+  new URL("./components/focus-link-picker.tsx", import.meta.url),
+  "utf8",
+);
 
 test("Mobile Focus exposes the three independent Session entry paths", () => {
   assert.match(source, /Pending First Move/);
@@ -27,6 +31,16 @@ test("Mobile Focus makes persistence automatic and review optional", () => {
 
 test("canonical link choices are gated to the current Supabase Auth UUID", () => {
   assert.match(source, /cloud\.userId === auth\.user\.id/);
-  assert.match(source, /Synced read-only item/);
+  assert.match(pickerSource, /Synced read-only item/);
   assert.match(source, /cloud business data remains read-only/);
+});
+
+test("Focus uses one compact searchable linked-item field", () => {
+  assert.match(source, /FocusLinkPicker/);
+  assert.doesNotMatch(source, /function LinkPicker/);
+  assert.match(pickerSource, /Search Tasks and Habits/);
+  assert.match(pickerSource, /No linked item/);
+  assert.match(pickerSource, /Tasks/);
+  assert.match(pickerSource, /Habits/);
+  assert.match(pickerSource, /Selected/);
 });

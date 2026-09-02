@@ -12,6 +12,7 @@ import {
   Screen,
   SecondaryButton,
 } from "../../components/ui.tsx";
+import { FocusLinkPicker } from "../../components/focus-link-picker.tsx";
 import { getPendingIntent } from "../../domain/app-state.ts";
 import {
   buildFocusLinkOptions,
@@ -429,7 +430,7 @@ function CountdownSetup({
       <Body muted>
         Start Focus directly without creating or consuming an ActivityIntent.
       </Body>
-      <LinkPicker
+      <FocusLinkPicker
         label="Link to a Task or Habit (optional)"
         onSelect={chooseLink}
         options={linkOptions}
@@ -521,7 +522,7 @@ function StopwatchSetup({
       <Body muted>
         Track open-ended time with the same persisted Session engine.
       </Body>
-      <LinkPicker
+      <FocusLinkPicker
         label="Link to a Task or Habit (optional)"
         onSelect={chooseLink}
         options={linkOptions}
@@ -660,7 +661,7 @@ function SessionReview({
               <Body muted>{relationship}</Body>
             </View>
           ) : (
-            <LinkPicker
+            <FocusLinkPicker
               currentUnavailableLabel={relationship}
               label="Linked Task or Habit (optional)"
               onSelect={setLinkKey}
@@ -706,54 +707,6 @@ function DirectionPicker({
             label={direction}
             onPress={() => onSelect(direction)}
             selected={selected === direction}
-          />
-        ))}
-      </View>
-    </>
-  );
-}
-
-function LinkPicker({
-  currentUnavailableLabel,
-  label,
-  onSelect,
-  options,
-  selectedKey,
-}: {
-  currentUnavailableLabel?: string;
-  label: string;
-  onSelect(value: string): void;
-  options: readonly FocusLinkOption[];
-  selectedKey: string;
-}) {
-  const selectedAvailable =
-    !selectedKey || options.some((option) => option.key === selectedKey);
-
-  return (
-    <>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View accessibilityRole="radiogroup" style={styles.choiceList}>
-        <ChoiceButton
-          label="No linked item"
-          onPress={() => onSelect("")}
-          selected={!selectedKey}
-        />
-        {!selectedAvailable ? (
-          <ChoiceButton
-            label={`${currentUnavailableLabel ?? "Existing linked item"} · unavailable for new links`}
-            onPress={() => onSelect(selectedKey)}
-            selected
-          />
-        ) : null}
-        {options.map((option) => (
-          <ChoiceButton
-            detail={`${option.direction} · ${
-              option.source === "canonical" ? "Synced read-only item" : "On-device item"
-            }`}
-            key={option.key}
-            label={`${option.kind === "task" ? "Task" : "Habit"}: ${option.title}`}
-            onPress={() => onSelect(option.key)}
-            selected={selectedKey === option.key}
           />
         ))}
       </View>

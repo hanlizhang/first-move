@@ -57,6 +57,19 @@ export function findFocusLinkOption(
   return options.find((option) => option.key === key);
 }
 
+export function filterFocusLinkOptions(
+  options: readonly FocusLinkOption[],
+  query: string,
+): FocusLinkOption[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return [...options];
+  return options.filter((option) =>
+    [option.title, option.direction, option.kind].some((value) =>
+      value.toLocaleLowerCase().includes(normalized),
+    ),
+  );
+}
+
 export function focusLinkFields(key: string): {
   linkedTaskId?: string;
   linkedHabitId?: string;

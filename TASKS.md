@@ -284,6 +284,17 @@
 
 **M1C status:** Implemented on `mobile/m1c-focus`. Mobile Focus now matches the current cross-platform Focus entry and review contract without adding rewards, Today/history, Tasks/Habits CRUD, cloud writes, native dependencies, or SQL/RPC changes.
 
+### M1D — Local Tasks and Habits
+
+- [x] Reuse the schema-v8 Task/Habit models and add UUID-v4 local creation, title/direction editing, local-date completion toggles, active-list soft deletion, and daily/selected-weekday Habit schedules.
+- [x] Add dedicated Mobile Tasks and Habits screens reachable from Today, with accessible current-date completion controls and deletion confirmation.
+- [x] Keep Guest and per-Supabase-UUID account-local writes serialized through the existing AsyncStorage repository without merging namespaces.
+- [x] Show current-owner canonical Tasks/Habits separately as read-only, preserve their stable UUIDs, and never copy them into editable local state.
+- [x] Replace each long inline Focus parent list with one compact field and a searchable modal containing No linked item, Tasks, Habits, source labels, and an explicit selected state.
+- [x] Preserve existing `linkedTaskId` / `linkedHabitId` relationships and add no cloud business writes, rewards/history, dependencies, SQL, or RPCs.
+
+**M1D status:** Implemented on `mobile/m1d-tasks-habits`. Focus and local Task/Habit CRUD remain schema-v8 compatible while canonical cloud business data stays read-only pending M1E authenticated writes.
+
 ## Explicitly excluded
 
 - Advertising or consumable real-money purchases

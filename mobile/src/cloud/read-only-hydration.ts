@@ -50,7 +50,7 @@ export async function hydrateInitializedWorkspace(
       return {
         status: "setup-unavailable",
         message:
-          "This account has no cloud workspace yet. Cloud setup is not available in Mobile M1C; keep using local progress on this device.",
+          "This account has no cloud workspace yet. Cloud setup is not available until Mobile M1E; keep using local progress on this device.",
       };
     }
 
