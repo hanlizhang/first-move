@@ -1,10 +1,111 @@
 import {
+  isDirection,
+  isFocusDuration,
   isIntendedDuration,
   type ActivitySession,
   type AppState,
+  type Direction,
 } from "./models.ts";
 
 type IdFactory = () => string;
+
+interface SessionLink {
+  linkedTaskId?: string;
+  linkedHabitId?: string;
+  linkedIntentId?: string;
+}
+
+export interface SessionReference {
+  id: string;
+  title: string;
+  direction: Direction;
+}
+
+export interface SessionReferenceCatalog {
+  tasks?: readonly SessionReference[];
+  habits?: readonly SessionReference[];
+}
+
+export interface StartCountdownInput extends SessionLink {
+  direction?: Direction;
+  label?: string;
+  durationMinutes: number;
+}
+
+export interface StartStopwatchInput extends SessionLink {
+  direction?: Direction;
+  label?: string;
+}
+
+export interface ReviewSessionInput {
+  label: string;
+  direction: Direction;
+  linkedTaskId?: string;
+  linkedHabitId?: string;
+}
+
+export function startCountdown(
+  state: AppState,
+  input: StartCountdownInput,
+  nowMs = Date.now(),
+  idFactory: IdFactory = makeSessionId,
+  references: SessionReferenceCatalog = {},
+): AppState {
+  if (
+    getOpenSession(state) ||
+    !isFocusDuration(input.durationMinutes) ||
+    hasMultipleLinks(input)
+  ) {
+    return state;
+  }
+  const linked = resolveLink(state, input, references);
+  if (!linked.valid) return state;
+  const direction = input.direction ?? linked.direction;
+  if (!direction || !isDirection(direction)) return state;
+
+  return appendSession(
+    state,
+    {
+      id: idFactory(),
+      mode: "countdown",
+      direction,
+      label: cleanLabel(input.label) || cleanLabel(linked.label) || "Focus time",
+      targetDurationMinutes: input.durationMinutes,
+      ...(input.linkedTaskId ? { linkedTaskId: input.linkedTaskId } : {}),
+      ...(input.linkedHabitId ? { linkedHabitId: input.linkedHabitId } : {}),
+      ...(input.linkedIntentId ? { linkedIntentId: input.linkedIntentId } : {}),
+    },
+    nowMs,
+  );
+}
+
+export function startStopwatch(
+  state: AppState,
+  input: StartStopwatchInput,
+  nowMs = Date.now(),
+  idFactory: IdFactory = makeSessionId,
+  references: SessionReferenceCatalog = {},
+): AppState {
+  if (getOpenSession(state) || hasMultipleLinks(input)) return state;
+  const linked = resolveLink(state, input, references);
+  if (!linked.valid) return state;
+  const direction = input.direction ?? linked.direction;
+  if (!direction || !isDirection(direction)) return state;
+
+  return appendSession(
+    state,
+    {
+      id: idFactory(),
+      mode: "stopwatch",
+      direction,
+      label: cleanLabel(input.label) || cleanLabel(linked.label) || "Tracked time",
+      ...(input.linkedTaskId ? { linkedTaskId: input.linkedTaskId } : {}),
+      ...(input.linkedHabitId ? { linkedHabitId: input.linkedHabitId } : {}),
+      ...(input.linkedIntentId ? { linkedIntentId: input.linkedIntentId } : {}),
+    },
+    nowMs,
+  );
+}
 
 export function startCountdownFromIntent(
   state: AppState,
@@ -12,26 +113,19 @@ export function startCountdownFromIntent(
   nowMs = Date.now(),
   idFactory: IdFactory = makeSessionId,
 ): AppState {
-  if (getOpenSession(state)) return state;
   const intent = state.activityIntents.find(
     (candidate) => candidate.id === intentId && candidate.status === "pending",
   );
   if (!intent || !isIntendedDuration(intent.intendedDurationMinutes)) return state;
-
-  const timestamp = new Date(nowMs).toISOString();
-  const session: ActivitySession = {
-    id: idFactory(),
-    mode: "countdown",
-    direction: intent.direction,
-    label: intent.moveText,
-    targetDurationMinutes: intent.intendedDurationMinutes,
-    linkedIntentId: intent.id,
-    status: "running",
-    startedAt: timestamp,
-    lastResumedAt: timestamp,
-    accumulatedElapsedMs: 0,
-  };
-  return { ...state, sessions: [...state.sessions, session] };
+  return startCountdown(
+    state,
+    {
+      durationMinutes: intent.intendedDurationMinutes,
+      linkedIntentId: intent.id,
+    },
+    nowMs,
+    idFactory,
+  );
 }
 
 export function pauseSession(
@@ -81,10 +175,10 @@ export function stopSession(
 export function cancelSession(
   state: AppState,
   sessionId: string,
-  nowMs = Date.now(),
+  _nowMs = Date.now(),
 ): AppState {
-  const completed = completeSessionIfElapsed(state, sessionId, nowMs);
-  if (completed !== state) return completed;
+  // Product cancellation always removes an open record, even if the UI has not
+  // yet reconciled a countdown whose wall-clock target just passed.
   const session = getOpenSession(state);
   if (!session || session.id !== sessionId) return state;
   return {
@@ -117,6 +211,54 @@ export function reconcileRunningCountdown(
 ): AppState {
   const session = getOpenSession(state);
   return session ? completeSessionIfElapsed(state, session.id, nowMs) : state;
+}
+
+export function reviewSession(
+  state: AppState,
+  sessionId: string,
+  input: ReviewSessionInput,
+  nowMs = Date.now(),
+  references: SessionReferenceCatalog = {},
+): AppState {
+  const label = cleanLabel(input.label);
+  if (!label || !isDirection(input.direction)) return state;
+  if (input.linkedTaskId && input.linkedHabitId) return state;
+  const session = state.sessions.find((candidate) => candidate.id === sessionId);
+  if (!session || (session.status !== "completed" && session.status !== "stopped")) {
+    return state;
+  }
+  if (session.linkedIntentId && (input.linkedTaskId || input.linkedHabitId)) {
+    return state;
+  }
+
+  const preservesUnavailableLink =
+    input.linkedTaskId === session.linkedTaskId &&
+    input.linkedHabitId === session.linkedHabitId;
+  if (!session.linkedIntentId && !preservesUnavailableLink) {
+    const linked = resolveLink(state, input, references);
+    if (!linked.valid) return state;
+  }
+
+  return {
+    ...state,
+    sessions: state.sessions.map((candidate) =>
+      candidate.id === sessionId
+        ? {
+            ...candidate,
+            label,
+            direction: input.direction,
+            linkedTaskId: session.linkedIntentId
+              ? undefined
+              : input.linkedTaskId,
+            linkedHabitId: session.linkedIntentId
+              ? undefined
+              : input.linkedHabitId,
+            linkedIntentId: session.linkedIntentId,
+            reviewedAt: new Date(nowMs).toISOString(),
+          }
+        : candidate,
+    ),
+  };
 }
 
 export function getOpenSession(state: AppState): ActivitySession | undefined {
@@ -161,6 +303,32 @@ export function remainingMs(
   );
 }
 
+function appendSession(
+  state: AppState,
+  input: Pick<
+    ActivitySession,
+    | "id"
+    | "mode"
+    | "direction"
+    | "label"
+    | "targetDurationMinutes"
+    | "linkedTaskId"
+    | "linkedHabitId"
+    | "linkedIntentId"
+  >,
+  nowMs: number,
+): AppState {
+  const timestamp = new Date(nowMs).toISOString();
+  const session: ActivitySession = {
+    ...input,
+    status: "running",
+    startedAt: timestamp,
+    lastResumedAt: timestamp,
+    accumulatedElapsedMs: 0,
+  };
+  return { ...state, sessions: [...state.sessions, session] };
+}
+
 function closeSession(
   state: AppState,
   sessionId: string,
@@ -178,7 +346,7 @@ function closeSession(
     session.targetDurationMinutes
       ? Math.min(measured, session.targetDurationMinutes * 60_000)
       : measured;
-  return {
+  const closedState: AppState = {
     ...state,
     sessions: state.sessions.map((candidate) =>
       candidate.id === sessionId
@@ -191,6 +359,15 @@ function closeSession(
             endedAt: new Date(nowMs).toISOString(),
           }
         : candidate,
+    ),
+  };
+  if (!session.linkedIntentId) return closedState;
+  return {
+    ...closedState,
+    activityIntents: closedState.activityIntents.map((intent) =>
+      intent.id === session.linkedIntentId && intent.status === "pending"
+        ? { ...intent, status: "consumed" }
+        : intent,
     ),
   };
 }
@@ -212,6 +389,48 @@ function updateOpenSession(
       session.id === sessionId ? next : session,
     ),
   };
+}
+
+function resolveLink(
+  state: AppState,
+  link: SessionLink,
+  references: SessionReferenceCatalog,
+): { valid: boolean; direction?: Direction; label?: string } {
+  if (link.linkedTaskId) {
+    const task = [...state.tasks, ...(references.tasks ?? [])].find(
+      (candidate) => candidate.id === link.linkedTaskId,
+    );
+    return task
+      ? { valid: true, direction: task.direction, label: task.title }
+      : { valid: false };
+  }
+  if (link.linkedHabitId) {
+    const habit = [...state.habits, ...(references.habits ?? [])].find(
+      (candidate) => candidate.id === link.linkedHabitId,
+    );
+    return habit
+      ? { valid: true, direction: habit.direction, label: habit.title }
+      : { valid: false };
+  }
+  if (link.linkedIntentId) {
+    const intent = state.activityIntents.find(
+      (candidate) =>
+        candidate.id === link.linkedIntentId && candidate.status === "pending",
+    );
+    return intent
+      ? { valid: true, direction: intent.direction, label: intent.moveText }
+      : { valid: false };
+  }
+  return { valid: true };
+}
+
+function hasMultipleLinks(link: SessionLink): boolean {
+  return [link.linkedTaskId, link.linkedHabitId, link.linkedIntentId].filter(Boolean)
+    .length > 1;
+}
+
+function cleanLabel(value?: string): string {
+  return (value ?? "").trim().replace(/\s+/g, " ").slice(0, 160);
 }
 
 function makeSessionId(): string {

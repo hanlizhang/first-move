@@ -1,4 +1,4 @@
-# First Move Mobile — M0 + M1A + M1B
+# First Move Mobile — M0 + M1A + M1B + M1C
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
@@ -11,7 +11,7 @@ This is an independent Expo React Native project. The Next.js Web app remains at
 - Supabase sessions persisted through an `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage. Long session values are safely chunked.
 - Schema-v8 Guest storage, per-account local storage, and validated account-scoped cloud caches remain separate.
 - Existing initialized accounts are read through `cloud_workspace_status` and then `get_cloud_workspace_v2` only.
-- Empty accounts show that cloud setup remains unavailable in M1B.
+- Empty accounts show that cloud setup remains unavailable in M1C.
 
 M0 does not import, merge, initialize, or write business data. It does not call `initialize_cloud_workspace`, `initialize_cloud_workspace_v2`, or `sync_cloud_workspace_v1`.
 
@@ -33,7 +33,18 @@ M0 does not import, merge, initialize, or write business data. It does not call 
 - Completed and stopped sessions save actual elapsed time. M1B adds no rewards, points, timeline, history, or statistics.
 - Signing out exposes neither the account-local intent nor its session in Guest Mode; neither workspace is deleted or merged.
 
-M1A/M1B do not implement Tasks/Habits UI, cloud writes, post-session choices, Cat, Morning Start, AI, RevenueCat, notifications, background services, or SQL changes.
+## M1C boundary
+
+- Focus keeps a pending First Move in its own prominent card while standalone Countdown and Stopwatch remain available.
+- Quick Countdown offers 2/5/10/25/50-minute presets and validated whole custom minutes from 1 through 720.
+- Standalone Countdown and Stopwatch accept an optional title, one of the five directions, and one existing Task or Habit link or no link. They never create an `ActivityIntent`.
+- The same M1B timestamp engine handles Countdown and Stopwatch start, pause, resume, recovery, stop/cancel, duplicate prevention, and actual elapsed time.
+- Completed and intentionally stopped Sessions are saved before review. `Edit details` is optional and can update title/direction; standalone Sessions can also link, relink, or unlink an existing Task/Habit.
+- Completing or stopping an assisted Session clears its pending state but retains the full historical Intent as consumed. Cancelling the Session creates no closed result and keeps the First Move pending.
+- Guest and per-Supabase-UUID local workspaces remain separate. Active canonical Tasks/Habits are offered only from the current UUID’s validated read-only cache and retain their UUID without being copied.
+- A later cloud writer must preserve ordered assisted start/close mutations and serialize only the active pending Intent view to the current snapshot RPC; retained local `consumed` history must never be sent back as pending.
+
+M1A/M1B/M1C do not implement full Tasks/Habits CRUD, cloud business writes, post-session choices, rewards, Today/history, Cat, Morning Start, AI, RevenueCat, notifications, background services, or SQL/RPC changes.
 
 ## Local setup
 
@@ -95,7 +106,7 @@ git diff --check
 - [ ] A valid email request says to check email and uses `firstmove://auth/callback`.
 - [ ] Opening a valid link reaches the callback screen, restores the same Supabase Auth UUID, and survives app restart.
 - [ ] An initialized account loads a verified read-only summary from `get_cloud_workspace_v2`.
-- [ ] An empty account shows that cloud setup is unavailable in M1B and makes no setup/import RPC.
+- [ ] An empty account shows that cloud setup is unavailable in M1C and makes no setup/import RPC.
 - [ ] Invalid/expired links and failed hydration show generic errors without exposing email, token, journal, or payload data.
 - [ ] Sign out returns to signed-out state while Guest Mode data and the account-scoped validated cache remain present.
 
@@ -111,7 +122,7 @@ git diff --check
 
 ## Manual M1B acceptance
 
-- [ ] In Guest Mode, save each allowed duration (2/5/10/25) and confirm Focus starts that exact countdown; no other duration control appears.
+- [ ] In Guest Mode, save each allowed First Move duration (2/5/10/25) and confirm the pending card starts that exact countdown while standalone Focus controls remain separate.
 - [ ] Start, wait, pause, leave Focus, return, and confirm paused remaining time does not change; resume and confirm it continues from the saved value.
 - [ ] With a countdown running, reload/restart the app and confirm the remaining time reflects wall-clock time rather than resetting.
 - [ ] Let a timer expire, including while the app is away, and confirm one completed session with actual elapsed time equal to its bound.
@@ -120,3 +131,19 @@ git diff --check
 - [ ] Repeated taps/reloads never create two open sessions or duplicate a completed session.
 - [ ] Create an authenticated intent/session, sign out, continue as Guest, and confirm only prior Guest data appears; sign back into the same account and confirm its local state returns.
 - [ ] Sign into a different account and confirm neither Guest nor the first account’s local state is shown or merged.
+
+## Manual M1C acceptance
+
+- [ ] Create a pending First Move and confirm Focus shows its title, direction, intended duration, and existing Task/Habit relationship in a separate card above the standalone tools.
+- [ ] While that First Move is pending, start a standalone Countdown and then a standalone Stopwatch; confirm neither Session has `linkedIntentId` and the First Move remains pending after each closes.
+- [ ] Start the pending card with **Start this First Move**; complete once and stop once, confirming each saved Session retains `linkedIntentId`, only that matching Intent becomes consumed, and its full Task/Habit relationship remains readable.
+- [ ] Cancel a running assisted Session before and after its nominal zero time; confirm no completed/stopped record is created and the First Move remains pending.
+- [ ] Start Countdown with each 2/5/10/25/50 preset, plus custom 1 and 720; confirm blank, 0, decimals, exponents, and 721 cannot start.
+- [ ] For Countdown and Stopwatch, verify optional blank title defaults, all five directions, no link, a Task link, and a Habit link. Selecting a parent prefills title/direction but both remain editable.
+- [ ] Pause, leave Focus, restart the app, return, and resume each mode; confirm paused time is excluded, running time catches up from timestamps, and only Countdown completes automatically at zero.
+- [ ] Stop each mode and confirm actual elapsed time plus the saved result appear immediately with no **Save session** action; leave Focus and return to confirm the record remains.
+- [ ] Use **Edit details** to change title/direction and link, relink, then unlink a standalone Session. Confirm elapsed time/status stay unchanged and no Task/Habit is created or completed.
+- [ ] Edit an assisted Session and confirm its First Move relationship cannot be replaced by a direct Task/Habit link.
+- [ ] With an initialized account, link a validated canonical Task and Habit; confirm the local Session stores their stable UUIDs, no parent is copied, and no business-write RPC occurs.
+- [ ] Switch between Guest, account A, and account B while Focus data exists; confirm local Sessions and canonical link choices never cross owners, including during hydration/loading.
+- [ ] Confirm stopped/completed Sessions add no rewards, points, Today/history entries, notifications, or background service behavior in M1C.

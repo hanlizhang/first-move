@@ -272,6 +272,18 @@
 
 **M1B status:** Implemented on `mobile/expo-v1`; focused and full Mobile tests, lint, strict TypeScript, Expo dependency validation, and iOS/Android exports pass. Rewards, post-session choices, Today/history, Tasks/Habits UI, cloud writes, notifications/background services, and later M1 features remain out of scope.
 
+### M1C — Complete local Focus
+
+- [x] Keep the pending First Move as a separate prominent card while leaving standalone Countdown and Stopwatch independently available.
+- [x] Add standalone 2/5/10/25/50-minute Countdown presets plus validated 1–720 custom minutes, optional title, one of five directions, and an optional existing Task or Habit link.
+- [x] Add standalone Stopwatch start, pause, resume, stop, cancellation, optional title, one of five directions, and an optional existing Task or Habit link through the M1B Session engine.
+- [x] Persist completed and intentionally stopped Sessions immediately, then show the saved result with optional title, direction, and Task/Habit review edits.
+- [x] Mark only the matching pending Intent consumed after completion/stop, retain its full historical record and relationship, and keep it pending after Session cancellation.
+- [x] Reuse active local parents plus active Tasks/Habits from the current authenticated UUID’s validated read-only canonical cache without copying or creating parent records.
+- [x] Preserve Guest/account-local namespaces, canonical-cache isolation, actual elapsed time, restart recovery, duplicate prevention, and the no-cloud-business-write boundary.
+
+**M1C status:** Implemented on `mobile/m1c-focus`. Mobile Focus now matches the current cross-platform Focus entry and review contract without adding rewards, Today/history, Tasks/Habits CRUD, cloud writes, native dependencies, or SQL/RPC changes.
+
 ## Explicitly excluded
 
 - Advertising or consumable real-money purchases

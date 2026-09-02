@@ -130,3 +130,32 @@ test("schema-v8 normalization preserves valid records and removes malformed ones
   assert.equal(normalized.progress.points, 0);
   assert.equal(normalized.progress.journeyDay, 3);
 });
+
+test("normalization retains historical intents while exposing only one pending pointer", () => {
+  const baseIntent = {
+    stuckState: "unsure what is needed" as const,
+    direction: "Rest" as const,
+    moveText: "Pause for two minutes.",
+    intendedDurationMinutes: 2 as const,
+    createdAt: timestamp,
+  };
+  const normalized = normalizeAppState({
+    ...createEmptyState(),
+    activityIntents: [
+      { ...baseIntent, id: "intent-consumed", status: "consumed" },
+      { ...baseIntent, id: "intent-pending", status: "pending" },
+      { ...baseIntent, id: "intent-extra-pending", status: "pending" },
+      { ...baseIntent, id: "intent-cancelled", status: "cancelled" },
+    ],
+  });
+
+  assert.deepEqual(
+    normalized.activityIntents.map(({ id, status }) => ({ id, status })),
+    [
+      { id: "intent-consumed", status: "consumed" },
+      { id: "intent-pending", status: "pending" },
+      { id: "intent-cancelled", status: "cancelled" },
+    ],
+  );
+  assert.equal(getPendingIntent(normalized)?.id, "intent-pending");
+});

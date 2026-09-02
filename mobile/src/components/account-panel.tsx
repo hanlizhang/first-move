@@ -133,7 +133,7 @@ export function AccountPanel() {
       return (
         <Card tone="warning">
           <Label>Cloud setup unavailable</Label>
-          <Heading>Not available in M1B</Heading>
+          <Heading>Not available in M1C</Heading>
           <Body>{cloud.message}</Body>
         </Card>
       );

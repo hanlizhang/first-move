@@ -7,7 +7,11 @@ import { createEmptyState } from "../domain/models.ts";
 import {
   getOpenSession,
   pauseSession,
+  reconcileRunningCountdown,
+  reviewSession,
   startCountdownFromIntent,
+  startStopwatch,
+  stopSession,
 } from "../domain/sessions.ts";
 import { canonicalPayload, USER_ID } from "../test-fixtures/canonical.ts";
 import {
@@ -212,4 +216,100 @@ test("an account-owned running or paused session restores from AsyncStorage", as
   const restored = getOpenSession(await repository.loadLocalWorkspace(owner));
   assert.equal(restored?.status, "paused");
   assert.equal(restored?.accumulatedElapsedMs, 45_000);
+});
+
+test("completion is persisted before optional review and retains its historical intent", async () => {
+  const store = memoryStore();
+  const repository = createMobileRepositoryWithStore(store);
+  const owner = { kind: "guest" } as const;
+  const startMs = Date.parse("2026-08-09T09:00:00.000Z");
+
+  await repository.updateLocalWorkspace(owner, (state) =>
+    startCountdownFromIntent(
+      createPendingIntent(
+        state,
+        {
+          stuckState: "knows what to do but cannot start",
+          direction: "Work & Study",
+          moveText: "Open the saved draft.",
+          intendedDurationMinutes: 2,
+        },
+        () => new Date(startMs).toISOString(),
+        () => "persisted-intent",
+      ),
+      "persisted-intent",
+      startMs,
+      () => "persisted-session",
+    ),
+  );
+  await repository.updateLocalWorkspace(owner, (state) =>
+    reconcileRunningCountdown(state, startMs + 180_000),
+  );
+
+  const savedBeforeReview = await repository.loadLocalWorkspace(owner);
+  assert.equal(savedBeforeReview.sessions[0]?.status, "completed");
+  assert.equal(savedBeforeReview.sessions[0]?.actualElapsedMs, 120_000);
+  assert.equal(savedBeforeReview.sessions[0]?.reviewedAt, undefined);
+  assert.equal(savedBeforeReview.activityIntents[0]?.status, "consumed");
+  assert.equal(savedBeforeReview.activityIntents[0]?.moveText, "Open the saved draft.");
+
+  await repository.updateLocalWorkspace(owner, (state) =>
+    reviewSession(
+      state,
+      "persisted-session",
+      { label: "Opened the saved draft", direction: "Work & Study" },
+      startMs + 190_000,
+    ),
+  );
+  const reviewed = await repository.loadLocalWorkspace(owner);
+  assert.equal(reviewed.sessions[0]?.label, "Opened the saved draft");
+  assert.equal(reviewed.sessions[0]?.actualElapsedMs, 120_000);
+  assert.equal(reviewed.sessions[0]?.linkedIntentId, "persisted-intent");
+});
+
+test("standalone Stopwatch records stay isolated by local workspace owner", async () => {
+  const store = memoryStore();
+  const repository = createMobileRepositoryWithStore(store);
+  const startMs = Date.parse("2026-08-09T09:00:00.000Z");
+  const guestOwner = { kind: "guest" } as const;
+  const accountOwner = { kind: "account", userId: USER_ID } as const;
+
+  await repository.updateLocalWorkspace(guestOwner, (state) =>
+    stopSession(
+      startStopwatch(
+        state,
+        { direction: "Rest", label: "Guest pause" },
+        startMs,
+        () => "guest-stopwatch",
+      ),
+      "guest-stopwatch",
+      startMs + 10_000,
+    ),
+  );
+  await repository.updateLocalWorkspace(accountOwner, (state) =>
+    stopSession(
+      startStopwatch(
+        state,
+        { direction: "Daily Life", label: "Account tidy" },
+        startMs,
+        () => "account-stopwatch",
+      ),
+      "account-stopwatch",
+      startMs + 20_000,
+    ),
+  );
+
+  assert.deepEqual(
+    (await repository.loadLocalWorkspace(guestOwner)).sessions.map(({ id }) => id),
+    ["guest-stopwatch"],
+  );
+  assert.deepEqual(
+    (await repository.loadLocalWorkspace(accountOwner)).sessions.map(({ id }) => id),
+    ["account-stopwatch"],
+  );
+  assert.equal(
+    (await repository.loadLocalWorkspace({ kind: "account", userId: "account-b" }))
+      .sessions.length,
+    0,
+  );
 });

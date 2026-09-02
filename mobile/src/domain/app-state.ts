@@ -1,6 +1,7 @@
 import {
   createEmptyState,
   isDirection,
+  isFocusDuration,
   isIntendedDuration,
   isStuckState,
   isWeekday,
@@ -180,7 +181,9 @@ function isActivityIntent(value: unknown): value is ActivityIntent {
     optionalString(value.linkedHabitId) &&
     !(value.linkedTaskId && value.linkedHabitId) &&
     typeof value.createdAt === "string" &&
-    value.status === "pending"
+    (value.status === "pending" ||
+      value.status === "consumed" ||
+      value.status === "cancelled")
   );
 }
 
@@ -346,8 +349,13 @@ function isSchedule(value: unknown): value is HabitSchedule {
 function keepOnePendingIntent(
   intents: ActivityIntent[],
 ): ActivityIntent[] {
-  const pending = intents.find((intent) => intent.status === "pending");
-  return pending ? [pending] : [];
+  let keptPending = false;
+  return intents.filter((intent) => {
+    if (intent.status !== "pending") return true;
+    if (keptPending) return false;
+    keptPending = true;
+    return true;
+  });
 }
 
 function keepOneOpenSession(sessions: ActivitySession[]): ActivitySession[] {
@@ -451,12 +459,7 @@ function optionalRating(value: unknown): boolean {
 }
 
 function validSessionDuration(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= 1 &&
-    value <= 720
-  );
+  return isFocusDuration(value);
 }
 
 function optionalSessionDuration(value: unknown): boolean {

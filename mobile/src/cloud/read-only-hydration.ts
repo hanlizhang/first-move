@@ -9,7 +9,12 @@ export type CloudHydrationState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "setup-unavailable"; message: string }
-  | { status: "ready"; workspace: CanonicalWorkspace; hydratedAt: string }
+  | {
+      status: "ready";
+      userId: string;
+      workspace: CanonicalWorkspace;
+      hydratedAt: string;
+    }
   | { status: "error"; message: string };
 
 export interface CloudRpcClient {
@@ -18,14 +23,26 @@ export interface CloudRpcClient {
   ): Promise<{ data: unknown; error: unknown | null }>;
 }
 
+export function cloudHydrationForUser(
+  state: CloudHydrationState,
+  userId?: string,
+): CloudHydrationState {
+  return state.status === "ready" && state.userId !== userId
+    ? { status: "loading" }
+    : state;
+}
+
 export async function hydrateInitializedWorkspace(
   client: CloudRpcClient,
   repository: MobileRepository,
   userId: string,
   now: () => string = () => new Date().toISOString(),
+  isCurrent: () => boolean = () => true,
 ): Promise<CloudHydrationState> {
   try {
+    if (!isCurrent()) return { status: "loading" };
     const statusResponse = await client.rpc(CLOUD_WORKSPACE_STATUS_RPC);
+    if (!isCurrent()) return { status: "loading" };
     if (statusResponse.error || !isRecord(statusResponse.data)) {
       return hydrationError();
     }
@@ -33,16 +50,19 @@ export async function hydrateInitializedWorkspace(
       return {
         status: "setup-unavailable",
         message:
-          "This account has no cloud workspace yet. Cloud setup is not available in Mobile M1B; keep using local progress on this device.",
+          "This account has no cloud workspace yet. Cloud setup is not available in Mobile M1C; keep using local progress on this device.",
       };
     }
 
     const workspaceResponse = await client.rpc(GET_CLOUD_WORKSPACE_RPC);
+    if (!isCurrent()) return { status: "loading" };
     if (workspaceResponse.error) return hydrationError();
     const workspace = validateCanonicalWorkspace(workspaceResponse.data);
     const hydratedAt = now();
+    if (!isCurrent()) return { status: "loading" };
     await repository.saveCloudWorkspace(userId, workspace, hydratedAt);
-    return { status: "ready", workspace, hydratedAt };
+    if (!isCurrent()) return { status: "loading" };
+    return { status: "ready", userId, workspace, hydratedAt };
   } catch {
     return hydrationError();
   }

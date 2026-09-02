@@ -22,6 +22,10 @@ export type StuckState = (typeof STUCK_STATES)[number];
 export const INTENDED_DURATIONS = [2, 5, 10, 25] as const;
 export type IntendedDuration = (typeof INTENDED_DURATIONS)[number];
 
+export const FOCUS_COUNTDOWN_PRESETS = [2, 5, 10, 25, 50] as const;
+export const MIN_FOCUS_DURATION_MINUTES = 1;
+export const MAX_FOCUS_DURATION_MINUTES = 720;
+
 export const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 
@@ -58,7 +62,7 @@ export interface ActivityIntent {
   linkedTaskId?: string;
   linkedHabitId?: string;
   createdAt: string;
-  status: "pending";
+  status: "pending" | "consumed" | "cancelled";
 }
 
 export type SessionStatus = "running" | "paused" | "completed" | "stopped";
@@ -203,6 +207,15 @@ export function isStuckState(value: unknown): value is StuckState {
 
 export function isIntendedDuration(value: unknown): value is IntendedDuration {
   return typeof value === "number" && INTENDED_DURATIONS.includes(value as IntendedDuration);
+}
+
+export function isFocusDuration(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_FOCUS_DURATION_MINUTES &&
+    value <= MAX_FOCUS_DURATION_MINUTES
+  );
 }
 
 export function isWeekday(value: unknown): value is Weekday {
