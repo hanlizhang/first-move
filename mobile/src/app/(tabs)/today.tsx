@@ -34,17 +34,17 @@ export default function TodayScreen() {
       </Card>
       {auth.status === "authenticated" && cloud.status === "ready" ? (
         <Card tone="success">
-          <Label>Read-only cloud snapshot</Label>
-          <Heading>{cloud.workspace.state.tasks.length} tasks in the canonical workspace</Heading>
+          <Label>Server-authoritative progress</Label>
+          <Heading>{cloud.workspace.state.progress.points} verified points</Heading>
           <Body>
-            {cloud.workspace.state.habits.length} habits · {cloud.workspace.state.progress.totalActiveDays} active days · {cloud.workspace.state.progress.points} points
+            Latest validated response · {cloud.workspace.state.progress.totalActiveDays} active days
           </Body>
         </Card>
       ) : null}
       <Card>
-        <Label>Later M1 work</Label>
+        <Label>Still outside M1E</Label>
         <Heading>Plan and timeline</Heading>
-        <Body muted>Rewards, history, Mini Journal, and Morning metadata are outside M1D.</Body>
+        <Body muted>Today history, daily-plan editing, Mini Journal, and Morning metadata remain later Mobile work.</Body>
       </Card>
     </Screen>
   );

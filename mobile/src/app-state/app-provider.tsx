@@ -2,6 +2,7 @@ import {
   AppState as NativeAppState,
   type AppStateStatus,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createContext,
   useCallback,
@@ -25,10 +26,15 @@ import { requestMagicLink } from "../auth/magic-link.ts";
 import { signOutWithoutDeletingLocalData } from "../auth/sign-out.ts";
 import {
   cloudHydrationForUser,
-  hydrateInitializedWorkspace,
   type CloudHydrationState,
-  type CloudRpcClient,
 } from "../cloud/read-only-hydration.ts";
+import {
+  MobileSyncRuntime,
+  defaultMobileSyncDependencies,
+  type MobileSyncClient,
+  type MobileSyncSnapshot,
+} from "../cloud/sync-runtime.ts";
+import { createMobileSyncQueue } from "../cloud/sync-queue.ts";
 import { createEmptyState, type AppState } from "../domain/models.ts";
 import { reconcileRunningCountdown } from "../domain/sessions.ts";
 import {
@@ -37,15 +43,21 @@ import {
 } from "../local/repository.ts";
 import { getSupabaseClient } from "../supabase/client.ts";
 import { localWorkspaceOwnerForAuth } from "./local-workspace-owner.ts";
+import {
+  createWorkspaceStartupController,
+  type WorkspaceStartupResult,
+} from "./workspace-startup.ts";
 
 type LocalWorkspaceStatus = "loading" | "ready" | "error";
 
 interface AppContextValue {
   auth: AuthState;
   cloud: CloudHydrationState;
+  sync: AppSyncState;
   localWorkspace: AppState;
   localWorkspaceStatus: LocalWorkspaceStatus;
   localWorkspaceMessage?: string;
+  workspaceEditable: boolean;
   continueAsGuest(): void;
   openSignIn(): void;
   sendMagicLink(email: string): Promise<void>;
@@ -57,12 +69,23 @@ interface AppContextValue {
   ): Promise<AppState | undefined>;
 }
 
+export type AppSyncState =
+  | { status: "local"; pendingCount: 0 }
+  | MobileSyncSnapshot;
+
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 const repository = createMobileRepository();
+const syncQueue = createMobileSyncQueue(AsyncStorage);
+const defaultSyncDependencies = defaultMobileSyncDependencies();
+const guestWorkspaceKey = localWorkspaceKey({ kind: "guest" });
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [auth, dispatch] = useReducer(reduceAuthState, initialAuthState);
   const [cloud, setCloud] = useState<CloudHydrationState>({ status: "idle" });
+  const [sync, setSync] = useState<AppSyncState>({
+    status: "local",
+    pendingCount: 0,
+  });
   const [localWorkspace, setLocalWorkspace] = useState<AppState>(createEmptyState);
   const [loadedLocalOwnerKey, setLoadedLocalOwnerKey] = useState<
     string | undefined
@@ -72,8 +95,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [localWorkspaceMessage, setLocalWorkspaceMessage] = useState<
     string | undefined
   >();
+  const [accountBootstrapEnabled, setAccountBootstrapEnabled] = useState(false);
+  const [workspaceStartup] = useState(() =>
+    createWorkspaceStartupController(AsyncStorage, repository),
+  );
   const clientRef = useRef<SupabaseClient | undefined>(undefined);
+  const syncRuntimeRef = useRef<MobileSyncRuntime | undefined>(undefined);
   const hydrationRequestRef = useRef(0);
+  const accountBootstrapEnabledRef = useRef(false);
   const authenticatedUserId =
     auth.status === "authenticated" ? auth.user.id : undefined;
   const authenticatedUserIdRef = useRef(authenticatedUserId);
@@ -104,6 +133,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => cloudHydrationForUser(cloud, authenticatedUserId),
     [authenticatedUserId, cloud],
   );
+  const visibleSync = useMemo<AppSyncState>(() => {
+    if (auth.status !== "authenticated") {
+      return { status: "local", pendingCount: 0 };
+    }
+    return "userId" in sync && sync.userId === auth.user.id
+      ? sync
+      : {
+          userId: auth.user.id,
+          status: "loading",
+          pendingCount: 0,
+        };
+  }, [auth, sync]);
+  const workspaceEditable =
+    visibleLocalWorkspaceStatus === "ready" &&
+    (auth.status === "guest" ||
+      (auth.status === "authenticated" &&
+        "lastSuccessfulSyncAt" in visibleSync &&
+        Boolean(visibleSync.lastSuccessfulSyncAt)));
 
   const resolveClient = useCallback(() => {
     const client = clientRef.current ?? getSupabaseClient();
@@ -111,18 +158,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return client;
   }, []);
 
-  const restore = useCallback(async () => {
-    dispatch({ type: "RESTORE_STARTED" });
+  const restoreAccountAuth = useCallback(async () => {
     try {
       const client = resolveClient();
-      dispatch(await restoreAuthSession(client.auth));
+      return await restoreAuthSession(client.auth);
     } catch {
-      dispatch({
-        type: "FAILED",
+      return {
+        type: "FAILED" as const,
         message: "Account services are not configured. Guest Mode is still available.",
-      });
+      };
     }
   }, [resolveClient]);
+
+  const enterGuestBoundary = useCallback(() => {
+    accountBootstrapEnabledRef.current = false;
+    setAccountBootstrapEnabled(false);
+    authenticatedUserIdRef.current = undefined;
+    activeLocalOwnerKeyRef.current = guestWorkspaceKey;
+    hydrationRequestRef.current += 1;
+    syncRuntimeRef.current?.dispose();
+    syncRuntimeRef.current = undefined;
+    setCloud({ status: "idle" });
+    setSync({ status: "local", pendingCount: 0 });
+  }, []);
+
+  const applyGuestStartup = useCallback(
+    (result: Extract<WorkspaceStartupResult, { mode: "guest" }>) => {
+      if (activeLocalOwnerKeyRef.current !== guestWorkspaceKey) return;
+      setLocalWorkspace(result.state);
+      setLoadedLocalOwnerKey(guestWorkspaceKey);
+      setLocalWorkspaceStatus(result.status);
+      setLocalWorkspaceMessage(
+        result.status === "error"
+          ? "Local progress could not be loaded. Nothing was deleted; try again before saving a First Move."
+          : undefined,
+      );
+    },
+    [],
+  );
+
+  const restore = useCallback(async () => {
+    accountBootstrapEnabledRef.current = true;
+    setAccountBootstrapEnabled(true);
+    dispatch({ type: "RESTORE_STARTED" });
+    const result = await workspaceStartup.enterAccount(restoreAccountAuth);
+    if (result?.mode === "account") dispatch(result.authEvent);
+  }, [restoreAccountAuth, workspaceStartup]);
+
+  const dispatchSession = useCallback(
+    (session: Session | null) => {
+      if (!accountBootstrapEnabledRef.current) return;
+      workspaceStartup.selectAccount();
+      hydrationRequestRef.current += 1;
+      authenticatedUserIdRef.current = session?.user.id;
+      if (!session) {
+        syncRuntimeRef.current?.dispose();
+        syncRuntimeRef.current = undefined;
+        setCloud({ status: "idle" });
+        setSync({ status: "local", pendingCount: 0 });
+        dispatch({ type: "SIGNED_OUT" });
+        return;
+      }
+      dispatch({
+        type: "AUTHENTICATED",
+        user: { id: session.user.id, email: session.user.email },
+      });
+    },
+    [workspaceStartup],
+  );
 
   useEffect(() => {
     authenticatedUserIdRef.current = authenticatedUserId;
@@ -130,16 +233,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [authenticatedUserId]);
 
   useEffect(() => {
-    const timer = setTimeout(() => void restore(), 0);
-    return () => clearTimeout(timer);
-  }, [restore]);
+    let active = true;
+    void workspaceStartup.start(restoreAccountAuth).then((result) => {
+      if (!active || !result) return;
+      if (result.mode === "guest") {
+        enterGuestBoundary();
+        applyGuestStartup(result);
+        dispatch({ type: "CONTINUE_AS_GUEST" });
+        return;
+      }
+      accountBootstrapEnabledRef.current = true;
+      setAccountBootstrapEnabled(true);
+      dispatch(result.authEvent);
+    });
+    return () => {
+      active = false;
+      workspaceStartup.cancel();
+    };
+  }, [applyGuestStartup, enterGuestBoundary, restoreAccountAuth, workspaceStartup]);
 
   useEffect(() => {
     activeLocalOwnerKeyRef.current = activeLocalOwnerKey;
   }, [activeLocalOwnerKey]);
 
   useEffect(() => {
-    if (!localOwner || !activeLocalOwnerKey) return;
+    if (
+      !localOwner ||
+      localOwner.kind !== "account" ||
+      !activeLocalOwnerKey
+    ) {
+      return;
+    }
     let active = true;
     const owner = localOwner;
     const ownerKey = activeLocalOwnerKey;
@@ -176,6 +300,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [activeLocalOwnerKey, localOwner]);
 
   useEffect(() => {
+    if (!accountBootstrapEnabled) return;
     let client: SupabaseClient;
     try {
       client = resolveClient();
@@ -186,9 +311,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatchSession(session);
     });
     return () => data.subscription.unsubscribe();
-  }, [resolveClient]);
+  }, [accountBootstrapEnabled, dispatchSession, resolveClient]);
 
   useEffect(() => {
+    if (!accountBootstrapEnabled) return;
     let client: SupabaseClient;
     try {
       client = resolveClient();
@@ -196,8 +322,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     const applyRefreshState = (state: AppStateStatus) => {
-      if (state === "active") client.auth.startAutoRefresh();
-      else client.auth.stopAutoRefresh();
+      if (state === "active") {
+        client.auth.startAutoRefresh();
+        void syncRuntimeRef.current?.refresh();
+      } else {
+        client.auth.stopAutoRefresh();
+      }
     };
     applyRefreshState(NativeAppState.currentState);
     const subscription = NativeAppState.addEventListener("change", applyRefreshState);
@@ -205,57 +335,96 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subscription.remove();
       client.auth.stopAutoRefresh();
     };
-  }, [resolveClient]);
-
-  const hydrate = useCallback(
-    async (userId: string) => {
-      const requestId = hydrationRequestRef.current + 1;
-      hydrationRequestRef.current = requestId;
-      const isCurrent = () =>
-        hydrationRequestRef.current === requestId &&
-        authenticatedUserIdRef.current === userId;
-      setCloud({ status: "loading" });
-      try {
-        const client = resolveClient();
-        const rpcClient: CloudRpcClient = {
-          rpc: async (name) => {
-            const response = await client.rpc(name);
-            return { data: response.data, error: response.error };
-          },
-        };
-        const result = await hydrateInitializedWorkspace(
-          rpcClient,
-          repository,
-          userId,
-          undefined,
-          isCurrent,
-        );
-        if (isCurrent()) setCloud(result);
-      } catch {
-        if (!isCurrent()) return;
-        setCloud({
-          status: "error",
-          message:
-            "Cloud progress could not be loaded or verified. Guest and cached local data were not changed.",
-        });
-      }
-    },
-    [resolveClient],
-  );
+  }, [accountBootstrapEnabled, resolveClient]);
 
   useEffect(() => {
     if (auth.status !== "authenticated") return;
-    const timer = setTimeout(() => void hydrate(auth.user.id), 0);
-    return () => clearTimeout(timer);
-  }, [auth, hydrate]);
+    const userId = auth.user.id;
+    const requestId = hydrationRequestRef.current + 1;
+    hydrationRequestRef.current = requestId;
+    const ownerKey = localWorkspaceKey({ kind: "account", userId });
+    const isCurrent = () =>
+      hydrationRequestRef.current === requestId &&
+      authenticatedUserIdRef.current === userId;
+    let client: SupabaseClient;
+    try {
+      client = resolveClient();
+    } catch {
+      const timer = setTimeout(() => {
+        setCloud({
+          status: "error",
+          message:
+            "Cloud progress could not be loaded or verified. Local data and pending changes were not replaced.",
+        });
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+    const syncClient: MobileSyncClient = {
+      auth: client.auth,
+      async rpc(name, parameters) {
+        const response = await client.rpc(name, parameters);
+        return { data: response.data, error: response.error };
+      },
+    };
+    const runtime = new MobileSyncRuntime({
+      userId,
+      client: syncClient,
+      repository,
+      queue: syncQueue,
+      isCurrent,
+      ...defaultSyncDependencies,
+      async applyCanonical(workspace, hydratedAt) {
+        await repository.saveCloudWorkspace(userId, workspace, hydratedAt);
+        if (!isCurrent()) return;
+        await repository.saveLocalWorkspace(
+          { kind: "account", userId },
+          workspace.state,
+        );
+        if (!isCurrent()) return;
+        setLocalWorkspace(workspace.state);
+        setLoadedLocalOwnerKey(ownerKey);
+        setLocalWorkspaceStatus("ready");
+        setLocalWorkspaceMessage(undefined);
+      },
+      applyWorkingState(state) {
+        if (!isCurrent()) return;
+        setLocalWorkspace(state);
+        setLoadedLocalOwnerKey(ownerKey);
+        setLocalWorkspaceStatus("ready");
+        setLocalWorkspaceMessage(undefined);
+      },
+      setCloudState(state) {
+        if (isCurrent()) setCloud(state);
+      },
+    });
+    syncRuntimeRef.current?.dispose();
+    syncRuntimeRef.current = runtime;
+    const unsubscribe = runtime.subscribe((snapshot) => {
+      if (isCurrent()) setSync(snapshot);
+    });
+    const timer = setTimeout(() => void runtime.start(), 0);
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+      runtime.dispose();
+      if (syncRuntimeRef.current === runtime) syncRuntimeRef.current = undefined;
+    };
+  }, [auth, resolveClient]);
 
   const continueAsGuest = useCallback(() => {
+    enterGuestBoundary();
     dispatch({ type: "CONTINUE_AS_GUEST" });
-  }, []);
+    void workspaceStartup.enterGuest().then((result) => {
+      if (result?.mode === "guest") applyGuestStartup(result);
+    });
+  }, [applyGuestStartup, enterGuestBoundary, workspaceStartup]);
 
   const openSignIn = useCallback(() => {
+    accountBootstrapEnabledRef.current = true;
+    setAccountBootstrapEnabled(true);
+    workspaceStartup.selectAccount();
     dispatch({ type: "OPEN_SIGN_IN" });
-  }, []);
+  }, [workspaceStartup]);
 
   const sendMagicLink = useCallback(
     async (email: string) => {
@@ -275,6 +444,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    syncRuntimeRef.current?.dispose();
+    syncRuntimeRef.current = undefined;
     try {
       const result = await signOutWithoutDeletingLocalData(resolveClient().auth);
       if (!result.ok) {
@@ -286,6 +457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       setCloud({ status: "idle" });
+      setSync({ status: "local", pendingCount: 0 });
       dispatch({ type: "SIGNED_OUT" });
     } catch {
       dispatch({
@@ -297,8 +469,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [resolveClient]);
 
   const refreshCloud = useCallback(async () => {
-    if (auth.status === "authenticated") await hydrate(auth.user.id);
-  }, [auth, hydrate]);
+    if (auth.status === "authenticated") {
+      await syncRuntimeRef.current?.retry();
+    }
+  }, [auth]);
 
   const updateLocalWorkspace = useCallback(
     async (recipe: (current: AppState) => AppState) => {
@@ -306,7 +480,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const owner = localOwner;
       const ownerKey = activeLocalOwnerKey;
       try {
-        const next = await repository.updateLocalWorkspace(owner, recipe);
+        const next =
+          owner.kind === "guest"
+            ? await repository.updateLocalWorkspace(owner, recipe)
+            : await syncRuntimeRef.current?.mutate(recipe);
+        if (!next) {
+          if (activeLocalOwnerKeyRef.current === ownerKey) {
+            setLocalWorkspaceMessage(
+              "Cloud editing is available only after this initialized account has a verified working copy.",
+            );
+          }
+          return undefined;
+        }
         if (activeLocalOwnerKeyRef.current !== ownerKey) return next;
         setLocalWorkspace(next);
         setLoadedLocalOwnerKey(ownerKey);
@@ -329,9 +514,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       auth,
       cloud: visibleCloud,
+      sync: visibleSync,
       localWorkspace: visibleLocalWorkspace,
       localWorkspaceStatus: visibleLocalWorkspaceStatus,
       localWorkspaceMessage: visibleLocalWorkspaceMessage,
+      workspaceEditable,
       continueAsGuest,
       openSignIn,
       sendMagicLink,
@@ -343,9 +530,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       auth,
       visibleCloud,
+      visibleSync,
       visibleLocalWorkspace,
       visibleLocalWorkspaceStatus,
       visibleLocalWorkspaceMessage,
+      workspaceEditable,
       continueAsGuest,
       openSignIn,
       sendMagicLink,
@@ -358,19 +547,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 
-  function dispatchSession(session: Session | null): void {
-    hydrationRequestRef.current += 1;
-    authenticatedUserIdRef.current = session?.user.id;
-    if (!session) {
-      setCloud({ status: "idle" });
-      dispatch({ type: "SIGNED_OUT" });
-      return;
-    }
-    dispatch({
-      type: "AUTHENTICATED",
-      user: { id: session.user.id, email: session.user.email },
-    });
-  }
 }
 
 export function useFirstMoveApp(): AppContextValue {

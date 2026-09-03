@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -32,6 +32,7 @@ import {
 import {
   addHabit,
   editHabit,
+  isHabitActive,
   isHabitScheduled,
   softDeleteHabit,
   toggleHabitCompletion,
@@ -53,11 +54,12 @@ export default function HabitsScreen() {
   const router = useRouter();
   const {
     auth,
-    cloud,
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
+    sync,
     updateLocalWorkspace,
+    workspaceEditable,
   } = useFirstMoveApp();
   const today = useCurrentLocalDate();
   const [editingId, setEditingId] = useState<string>();
@@ -67,17 +69,6 @@ export default function HabitsScreen() {
   const [weekdays, setWeekdays] = useState<Weekday[]>(DEFAULT_WEEKDAYS);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  const canonicalHabits = useMemo(() => {
-    if (
-      auth.status !== "authenticated" ||
-      cloud.status !== "ready" ||
-      cloud.userId !== auth.user.id
-    ) {
-      return [];
-    }
-    const localIds = new Set(localWorkspace.habits.map((habit) => habit.id));
-    return cloud.workspace.state.habits.filter((habit) => !localIds.has(habit.id));
-  }, [auth, cloud, localWorkspace.habits]);
   const schedule: HabitSchedule | undefined =
     scheduleKind === "daily"
       ? { kind: "daily" }
@@ -110,9 +101,17 @@ export default function HabitsScreen() {
           <Body>{notice}</Body>
         </Card>
       ) : null}
+      {!workspaceEditable && auth.status === "authenticated" ? (
+        <Card tone="warning">
+          <Label>Editing unavailable</Label>
+          <Body>
+            Finish loading a verified initialized cloud workspace in Settings before changing Habits.
+          </Body>
+        </Card>
+      ) : null}
 
       <Card>
-        <Label>{editingId ? "Edit on-device Habit" : "New on-device Habit"}</Label>
+        <Label>{editingId ? "Edit Habit" : "New Habit"}</Label>
         <FormLabel>Habit title</FormLabel>
         <TitleInput
           accessibilityLabel="Habit title"
@@ -175,7 +174,7 @@ export default function HabitsScreen() {
           </>
         ) : null}
         <PrimaryButton
-          disabled={saving || !title.trim() || !schedule}
+          disabled={saving || !workspaceEditable || !title.trim() || !schedule}
           title={editingId ? "Save Habit changes" : "Create Habit"}
           onPress={() => void submitHabit()}
         />
@@ -189,26 +188,26 @@ export default function HabitsScreen() {
       </Card>
 
       <View style={styles.sectionHeader}>
-        <Label>Editable on this device</Label>
+        <Label>Active Habits</Label>
         <Text style={styles.count}>{localWorkspace.habits.length}</Text>
       </View>
       {localWorkspace.habits.length === 0 ? (
         <Card>
-          <Heading>No on-device Habits yet</Heading>
+          <Heading>No Habits yet</Heading>
           <Body muted>Keep the first one light and forgiving.</Body>
         </Card>
       ) : (
         localWorkspace.habits.map((habit) => (
           <EditableHabitCard
             key={habit.id}
-            disabled={saving}
+            disabled={saving || !workspaceEditable}
             habit={habit}
             onDelete={() => confirmDelete(habit)}
             onEdit={() => beginEdit(habit)}
             onToggle={() =>
               void saveChange(
                 (state) => toggleHabitCompletion(state, habit.id, today),
-                habit.completedOn.includes(today)
+                !isHabitActive(habit, today)
                   ? "Habit check-in removed for today."
                   : "Habit checked for today.",
               )
@@ -218,23 +217,13 @@ export default function HabitsScreen() {
         ))
       )}
 
-      {canonicalHabits.length > 0 ? (
-        <>
-          <View style={styles.sectionHeader}>
-            <Label>Canonical cloud · read-only</Label>
-            <Text style={styles.count}>{canonicalHabits.length}</Text>
-          </View>
-          {canonicalHabits.map((habit) => (
-            <ReadOnlyHabitCard key={habit.id} habit={habit} today={today} />
-          ))}
-        </>
-      ) : null}
-
       <Card tone={auth.status === "authenticated" ? "warning" : "default"}>
         <Label>Storage boundary</Label>
         <Body muted>
           {auth.status === "authenticated"
-            ? "New and edited Habits stay in this Supabase UUID’s account-local workspace. Canonical cloud Habits remain separate and read-only until M1E adds authenticated business writes."
+            ? sync.status === "write-disabled"
+              ? "This uninitialized account remains write-disabled. Its local cache is never merged with Guest or another account."
+              : "This initialized Supabase UUID uses one immediate local working copy and an owner-scoped retry queue; validated server responses remain canonical."
             : "Guest Habits stay only in the separate Guest workspace on this device."}
         </Body>
       </Card>
@@ -249,7 +238,7 @@ export default function HabitsScreen() {
         editing
           ? editHabit(state, editing, { title, direction, schedule })
           : addHabit(state, { title, direction, schedule }),
-      editing ? "Habit changes saved on this device." : "Habit created on this device.",
+      editing ? "Habit changes saved." : "Habit created.",
     );
     if (changed) resetEditor();
   }
@@ -288,7 +277,7 @@ export default function HabitsScreen() {
   function confirmDelete(habit: Habit): void {
     Alert.alert(
       "Delete this Habit?",
-      "It will leave the active on-device list. Existing Focus history keeps its stable relationship ID.",
+      "It will leave the active list. Existing Focus history keeps its stable relationship ID.",
       [
         { text: "Keep Habit", style: "cancel" },
         {
@@ -343,7 +332,7 @@ function EditableHabitCard({
   today: string;
 }) {
   const scheduled = isHabitScheduled(habit, today);
-  const completed = habit.completedOn.includes(today);
+  const completed = !isHabitActive(habit, today);
   return (
     <Card tone={completed ? "success" : "default"}>
       <View style={styles.itemHeading}>
@@ -376,24 +365,6 @@ function EditableHabitCard({
           onPress={onDelete}
         />
       </View>
-    </Card>
-  );
-}
-
-function ReadOnlyHabitCard({ habit, today }: { habit: Habit; today: string }) {
-  const scheduled = isHabitScheduled(habit, today);
-  return (
-    <Card>
-      <Label>Synced read-only item</Label>
-      <Heading>{habit.title}</Heading>
-      <Body muted>
-        {habit.direction} · {scheduleLabel(habit.schedule)} · {scheduled ? "Scheduled today" : "Not scheduled today"}
-        {scheduled
-          ? habit.completedOn.includes(today)
-            ? " · Checked today"
-            : " · Not checked today"
-          : ""}
-      </Body>
     </Card>
   );
 }

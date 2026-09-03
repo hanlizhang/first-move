@@ -6,6 +6,7 @@ import {
   type AppState,
   type Direction,
 } from "./models.ts";
+import { createUuidV4 } from "./ids.ts";
 
 type IdFactory = () => string;
 
@@ -48,7 +49,7 @@ export function startCountdown(
   state: AppState,
   input: StartCountdownInput,
   nowMs = Date.now(),
-  idFactory: IdFactory = makeSessionId,
+  idFactory: IdFactory = createUuidV4,
   references: SessionReferenceCatalog = {},
 ): AppState {
   if (
@@ -83,7 +84,7 @@ export function startStopwatch(
   state: AppState,
   input: StartStopwatchInput,
   nowMs = Date.now(),
-  idFactory: IdFactory = makeSessionId,
+  idFactory: IdFactory = createUuidV4,
   references: SessionReferenceCatalog = {},
 ): AppState {
   if (getOpenSession(state) || hasMultipleLinks(input)) return state;
@@ -111,7 +112,7 @@ export function startCountdownFromIntent(
   state: AppState,
   intentId: string,
   nowMs = Date.now(),
-  idFactory: IdFactory = makeSessionId,
+  idFactory: IdFactory = createUuidV4,
 ): AppState {
   const intent = state.activityIntents.find(
     (candidate) => candidate.id === intentId && candidate.status === "pending",
@@ -431,16 +432,4 @@ function hasMultipleLinks(link: SessionLink): boolean {
 
 function cleanLabel(value?: string): string {
   return (value ?? "").trim().replace(/\s+/g, " ").slice(0, 160);
-}
-
-function makeSessionId(): string {
-  const cryptoValue = (
-    globalThis as typeof globalThis & {
-      crypto?: { randomUUID?: () => string };
-    }
-  ).crypto;
-  return (
-    cryptoValue?.randomUUID?.() ??
-    `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
-  );
 }

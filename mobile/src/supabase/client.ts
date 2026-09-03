@@ -17,7 +17,7 @@ export function getSupabaseClient(): SupabaseClient {
       flowType: "pkce",
     },
     global: {
-      headers: { "X-Client-Info": "first-move-mobile-m0" },
+      headers: { "X-Client-Info": "first-move-mobile-m1e" },
     },
   });
   return client;

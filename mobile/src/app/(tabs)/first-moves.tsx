@@ -54,7 +54,9 @@ export default function FirstMovesScreen() {
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
+    sync,
     updateLocalWorkspace,
+    workspaceEditable,
   } = useFirstMoveApp();
   const [step, setStep] = useState<FlowStep>("stuck-state");
   const [stuckState, setStuckState] = useState<StuckState>(STUCK_STATES[0]);
@@ -102,7 +104,7 @@ export default function FirstMovesScreen() {
   }
 
   async function savePendingIntent() {
-    if (!moveText.trim() || saving) return;
+    if (!moveText.trim() || saving || !workspaceEditable) return;
     setSaving(true);
     setNotice("");
     const next = await updateLocalWorkspace((state) =>
@@ -122,7 +124,7 @@ export default function FirstMovesScreen() {
   }
 
   async function clearPending(nextStep: FlowStep) {
-    if (!pendingIntent || saving) return;
+    if (!pendingIntent || saving || !workspaceEditable) return;
     setSaving(true);
     const next = await updateLocalWorkspace((state) =>
       cancelPendingIntent(state, pendingIntent.id),
@@ -177,18 +179,21 @@ export default function FirstMovesScreen() {
             <>
               <SecondaryButton
                 title="Change this move"
-                disabled={saving}
+                disabled={saving || !workspaceEditable}
                 onPress={() => void clearPending("move")}
               />
               <SecondaryButton
                 title="Cancel for now"
-                disabled={saving}
+                disabled={saving || !workspaceEditable}
                 onPress={() => void clearPending("stuck-state")}
               />
             </>
           ) : null}
         </Card>
-        <LocalBoundary authenticated={auth.status === "authenticated"} />
+        <LocalBoundary
+          authenticated={auth.status === "authenticated"}
+          syncStatus={sync.status}
+        />
       </Screen>
     );
   }
@@ -311,7 +316,7 @@ export default function FirstMovesScreen() {
 
           <PrimaryButton
             title={saving ? "Saving…" : "Save this First Move"}
-            disabled={!moveText.trim() || saving}
+            disabled={!moveText.trim() || saving || !workspaceEditable}
             onPress={() => void savePendingIntent()}
           />
           <SecondaryButton
@@ -338,7 +343,10 @@ export default function FirstMovesScreen() {
           {notice}
         </Text>
       ) : null}
-      <LocalBoundary authenticated={auth.status === "authenticated"} />
+      <LocalBoundary
+        authenticated={auth.status === "authenticated"}
+        syncStatus={sync.status}
+      />
     </Screen>
   );
 }
@@ -382,13 +390,21 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LocalBoundary({ authenticated }: { authenticated: boolean }) {
+function LocalBoundary({
+  authenticated,
+  syncStatus,
+}: {
+  authenticated: boolean;
+  syncStatus: string;
+}) {
   return (
     <Card>
-      <Label>Mobile local boundary</Label>
+      <Label>Storage boundary</Label>
       <Body muted>
         {authenticated
-          ? "This First Move stays in this account’s separate local AsyncStorage workspace. Cloud business data remains read-only."
+          ? syncStatus === "write-disabled"
+            ? "This uninitialized account cannot save a First Move. Guest and account workspaces remain separate."
+            : "This First Move saves immediately to the account working copy and queues through Web Sync v1. Only the pending Intent view is sent."
           : "Guest Mode stores this First Move in its separate local AsyncStorage workspace. No account or network is required."}
       </Body>
     </Card>

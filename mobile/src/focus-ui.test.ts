@@ -29,10 +29,11 @@ test("Mobile Focus makes persistence automatic and review optional", () => {
   assert.doesNotMatch(source, /Save session/);
 });
 
-test("canonical link choices are gated to the current Supabase Auth UUID", () => {
-  assert.match(source, /cloud\.userId === auth\.user\.id/);
-  assert.match(pickerSource, /Synced read-only item/);
-  assert.match(source, /cloud business data remains read-only/);
+test("Focus links use the current owner authoritative working copy", () => {
+  assert.match(source, /buildFocusLinkOptions\(localWorkspace, today\)/);
+  assert.doesNotMatch(source, /canonicalState/);
+  assert.match(pickerSource, /Working item/);
+  assert.match(source, /owner-scoped retry queue|queue in order/);
 });
 
 test("Focus uses one compact searchable linked-item field", () => {

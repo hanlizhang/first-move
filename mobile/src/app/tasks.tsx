@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -23,6 +23,7 @@ import { DIRECTIONS, type AppState, type Direction, type Task } from "../domain/
 import {
   addTask,
   editTask,
+  isTaskActive,
   softDeleteTask,
   toggleTaskCompletion,
 } from "../domain/tasks-habits.ts";
@@ -32,11 +33,12 @@ export default function TasksScreen() {
   const router = useRouter();
   const {
     auth,
-    cloud,
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
+    sync,
     updateLocalWorkspace,
+    workspaceEditable,
   } = useFirstMoveApp();
   const today = useCurrentLocalDate();
   const [editingId, setEditingId] = useState<string>();
@@ -44,18 +46,6 @@ export default function TasksScreen() {
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  const canonicalTasks = useMemo(() => {
-    if (
-      auth.status !== "authenticated" ||
-      cloud.status !== "ready" ||
-      cloud.userId !== auth.user.id
-    ) {
-      return [];
-    }
-    const localIds = new Set(localWorkspace.tasks.map((task) => task.id));
-    return cloud.workspace.state.tasks.filter((task) => !localIds.has(task.id));
-  }, [auth, cloud, localWorkspace.tasks]);
-
   if (localWorkspaceStatus === "loading") {
     return (
       <Screen title="Tasks">
@@ -81,9 +71,17 @@ export default function TasksScreen() {
           <Body>{notice}</Body>
         </Card>
       ) : null}
+      {!workspaceEditable && auth.status === "authenticated" ? (
+        <Card tone="warning">
+          <Label>Editing unavailable</Label>
+          <Body>
+            Finish loading a verified initialized cloud workspace in Settings before changing Tasks.
+          </Body>
+        </Card>
+      ) : null}
 
       <Card>
-        <Label>{editingId ? "Edit on-device Task" : "New on-device Task"}</Label>
+        <Label>{editingId ? "Edit Task" : "New Task"}</Label>
         <FormLabel>Task title</FormLabel>
         <TitleInput
           accessibilityLabel="Task title"
@@ -93,7 +91,7 @@ export default function TasksScreen() {
         />
         <DirectionPicker onSelect={setDirection} selected={direction} />
         <PrimaryButton
-          disabled={saving || !title.trim()}
+          disabled={saving || !workspaceEditable || !title.trim()}
           title={editingId ? "Save Task changes" : "Create Task"}
           onPress={() => void submitTask()}
         />
@@ -107,25 +105,25 @@ export default function TasksScreen() {
       </Card>
 
       <View style={styles.sectionHeader}>
-        <Label>Editable on this device</Label>
+        <Label>Active Tasks</Label>
         <Text style={styles.count}>{localWorkspace.tasks.length}</Text>
       </View>
       {localWorkspace.tasks.length === 0 ? (
         <Card>
-          <Heading>No on-device Tasks yet</Heading>
+          <Heading>No Tasks yet</Heading>
           <Body muted>Add one small action above.</Body>
         </Card>
       ) : (
         localWorkspace.tasks.map((task) => (
           <EditableTaskCard
             key={task.id}
-            disabled={saving}
+            disabled={saving || !workspaceEditable}
             onDelete={() => confirmDelete(task)}
             onEdit={() => beginEdit(task)}
             onToggle={() =>
               void saveChange(
                 (state) => toggleTaskCompletion(state, task.id, today),
-                task.completedOn.includes(today)
+                !isTaskActive(task, today)
                   ? "Task marked incomplete for today."
                   : "Task completed for today.",
               )
@@ -136,23 +134,13 @@ export default function TasksScreen() {
         ))
       )}
 
-      {canonicalTasks.length > 0 ? (
-        <>
-          <View style={styles.sectionHeader}>
-            <Label>Canonical cloud · read-only</Label>
-            <Text style={styles.count}>{canonicalTasks.length}</Text>
-          </View>
-          {canonicalTasks.map((task) => (
-            <ReadOnlyTaskCard key={task.id} task={task} today={today} />
-          ))}
-        </>
-      ) : null}
-
       <Card tone={auth.status === "authenticated" ? "warning" : "default"}>
         <Label>Storage boundary</Label>
         <Body muted>
           {auth.status === "authenticated"
-            ? "New and edited Tasks stay in this Supabase UUID’s account-local workspace. Canonical cloud Tasks remain separate and read-only until M1E adds authenticated business writes."
+            ? sync.status === "write-disabled"
+              ? "This uninitialized account remains write-disabled. Its local cache is never merged with Guest or another account."
+              : "This initialized Supabase UUID uses one immediate local working copy and an owner-scoped retry queue; validated server responses remain canonical."
             : "Guest Tasks stay only in the separate Guest workspace on this device."}
         </Body>
       </Card>
@@ -166,7 +154,7 @@ export default function TasksScreen() {
         editing
           ? editTask(state, editing, { title, direction })
           : addTask(state, { title, direction }),
-      editing ? "Task changes saved on this device." : "Task created on this device.",
+      editing ? "Task changes saved." : "Task created.",
     );
     if (changed) resetEditor();
   }
@@ -187,7 +175,7 @@ export default function TasksScreen() {
   function confirmDelete(task: Task): void {
     Alert.alert(
       "Delete this Task?",
-      "It will leave the active on-device list. Existing Focus history keeps its stable relationship ID.",
+      "It will leave the active list. Existing Focus history keeps its stable relationship ID.",
       [
         { text: "Keep Task", style: "cancel" },
         {
@@ -241,7 +229,7 @@ function EditableTaskCard({
   task: Task;
   today: string;
 }) {
-  const completed = task.completedOn.includes(today);
+  const completed = !isTaskActive(task, today);
   return (
     <Card tone={completed ? "success" : "default"}>
       <View style={styles.itemHeading}>
@@ -270,18 +258,6 @@ function EditableTaskCard({
           onPress={onDelete}
         />
       </View>
-    </Card>
-  );
-}
-
-function ReadOnlyTaskCard({ task, today }: { task: Task; today: string }) {
-  return (
-    <Card>
-      <Label>Synced read-only item</Label>
-      <Heading>{task.title}</Heading>
-      <Body muted>
-        {task.direction} · {task.completedOn.includes(today) ? "Completed today" : "Not completed today"}
-      </Body>
     </Card>
   );
 }

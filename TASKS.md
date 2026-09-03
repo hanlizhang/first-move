@@ -295,6 +295,19 @@
 
 **M1D status:** Implemented on `mobile/m1d-tasks-habits`. Focus and local Task/Habit CRUD remain schema-v8 compatible while canonical cloud business data stays read-only pending M1E authenticated writes.
 
+### M1E — Authenticated Mobile cloud writes
+
+- [x] Reuse `cloud_workspace_status`, `get_cloud_workspace_v2`, and `sync_cloud_workspace_v1` without SQL, RPC, RLS, Auth, or Web Sync redesign.
+- [x] Make a successfully hydrated initialized account’s canonical schema-v8 workspace the editable UUID-scoped Mobile working/cache copy without merging Guest or pre-sync account-local rows.
+- [x] Add an AsyncStorage-backed per-user device identity and ordered full-snapshot retry queue with UUID mutation identities, pending-only Intent serialization, canonical daily-plan passthrough, and empty economic commands.
+- [x] Save each authenticated Task, Habit/check-in, pending Intent, and Session lifecycle/review mutation to the durable queue before dispatch; preserve UI-local state and the queue on offline/failure/restart.
+- [x] Revalidate the current Supabase UUID before every dispatch, guard stale responses, isolate account A/account B/Guest queues, and flush pending writes before startup/foreground/manual reads.
+- [x] Validate every successful canonical response before it replaces the working/cache copy; show Loading, Pending, Syncing, Synced, Offline/retry-pending, Sync error, Guest-local, and uninitialized write-disabled states honestly.
+- [x] Keep Task/Habit/Session reward authority on the existing server contract and leave empty-account Start fresh / Import this device outside M1E.
+- [x] Cover hydration, all scoped mutation families, restart/offline/idempotent retry, flush-before-read, owner isolation, Guest/no-write, uninitialized, invalid/stale responses, UUIDs, passthrough state, and no-private-logging boundaries.
+
+**M1E status:** Implemented on `mobile/m1e-cloud-sync`; automated Mobile checks pass. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance remains required before release. No backend or native dependency change was made.
+
 ## Explicitly excluded
 
 - Advertising or consumable real-money purchases

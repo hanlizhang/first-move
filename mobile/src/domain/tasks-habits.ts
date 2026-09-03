@@ -99,6 +99,10 @@ export function toggleTaskCompletion(
   };
 }
 
+export function isTaskActive(task: Task, dateKey: string): boolean {
+  return !task.completedOn.includes(dateKey);
+}
+
 export function addHabit(
   state: AppState,
   input: { title: string; direction: Direction; schedule: HabitSchedule },
@@ -181,6 +185,10 @@ export function toggleHabitCompletion(
         : candidate,
     ),
   };
+}
+
+export function isHabitActive(habit: Habit, dateKey: string): boolean {
+  return !habit.completedOn.includes(dateKey);
 }
 
 export function isHabitScheduled(habit: Habit, dateKey: string): boolean {
