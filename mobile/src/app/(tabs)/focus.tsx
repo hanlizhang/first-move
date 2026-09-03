@@ -13,6 +13,7 @@ import {
   SecondaryButton,
 } from "../../components/ui.tsx";
 import { FocusLinkPicker } from "../../components/focus-link-picker.tsx";
+import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import { getPendingIntent } from "../../domain/app-state.ts";
 import {
   buildFocusLinkOptions,
@@ -59,25 +60,21 @@ import {
 export default function FocusScreen() {
   const {
     auth,
-    cloud,
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
+    sync,
     updateLocalWorkspace,
+    workspaceEditable,
   } = useFirstMoveApp();
   const [nowMs, setNowMs] = useState(Date.now);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const completionRequested = useRef<string | undefined>(undefined);
-  const canonicalState =
-    auth.status === "authenticated" &&
-    cloud.status === "ready" &&
-    cloud.userId === auth.user.id
-      ? cloud.workspace.state
-      : undefined;
+  const today = useCurrentLocalDate();
   const linkOptions = useMemo(
-    () => buildFocusLinkOptions(localWorkspace, canonicalState),
-    [canonicalState, localWorkspace],
+    () => buildFocusLinkOptions(localWorkspace, today),
+    [localWorkspace, today],
   );
   const references = useMemo(
     () => sessionReferenceCatalog(linkOptions),
@@ -101,6 +98,7 @@ export default function FocusScreen() {
       setNowMs(current);
       if (
         session.mode === "countdown" &&
+        workspaceEditable &&
         remainingMs(session, current) === 0 &&
         completionRequested.current !== session.id
       ) {
@@ -126,7 +124,7 @@ export default function FocusScreen() {
       clearTimeout(initialTick);
       clearInterval(interval);
     };
-  }, [openSession, updateLocalWorkspace]);
+  }, [openSession, updateLocalWorkspace, workspaceEditable]);
 
   if (localWorkspaceStatus === "loading") {
     return (
@@ -192,7 +190,7 @@ export default function FocusScreen() {
                   : "Stopped when you chose. This Session is already saved.",
             )
           }
-          saving={saving}
+          saving={saving || !workspaceEditable}
           session={openSession}
           state={localWorkspace}
         />
@@ -206,12 +204,13 @@ export default function FocusScreen() {
               session={latestClosedSession}
               state={localWorkspace}
               updateLocalWorkspace={updateLocalWorkspace}
+              workspaceEditable={workspaceEditable}
             />
           ) : null}
 
           {pendingIntent ? (
             <PendingFirstMoveCard
-              disabled={saving}
+              disabled={saving || !workspaceEditable}
               intent={pendingIntent}
               linkOptions={linkOptions}
               onStart={() =>
@@ -225,7 +224,7 @@ export default function FocusScreen() {
           ) : null}
 
           <CountdownSetup
-            disabled={saving}
+            disabled={saving || !workspaceEditable}
             linkOptions={linkOptions}
             onStart={(input) =>
               void saveChange(
@@ -237,7 +236,7 @@ export default function FocusScreen() {
           />
 
           <StopwatchSetup
-            disabled={saving}
+            disabled={saving || !workspaceEditable}
             linkOptions={linkOptions}
             onStart={(input) =>
               void saveChange(
@@ -254,7 +253,9 @@ export default function FocusScreen() {
         <Label>Storage boundary</Label>
         <Body muted>
           {auth.status === "authenticated"
-            ? "New Sessions stay in this Supabase UUID’s device-local workspace. Available canonical Tasks and Habits keep their existing UUID when linked; cloud business data remains read-only."
+            ? sync.status === "write-disabled"
+              ? "This uninitialized account remains write-disabled. Guest and account data are not merged."
+              : "Sessions and pending First Moves update this UUID’s local working copy immediately, queue in order, and accept only validated canonical responses."
             : "Guest Mode keeps Sessions and relationships only in the separate Guest workspace on this device."}
         </Body>
       </Card>
@@ -265,7 +266,7 @@ export default function FocusScreen() {
     recipe: (state: AppState, current: number) => AppState,
     successNotice: string | ((next: AppState) => string),
   ): Promise<void> {
-    if (saving) return;
+    if (saving || !workspaceEditable) return;
     const current = Date.now();
     setNowMs(current);
     setSaving(true);
@@ -560,6 +561,7 @@ function SessionReview({
   session,
   state,
   updateLocalWorkspace,
+  workspaceEditable,
 }: {
   linkOptions: readonly FocusLinkOption[];
   references: SessionReferenceCatalog;
@@ -568,6 +570,7 @@ function SessionReview({
   updateLocalWorkspace(
     recipe: (current: AppState) => AppState,
   ): Promise<AppState | undefined>;
+  workspaceEditable: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(session.label);
@@ -584,7 +587,7 @@ function SessionReview({
   const relationship = sessionRelationshipLabel(session, state, linkOptions);
 
   async function saveReview(): Promise<void> {
-    if (!label.trim() || saving) return;
+    if (!label.trim() || saving || !workspaceEditable) return;
     setSaving(true);
     setError("");
     let changed = false;
@@ -640,7 +643,11 @@ function SessionReview({
             <Detail label="Direction" value={session.direction} />
             <Detail label="Relationship" value={relationship} />
           </View>
-          <SecondaryButton title="Edit details" onPress={() => setEditing(true)} />
+          <SecondaryButton
+            disabled={!workspaceEditable}
+            title="Edit details"
+            onPress={() => setEditing(true)}
+          />
         </>
       ) : (
         <>
@@ -675,12 +682,12 @@ function SessionReview({
             </Text>
           ) : null}
           <PrimaryButton
-            disabled={saving || !label.trim()}
+            disabled={saving || !workspaceEditable || !label.trim()}
             title="Save changes"
             onPress={() => void saveReview()}
           />
           <SecondaryButton
-            disabled={saving}
+            disabled={saving || !workspaceEditable}
             title="Cancel editing"
             onPress={cancelEdit}
           />

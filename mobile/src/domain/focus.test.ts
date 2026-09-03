@@ -10,6 +10,7 @@ import {
   sessionReferenceCatalog,
 } from "./focus.ts";
 import { createEmptyState } from "./models.ts";
+import { softDeleteHabit, softDeleteTask } from "./tasks-habits.ts";
 
 const timestamp = "2026-08-09T09:00:00.000Z";
 
@@ -50,7 +51,7 @@ test("Focus link choices preserve stable IDs without copying canonical parents",
     },
   ];
 
-  const options = buildFocusLinkOptions(local, canonical);
+  const options = buildFocusLinkOptions(local, "2026-08-09", canonical);
   assert.deepEqual(
     options.map(({ key, source }) => ({ key, source })),
     [
@@ -98,7 +99,7 @@ test("local Focus parents win duplicate IDs and form a domain reference catalog"
     },
   ];
 
-  const options = buildFocusLinkOptions(local, canonical);
+  const options = buildFocusLinkOptions(local, "2026-08-09", canonical);
   assert.equal(options.length, 1);
   assert.equal(options[0]?.title, "Local working copy");
   assert.equal(options[0]?.source, "local");
@@ -108,6 +109,97 @@ test("local Focus parents win duplicate IDs and form a domain reference catalog"
     ],
     habits: [],
   });
+});
+
+test("Focus offers active Tasks and Habits but not completed or deleted items", () => {
+  const dateKey = "2026-08-09";
+  const state = createEmptyState();
+  state.tasks = [
+    {
+      id: "10000000-0000-4000-8000-000000000001",
+      title: "Active task",
+      direction: "Work & Study",
+      order: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [],
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000002",
+      title: "Completed task",
+      direction: "Daily Life",
+      order: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [dateKey],
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000003",
+      title: "Deleted task",
+      direction: "Rest",
+      order: 2,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [],
+    },
+  ];
+  state.habits = [
+    {
+      id: "20000000-0000-4000-8000-000000000001",
+      title: "Active habit",
+      direction: "Exercise & Movement",
+      schedule: { kind: "daily" },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [],
+    },
+    {
+      id: "20000000-0000-4000-8000-000000000002",
+      title: "Completed habit",
+      direction: "Daily Life",
+      schedule: { kind: "daily" },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [dateKey],
+    },
+    {
+      id: "20000000-0000-4000-8000-000000000003",
+      title: "Deleted habit",
+      direction: "Rest",
+      schedule: { kind: "daily" },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedOn: [],
+    },
+  ];
+
+  const withoutDeletedTask = softDeleteTask(
+    state,
+    "10000000-0000-4000-8000-000000000003",
+  );
+  const activeState = softDeleteHabit(
+    withoutDeletedTask,
+    "20000000-0000-4000-8000-000000000003",
+  );
+  const options = buildFocusLinkOptions(activeState, dateKey);
+
+  assert.deepEqual(
+    options.map(({ key }) => key),
+    [
+      "task:10000000-0000-4000-8000-000000000001",
+      "habit:20000000-0000-4000-8000-000000000001",
+    ],
+  );
+  assert.equal(
+    withoutDeletedTask.tasks[1]?.id,
+    "10000000-0000-4000-8000-000000000002",
+  );
+  assert.deepEqual(withoutDeletedTask.tasks[1]?.completedOn, [dateKey]);
+  assert.equal(
+    activeState.habits[1]?.id,
+    "20000000-0000-4000-8000-000000000002",
+  );
+  assert.deepEqual(activeState.habits[1]?.completedOn, [dateKey]);
 });
 
 test("custom countdown validation accepts only whole minutes from 1 through 720", () => {
@@ -144,7 +236,7 @@ test("Focus link search matches titles, kinds, and directions without changing i
       completedOn: [],
     },
   ];
-  const options = buildFocusLinkOptions(state);
+  const options = buildFocusLinkOptions(state, "2026-08-09");
 
   assert.deepEqual(
     filterFocusLinkOptions(options, " jobs ").map((option) => option.key),

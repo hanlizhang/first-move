@@ -19,6 +19,7 @@ import {
   type StuckState,
   type Task,
 } from "./models.ts";
+import { createUuidV4 } from "./ids.ts";
 
 type Clock = () => string;
 type IdFactory = () => string;
@@ -83,7 +84,7 @@ export function createPendingIntent(
   state: AppState,
   input: CreateIntentInput,
   clock: Clock = now,
-  idFactory: IdFactory = makeIntentId,
+  idFactory: IdFactory = createUuidV4,
 ): AppState {
   if (getPendingIntent(state)) return state;
   if (
@@ -396,18 +397,6 @@ function isDateKey(value: unknown): value is string {
 
 function cleanMoveText(value: string): string {
   return value.trim().replace(/\s+/g, " ").slice(0, 160);
-}
-
-function makeIntentId(): string {
-  const cryptoValue = (
-    globalThis as typeof globalThis & {
-      crypto?: { randomUUID?: () => string };
-    }
-  ).crypto;
-  return (
-    cryptoValue?.randomUUID?.() ??
-    `intent-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
-  );
 }
 
 function now(): string {

@@ -1,4 +1,4 @@
-# First Move Mobile — M0 + M1A + M1B + M1C + M1D
+# First Move Mobile — M0 through M1E
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
@@ -11,7 +11,7 @@ This is an independent Expo React Native project. The Next.js Web app remains at
 - Supabase sessions persisted through an `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage. Long session values are safely chunked.
 - Schema-v8 Guest storage, per-account local storage, and validated account-scoped cloud caches remain separate.
 - Existing initialized accounts are read through `cloud_workspace_status` and then `get_cloud_workspace_v2` only.
-- Empty accounts show that cloud setup remains unavailable until M1E.
+- Empty accounts show that Mobile cloud setup/import remains unavailable.
 
 M0 does not import, merge, initialize, or write business data. It does not call `initialize_cloud_workspace`, `initialize_cloud_workspace_v2`, or `sync_cloud_workspace_v1`.
 
@@ -57,15 +57,16 @@ M0 does not import, merge, initialize, or write business data. It does not call 
 
 M1A/M1B/M1C/M1D do not implement authenticated cloud business writes, Phase B2 setup choices, post-session choices, rewards/history, Cat, Morning Start, AI, RevenueCat, notifications, background services, or SQL/RPC changes.
 
-## M1E authenticated-write work remaining
+## M1E authenticated writes
 
-- Add explicit Start fresh, Import this device, and Use cloud progress choices without automatically merging or deleting Guest data.
-- Add an explicit activation choice for account-local M1D records that already coexist with an initialized canonical workspace. Never submit the account-local array as a full snapshot before reconciliation, because absent canonical rows would be tombstoned by `sync_cloud_workspace_v1`; after activation, expose canonical parents for editing under their same UUID rather than copying them to new IDs.
-- Add a stable device identity plus a durable, retry-safe, ordered local mutation/outbox pipeline. Assisted Focus delivery must create its Intent before closing its Session and serialize only the active pending Intent view.
-- Serialize UUID Task/Habit parents before relationships; materialize a referenced local parent that was deleted before the outbox existed before tombstoning it; map later active-list deletion to canonical tombstones; converge title, direction, Task rank, Habit schedule weekdays, and completion/uncompletion facts by local date and captured IANA timezone.
-- Treat acknowledged validated Supabase responses as canonical, keep the account-local cache and pending work on failure, and never expose one auth UUID’s cache or writes to another owner.
-- Let the server create idempotent Task/Habit completion rewards. Do not trust or synthesize a Mobile point total or client reward ledger.
-- Only after those paths exist, enable canonical Task/Habit editing and run Web/iOS/Android same-account create/edit/delete/schedule/check/offline-retry plus owner-isolation acceptance.
+- Guest Mode remains fully local. An authenticated account becomes editable only after `cloud_workspace_status` confirms it is initialized and a canonical `get_cloud_workspace_v2` response has passed the complete schema-v8 validator.
+- On first successful M1E hydration, canonical Supabase state replaces that UUID’s working/cache state. Existing account-local M1D rows are never submitted or merged into the full snapshot, so they cannot accidentally tombstone canonical rows. Empty accounts remain write-disabled; Start fresh and Import this device remain future work.
+- Authenticated Task, Habit/check-in, pending Intent, and Session lifecycle/review changes update the owner-local working copy immediately after their full snapshot is durably queued in AsyncStorage.
+- The queue stores one stable device UUID and ordered mutation UUIDs per Supabase Auth UUID. It survives restart, retries the same mutation ID, revalidates the current session UUID before every dispatch, and is never drained by another account or Guest Mode.
+- Startup, foreground, manual retry, and manual refresh flush pending writes before any canonical read. A failed or invalid response leaves the mutation queued and never replaces valid local state; only a fully validated response becomes canonical and updates the working/cache copy.
+- Mobile reuses `sync_cloud_workspace_v1` with schema-v8 state, unchanged canonical daily-plan passthrough, empty economic-command arrays, current IANA timezone, and stable relationship UUIDs. Retained local consumed Intent history is filtered from the wire so the RPC receives only the active pending Intent view.
+- Task/Habit completion and Session rewards remain server-derived. Mobile never calculates or submits a point balance, reward ledger mutation, purchase, or inventory consumption command.
+- Deliberately still local or unavailable: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, RevenueCat, notifications, and background services.
 
 ## Local setup
 
@@ -122,12 +123,14 @@ git diff --check
 
 ## Manual M0 acceptance
 
+The M0–M1D checklists below record their milestone boundaries. M1E supersedes their authenticated read-only assertions; use the final M1E checklist for the current cloud behavior.
+
 - [ ] A clean launch shows loading, then signed-out state when no secure session exists.
 - [ ] Continue as guest opens all five placeholder tabs without a network request.
 - [ ] A valid email request says to check email and uses `firstmove://auth/callback`.
 - [ ] Opening a valid link reaches the callback screen, restores the same Supabase Auth UUID, and survives app restart.
 - [ ] An initialized account loads a verified read-only summary from `get_cloud_workspace_v2`.
-- [ ] An empty account shows that cloud setup is unavailable until M1E and makes no setup/import RPC.
+- [ ] An empty account shows that Mobile cloud setup/import is unavailable and makes no setup/import RPC.
 - [ ] Invalid/expired links and failed hydration show generic errors without exposing email, token, journal, or payload data.
 - [ ] Sign out returns to signed-out state while Guest Mode data and the account-scoped validated cache remain present.
 
@@ -183,3 +186,40 @@ git diff --check
 - [ ] Switch among Guest, account A, and account B and confirm Tasks, Habits, completions, schedules, and Focus choices never merge or cross owners. Sign out and back in to confirm no namespace was deleted.
 - [ ] Monitor Supabase requests while creating, editing, completing, scheduling, and deleting account-local items; confirm only auth/status/read hydration occurs and no business-write, setup, import, SQL, or new RPC path is invoked.
 - [ ] Confirm M1D adds no rewards, Today timeline/history, post-session choices, Cat/Morning/AI/RevenueCat behavior, notifications, or native dependency.
+
+## Manual M1E acceptance
+
+Prerequisite: use a Web-initialized Supabase account and the same account on Mobile. Do not initialize or push a database from Mobile.
+
+### Mobile → Web
+
+- [ ] Sign in on Mobile and confirm the state moves through **Loading cloud progress** or **Syncing** before **Synced**; authentication alone must never display **Synced**.
+- [ ] Confirm canonical Web Tasks and Habits appear in Mobile as one editable working set with their existing UUIDs; confirm old account-local M1D rows were not merged or uploaded.
+- [ ] On Mobile, create a Task, edit its title and direction, complete/uncomplete it for today, then delete it. After each settled sync, refresh Web and confirm the same stable parent, local-date completion state, and final soft deletion.
+- [ ] On Mobile, create a daily Habit and a selected-weekday Habit, edit title/direction/schedule, check/uncheck today, then delete it. Refresh Web and confirm weekdays, completion facts, stable UUIDs, and tombstone behavior.
+- [ ] Create/cancel a pending First Move, then create another and run its Session through start, pause, resume, complete or stop, and review. Refresh Web and confirm ordered Intent/Session relationships and unchanged stable IDs.
+- [ ] Complete a Task, Habit, and qualifying Session; confirm Web shows only server-derived rewards/points and that repeated refresh/retry never duplicates them.
+
+### Web → Mobile
+
+- [ ] With no Mobile writes pending, create or edit Tasks/Habits on Web, foreground Mobile or choose **Refresh cloud data**, and confirm the validated canonical state replaces the Mobile working copy.
+- [ ] Confirm Web deletions disappear from active Mobile lists while historical Focus relationship labels/IDs remain safe.
+- [ ] Confirm an invalid/interrupted canonical read shows **Sync error** or **Offline** and leaves the last valid Mobile working copy unchanged.
+
+### Offline retry
+
+- [ ] After one successful authenticated hydration, disconnect Mobile and create/edit Task/Habit data plus a pending Intent or Session change. Confirm immediate UI updates and **Offline · retry pending** without data loss.
+- [ ] Reconnect and choose **Retry and refresh**. Confirm pending snapshots upload in order before the next read, the UI reaches **Synced**, Web converges, and no reward or completion is duplicated.
+- [ ] While a write remains failed, choose refresh and confirm the pending local state is not overwritten by an older cloud read.
+
+### App restart
+
+- [ ] Create an authenticated change offline, force-quit, relaunch offline, and confirm the same UUID-scoped working state and pending count restore from AsyncStorage.
+- [ ] Reconnect and retry; confirm the original mutation UUID is reused idempotently, the queue clears only after a valid canonical response, and the app reaches **Synced**.
+
+### Account switching and Guest Mode
+
+- [ ] Leave account A with a pending offline change, sign out, and sign into account B. Confirm B never displays or sends A’s state or queue.
+- [ ] Make and sync a B change, then return to A and retry. Confirm each owner converges independently and A’s queued mutation is sent only while A is the revalidated current session.
+- [ ] Continue as Guest, make Task/Habit/Intent/Session changes offline, and confirm no cloud status/read/write RPC is issued and no account namespace changes.
+- [ ] Sign into an uninitialized account and confirm **Cloud writes disabled**, no editing controls, and no initialization/import/write RPC. **Check cloud setup again** may only re-run the existing status boundary.

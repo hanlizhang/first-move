@@ -1,5 +1,6 @@
 import { isFocusDuration, type AppState, type Direction } from "./models.ts";
 import type { SessionReferenceCatalog } from "./sessions.ts";
+import { isHabitActive, isTaskActive } from "./tasks-habits.ts";
 
 export type FocusLinkKind = "task" | "habit";
 
@@ -14,6 +15,7 @@ export interface FocusLinkOption {
 
 export function buildFocusLinkOptions(
   localWorkspace: AppState,
+  dateKey: string,
   canonicalWorkspace?: AppState,
 ): FocusLinkOption[] {
   const options: FocusLinkOption[] = [];
@@ -25,10 +27,14 @@ export function buildFocusLinkOptions(
 
   function add(state: AppState, source: FocusLinkOption["source"]): void {
     for (const task of state.tasks) {
-      append("task", task.id, task.title, task.direction, source);
+      if (isTaskActive(task, dateKey)) {
+        append("task", task.id, task.title, task.direction, source);
+      }
     }
     for (const habit of state.habits) {
-      append("habit", habit.id, habit.title, habit.direction, source);
+      if (isHabitActive(habit, dateKey)) {
+        append("habit", habit.id, habit.title, habit.direction, source);
+      }
     }
   }
 

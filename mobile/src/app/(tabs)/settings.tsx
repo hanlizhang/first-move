@@ -6,7 +6,7 @@ export default function SettingsScreen() {
     <Screen
       eyebrow="Settings"
       title="Account and local data"
-      description="Authentication is optional. M0 reads an initialized cloud copy but never sets one up or writes business data."
+      description="Authentication is optional. Initialized accounts can sync core Mobile work; Guest Mode stays completely local."
     >
       <AccountPanel />
       <Card>

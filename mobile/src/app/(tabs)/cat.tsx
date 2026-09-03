@@ -14,9 +14,9 @@ export default function CatScreen() {
         </Card>
       ) : null}
       <PlaceholderCard
-        label="M1"
+        label="Later Mobile work"
         title="Cat room and store presentation"
-        body="M0 makes no purchases, consumptions, reward calculations, inventory writes, or milestone grants."
+        body="M1E makes no purchases, consumptions, client reward calculations, inventory writes, or milestone grants."
       />
     </Screen>
   );

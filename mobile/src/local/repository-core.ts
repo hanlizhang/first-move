@@ -48,6 +48,11 @@ export function createMobileRepositoryWithStore(store: AsyncKeyValueStore): Mobi
 
   async function loadLocalWorkspace(owner: LocalWorkspaceOwner): Promise<AppState> {
     const key = localWorkspaceKey(owner);
+    await (mutationQueues.get(key) ?? Promise.resolve());
+    return loadLocalWorkspaceDirect(key);
+  }
+
+  async function loadLocalWorkspaceDirect(key: string): Promise<AppState> {
     let raw: string | null;
     try {
       raw = await store.getItem(key);
@@ -67,11 +72,28 @@ export function createMobileRepositoryWithStore(store: AsyncKeyValueStore): Mobi
     owner: LocalWorkspaceOwner,
     state: AppState,
   ): Promise<void> {
+    const key = localWorkspaceKey(owner);
+    const previous = mutationQueues.get(key) ?? Promise.resolve();
+    const mutation = previous.then(() => saveLocalWorkspaceDirect(key, state));
+    mutationQueues.set(
+      key,
+      mutation.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    await mutation;
+  }
+
+  async function saveLocalWorkspaceDirect(
+    key: string,
+    state: AppState,
+  ): Promise<void> {
     const envelope: GuestEnvelope = {
       version: LOCAL_REPOSITORY_VERSION,
       state: normalizeAppState(state),
     };
-    await store.setItem(localWorkspaceKey(owner), JSON.stringify(envelope));
+    await store.setItem(key, JSON.stringify(envelope));
   }
 
   async function updateLocalWorkspace(
@@ -82,9 +104,9 @@ export function createMobileRepositoryWithStore(store: AsyncKeyValueStore): Mobi
     let result = createEmptyState();
     const previous = mutationQueues.get(key) ?? Promise.resolve();
     const mutation = previous.then(async () => {
-      const current = await loadLocalWorkspace(owner);
+      const current = await loadLocalWorkspaceDirect(key);
       result = normalizeAppState(recipe(current));
-      await saveLocalWorkspace(owner, result);
+      await saveLocalWorkspaceDirect(key, result);
     });
     mutationQueues.set(
       key,

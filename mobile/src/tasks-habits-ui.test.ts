@@ -16,11 +16,12 @@ test("Today exposes dedicated Mobile Tasks and Habits screens", () => {
   assert.match(habitsSource, /title="Habits"/);
 });
 
-test("Task and Habit controls use the owner-local repository mutation boundary", () => {
+test("Task and Habit controls use the owner-scoped working and sync boundary", () => {
   for (const source of [tasksSource, habitsSource]) {
     assert.match(source, /updateLocalWorkspace/);
-    assert.match(source, /cloud\.userId !== auth\.user\.id/);
-    assert.match(source, /Canonical cloud · read-only/);
+    assert.match(source, /workspaceEditable/);
+    assert.match(source, /owner-scoped retry queue/);
+    assert.doesNotMatch(source, /Canonical cloud · read-only/);
     assert.doesNotMatch(source, /\.rpc\(/);
   }
   assert.match(tasksSource, /toggleTaskCompletion/);

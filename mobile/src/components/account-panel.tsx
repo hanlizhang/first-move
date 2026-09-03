@@ -17,6 +17,7 @@ export function AccountPanel() {
   const {
     auth,
     cloud,
+    sync,
     continueAsGuest,
     openSignIn,
     sendMagicLink,
@@ -47,7 +48,7 @@ export function AccountPanel() {
         <Label>Guest Mode</Label>
         <Heading>Local and account data stay separate</Heading>
         <Body>
-          Guest progress and each account’s local progress use separate device storage. Signing in never uploads, merges, or deletes either side.
+          Guest progress and each account use separate device storage. Signing in never uploads or merges Guest data; an initialized account loads its canonical working copy.
         </Body>
         <PrimaryButton title="Sync across devices" onPress={openSignIn} />
       </Card>
@@ -121,38 +122,64 @@ export function AccountPanel() {
   }
 
   function CloudStatusCard({ onRefresh }: { onRefresh: () => void }) {
-    if (cloud.status === "loading") {
+    if (sync.status === "local") return null;
+    if (sync.status === "loading") {
       return (
         <Card>
-          <Label>Cloud</Label>
-          <Body>Checking and validating the canonical cloud workspace…</Body>
+          <Label>Loading cloud progress</Label>
+          <Body>Checking this account and validating its canonical workspace…</Body>
         </Card>
       );
     }
-    if (cloud.status === "setup-unavailable") {
+    if (sync.status === "write-disabled") {
       return (
         <Card tone="warning">
-          <Label>Cloud setup unavailable</Label>
-          <Heading>Not available until M1E</Heading>
-          <Body>{cloud.message}</Body>
+          <Label>Cloud writes disabled</Label>
+          <Heading>This account is not initialized</Heading>
+          <Body>{sync.message}</Body>
+          <SecondaryButton title="Check cloud setup again" onPress={onRefresh} />
         </Card>
       );
     }
-    if (cloud.status === "error") {
+    if (sync.status === "pending" || sync.status === "syncing") {
+      return (
+        <Card tone="warning">
+          <Label>{sync.status === "pending" ? "Pending sync" : "Syncing"}</Label>
+          <Heading>
+            {sync.pendingCount} {sync.pendingCount === 1 ? "change" : "changes"} queued
+          </Heading>
+          <Body muted>
+            Changes are saved to this account’s device workspace before upload.
+          </Body>
+          <SecondaryButton title="Retry and refresh" onPress={onRefresh} />
+        </Card>
+      );
+    }
+    if (sync.status === "offline") {
+      return (
+        <Card tone="warning">
+          <Label>Offline · retry pending</Label>
+          <Heading>Your local working copy is safe</Heading>
+          <Body>{sync.message}</Body>
+          <SecondaryButton title="Retry and refresh" onPress={onRefresh} />
+        </Card>
+      );
+    }
+    if (sync.status === "error") {
       return (
         <Card tone="danger">
-          <Label>Cloud read failed</Label>
-          <Body>{cloud.message}</Body>
-          <SecondaryButton title="Retry read-only hydration" onPress={onRefresh} />
+          <Label>Sync error</Label>
+          <Body>{sync.message}</Body>
+          <SecondaryButton title="Retry and refresh" onPress={onRefresh} />
         </Card>
       );
     }
-    if (cloud.status === "ready") {
+    if (sync.status === "synced" && cloud.status === "ready") {
       const { state } = cloud.workspace;
       return (
         <Card tone="success">
-          <Label>Cloud copy loaded · read-only</Label>
-          <Heading>Canonical workspace verified</Heading>
+          <Label>Synced</Label>
+          <Heading>Canonical workspace verified and editable</Heading>
           <View style={styles.metrics}>
             <Metric label="Tasks" value={state.tasks.length} />
             <Metric label="Habits" value={state.habits.length} />
@@ -160,8 +187,17 @@ export function AccountPanel() {
             <Metric label="Points" value={state.progress.points} />
           </View>
           <Body muted>
-            Mobile can read this initialized workspace. It cannot create, edit, import, merge, purchase, or sync cloud business data yet.
+            Tasks, Habits, pending First Moves, and Focus Sessions use the existing authenticated Web Sync v1 contract. Rewards remain server-authoritative.
           </Body>
+          <SecondaryButton title="Refresh cloud data" onPress={onRefresh} />
+        </Card>
+      );
+    }
+    if (sync.status === "synced") {
+      return (
+        <Card tone="success">
+          <Label>Synced</Label>
+          <Heading>Cloud operation complete</Heading>
           <SecondaryButton title="Refresh cloud data" onPress={onRefresh} />
         </Card>
       );

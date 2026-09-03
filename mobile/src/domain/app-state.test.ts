@@ -8,6 +8,7 @@ import {
   normalizeAppState,
 } from "./app-state.ts";
 import { createEmptyState } from "./models.ts";
+import { isUuidV4 } from "./ids.ts";
 
 const timestamp = "2026-08-09T09:00:00.000Z";
 
@@ -45,6 +46,16 @@ test("a template, edited, or manual move creates one validated pending intent", 
     }),
     created,
   );
+});
+
+test("default Mobile Intent IDs are canonical UUID v4 values", () => {
+  const state = createPendingIntent(createEmptyState(), {
+    stuckState: "unsure what is needed",
+    direction: "Rest",
+    moveText: "Take one breath",
+    intendedDurationMinutes: 2,
+  });
+  assert.ok(state.activityIntents[0] && isUuidV4(state.activityIntents[0].id));
 });
 
 test("invalid pending intents are rejected and cancellation is neutral", () => {

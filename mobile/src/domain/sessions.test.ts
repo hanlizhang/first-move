@@ -7,6 +7,7 @@ import {
   createEmptyState,
   type IntendedDuration,
 } from "./models.ts";
+import { isUuidV4 } from "./ids.ts";
 import {
   cancelSession,
   completeSessionIfElapsed,
@@ -69,6 +70,15 @@ test("a pending intent starts one bounded schema-v8 countdown", () => {
       1,
     );
   }
+});
+
+test("default Mobile Session IDs are canonical UUID v4 values", () => {
+  const started = startStopwatch(
+    createEmptyState(),
+    { direction: "Rest", label: "Pause" },
+    startMs,
+  );
+  assert.ok(started.sessions[0] && isUuidV4(started.sessions[0].id));
 });
 
 test("timestamp timing survives reload and pause/resume excludes paused time", () => {

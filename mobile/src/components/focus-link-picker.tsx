@@ -180,9 +180,7 @@ function OptionGroup({
         options.map((option) => (
           <PickerOption
             detail={`${option.direction} · ${
-              option.source === "canonical"
-                ? "Synced read-only item"
-                : "On-device item"
+              option.source === "canonical" ? "Canonical item" : "Working item"
             }`}
             key={option.key}
             label={option.title}

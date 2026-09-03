@@ -181,6 +181,8 @@ The v1 runtime sends complete validated schema-v8 workspace snapshots through an
 
 This is a frozen Web Sync v1 MVP checkpoint with documented pending smoke tests, not a claim of production-perfect or fully QA-complete synchronization. The remaining Web manual checks do not block Mobile M0 architecture and authentication work.
 
+Mobile M1E now reuses that frozen contract for already-initialized accounts only: canonical schema-v8 hydration becomes the UUID-scoped editable working copy, scoped Task/Habit/pending-Intent/Session mutations enter an ordered durable AsyncStorage queue before dispatch, pending writes flush before reads, and validated canonical responses remain authoritative. Guest Mode stays local and empty-account setup/import remains write-disabled. No SQL, RPC, RLS, Auth, reward-authority, or Web Sync v1 behavior changed; manual Mobile↔Web/offline/restart/account-switch acceptance remains a release gate.
+
 ## Free and Pro
 
 | Capability | Free | Pro |
