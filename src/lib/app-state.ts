@@ -220,6 +220,10 @@ export function toggleTask(state: AppState, id: string, dateKey: string, clock: 
     : addReward({ ...state, tasks }, "task", task.id, dateKey, TASK_REWARD_POINTS, clock);
 }
 
+export function isTaskActive(task: Task, dateKey: string): boolean {
+  return !task.completedOn.includes(dateKey);
+}
+
 export function addHabit(
   state: AppState,
   input: { title: string; direction: Direction; schedule: HabitSchedule },
@@ -280,6 +284,10 @@ export function toggleHabit(state: AppState, id: string, dateKey: string, clock:
   return completed
     ? { ...state, habits }
     : addReward({ ...state, habits }, "habit", habit.id, dateKey, HABIT_REWARD_POINTS, clock);
+}
+
+export function isHabitActive(habit: Habit, dateKey: string): boolean {
+  return !habit.completedOn.includes(dateKey);
 }
 
 export function isHabitScheduled(habit: Habit, dateKey: string): boolean {
