@@ -1,6 +1,6 @@
 # First Move — Delivery Plan
 
-> The Next.js Web app and the independent Expo Mobile app are implemented through the current Mobile v1 Focus, Tasks/Habits, and authenticated sync increments. Remaining work is tracked explicitly below and in the release backlog.
+> The Next.js Web app and the independent Expo Mobile app are implemented through the current Mobile v1 Focus, Tasks/Habits, authenticated sync, and Today v1 increments. Remaining work is tracked explicitly below and in the release backlog.
 
 ## Current implementation status
 
@@ -12,6 +12,7 @@
 - [x] Authenticated Mobile writes using existing Web Sync v1 contracts for Task, Habit/check-in, ActivityIntent, and ActivitySession mutations.
 - [x] Web/Mobile Focus link eligibility parity for new sessions, with historical relationships preserved after completion, check-in, or deletion.
 - [x] Mobile → Web and Web → Mobile canonical sync through owner-scoped queued snapshots and validated canonical replacement.
+- [x] Mobile Today v1: Tasks, Habits, closed Focus Sessions, current points, five-direction focused-time summary, activity timeline, and editable private Reflection / Mini Journal with captured local-date and timezone semantics.
 
 The implementation is complete for the checked items above. Recorded Mobile manual acceptance remains a release gate where noted; the unchecked release backlog is intentionally deferred.
 
@@ -325,12 +326,24 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 **M1E status:** Implemented in the current `/mobile` tree; automated Mobile checks pass. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance remains required before release. No backend or native dependency change was made.
 
+### Mobile Today v1
+
+- [x] Show current active Tasks and scheduled Habits with current-date completion/check-in controls through the existing owner-scoped mutation path.
+- [x] Show completed and intentionally stopped Focus Sessions for the captured local date, including actual elapsed time, direction, and available linked Task/Habit/First Move labels.
+- [x] Show the current canonical or Guest-local point balance without calculating or mutating authenticated authoritative points on Mobile.
+- [x] Show total focused time and all five direction totals using compact React Native primitives without a chart dependency.
+- [x] Show today's Task completions, Habit check-ins, and closed Sessions in an activity timeline with available captured times, directions/types, and point changes.
+- [x] Support current-day private Reflection / Mini Journal create, edit, and delete; Guest remains local, while authenticated writes use the existing durable Mobile full-snapshot sync path and server-authoritative first-save reward.
+- [x] Preserve captured local-date and IANA-timezone facts instead of deriving historical day membership from the viewer's current timezone.
+
+**Mobile Today v1 status:** Implemented on `main`. Reflection content remains excluded from AI, logs, analytics, and notifications; no SQL, RPC, RLS, product-rule, or native dependency change was introduced.
+
 ## Release backlog
 
 These items are intentionally deferred and are not implemented:
 
-1. Mobile Today production-usable screen.
-2. Cat core interaction/polish:
+1. Mobile Trends and Calendar history parity.
+2. Cat interaction/store work:
    - purchased toys must be visibly usable;
    - the laser pointer should create a visible target;
    - the cat should turn/move toward it and occasionally pounce/reach;

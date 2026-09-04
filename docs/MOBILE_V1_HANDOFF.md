@@ -1,6 +1,6 @@
 # First Move Mobile v1 handoff
 
-Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-04 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization.
+Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-05 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization.
 
 Status vocabulary used here:
 
@@ -70,6 +70,9 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 - Guest Mode remains local-only. Mobile queue, canonical cache, and editable working workspace are owner-scoped by Supabase Auth UUID; Guest and other accounts are never merged.
 - Authenticated writes queue ordered full snapshots in AsyncStorage, flush pending writes before reads, revalidate the current session UUID, and replace the working/cache state only after canonical responses pass validation.
 - A running timer is owned by the device that started it. Persisted Session state converges through normal sync; running timers are not realtime synchronized between devices.
+- Mobile Today v1 is implemented with Tasks, scheduled Habits, completed and intentionally stopped Focus Sessions, the current point balance, total and five-direction focused-time summaries, and a current-day activity timeline.
+- Mobile Today includes editable private Reflection / Mini Journal. Guest entries remain in Guest-local persistence; authenticated Journal changes use the existing owner-scoped durable full-snapshot queue, while first-save rewards and the authenticated point balance remain server-authoritative.
+- Today selects historical activity through captured local-date and IANA-timezone facts rather than reassigning it with the viewer's current timezone.
 
 ### Manually verified where known
 
@@ -79,8 +82,8 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 
 ### Intentionally deferred
 
-- Mobile Today production usability, Cat interaction polish, RevenueCat Pro entitlement, server-controlled AI quota, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
-- Mobile empty-account setup/import, post-session choices, rewards/history presentation, Cat/Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
+- Mobile Trends/Calendar history parity, Cat interaction/store work, RevenueCat Pro entitlement, server-controlled AI quota, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
+- Mobile empty-account setup/import, post-session choices, Cat/Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
 
 ## 6. Applied migration list
 
@@ -176,7 +179,7 @@ Remaining manual checks are known verification items and do not block the curren
 - Continuous sync remains feature-gated for controlled rollout. Its migration is remotely applied and core task/habit convergence is manually verified; the documented smoke tests remain pending.
 - Guest data, immutable IndexedDB backups, Web runtime metadata, the Mobile AsyncStorage retry queue, transient planning drafts, local First Move templates, toothbrush image previews, and development-only controls remain device-local by design.
 - Toothbrush photos are transient only; they are never synchronized or stored.
-- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, Mobile Today/Cat release polish, true-device testing, and store release work remain deferred.
+- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, Mobile Trends/Calendar history parity, Cat interaction/store work, Mobile release UI polish, true-device testing, and store release work remain deferred.
 - Current optional live AI routes are server-side and user-initiated, with mock/manual fallback and no automatic retries, but they are not the designed authenticated paid-AI gateway.
 - The architecture documents describe a more complete B5 conflict/outbox design than the implemented MVP.
 
@@ -198,13 +201,13 @@ Remaining manual checks are known verification items and do not block the curren
 
 ### M0 — Foundation and authentication
 
-Status: **implemented in the current `/mobile` tree; automated checks pass; callback/sign-in/restart persistence/hydration are manually verified on iOS Simulator; true-device acceptance remains pending**. An independent Expo SDK 57/React Native/TypeScript project now lives under `/mobile` without moving Web or creating a workspace. Expo Router provides First Moves, Today, Focus, Cat, and Settings placeholders. The app implements loading, signed-out, Guest Mode, authenticated, and privacy-safe error states; email magic links use `firstmove://auth/callback`; Supabase session values use a chunked `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage.
+Status: **implemented in the current `/mobile` tree; automated checks pass; callback/sign-in/restart persistence/hydration are manually verified on iOS Simulator; true-device acceptance remains pending**. An independent Expo SDK 57/React Native/TypeScript project now lives under `/mobile` without moving Web or creating a workspace. M0 established Expo Router routes for First Moves, Today, Focus, Cat, and Settings; later increments replaced the implemented feature placeholders, including Today v1. The app implements loading, signed-out, Guest Mode, authenticated, and privacy-safe error states; email magic links use `firstmove://auth/callback`; Supabase session values use a chunked `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage.
 
 M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate. Authentication restores the existing Supabase Auth UUID. An initialized account is detected with `cloud_workspace_status` and hydrated read-only with the exact existing `get_cloud_workspace_v2` canonical payload, including UUID/reference, tombstone, balance, date, and captured timezone validation. An empty account receives a clear M1 setup boundary. No initialization, import, merge, continuous-sync, or other business-data write RPC exists in mobile M0. See `/mobile/README.md` for environment names, local commands, the manual acceptance checklist, and the exact redirect URL that the user must add manually.
 
 ### M1 — Core features
 
-Status: **M1A through M1E implemented; automated Mobile checks pass and manual cross-platform M1E acceptance remains pending**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
+Status: **M1A through M1E and Mobile Today v1 are implemented; automated Mobile checks pass and manual cross-platform M1E/Today acceptance remains pending**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
 
 Focus has three entries through the same local `ActivitySession` engine: the pending First Move at its 2/5/10/25-minute intended duration, standalone Countdown with 2/5/10/25/50-minute presets or validated 1–720 custom minutes, and standalone Stopwatch. Standalone tools accept an optional title, one of the five directions, and one existing Task or Habit link or no link; they do not create an `ActivityIntent`. Selecting Intentional Entertainment as the standalone direction does not narrow these normal Focus durations; only the separate dedicated Intentional Entertainment flow is limited to 5/10 minutes. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic countdown completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention.
 
@@ -212,7 +215,13 @@ Completed and intentionally stopped Sessions persist before optional review; no 
 
 Guest local state and each Supabase Auth UUID’s local working/cache state use separate namespaces; switching owners exposes only that owner without merging data. For an initialized account, a completely validated canonical hydration becomes the editable working copy under the same stable UUIDs. An unreconciled pre-M1E account-local array is never submitted or merged into the full-snapshot RPC; canonical state replaces it on first successful activation. Validated canonical caches and durable retry records remain UUID-scoped.
 
-Dedicated Mobile Tasks and Habits screens are directly usable from the current Today navigation in both Guest and authenticated account-local workspaces; the production-usable Today screen remains deferred. They retain the Web/schema-v8 fields and exact directions, use UUID-v4 parent identities and ISO timestamps, keep Task ordering, store completion facts in `completedOn` by current local date, and use daily or non-empty selected-weekday Habit schedules. New Focus link eligibility matches Web: only incomplete active Tasks and unchecked-today active Habits are selectable; completed, checked-today, deleted, or inactive items are excluded. Removing an item removes it only from the active schema-v8 local list while historical Session/Intent relationship IDs remain unchanged; the existing Web snapshot contract translates omission of an already-canonical parent into a database tombstone. M1D introduced no reward/history records; M1E now persists its authenticated mutations through the existing sync contract.
+Dedicated Mobile Tasks and Habits screens are directly usable from Today in both Guest and authenticated account-local workspaces. They retain the Web/schema-v8 fields and exact directions, use UUID-v4 parent identities and ISO timestamps, keep Task ordering, store completion facts in `completedOn` by current local date, and use daily or non-empty selected-weekday Habit schedules. New Focus link eligibility matches Web: only incomplete active Tasks and unchecked-today active Habits are selectable; completed, checked-today, deleted, or inactive items are excluded. Removing an item removes it only from the active schema-v8 local list while historical Session/Intent relationship IDs remain unchanged; the existing Web snapshot contract translates omission of an already-canonical parent into a database tombstone. M1D introduced no reward/history records; M1E now persists its authenticated mutations through the existing sync contract.
+
+Mobile Today v1 combines those Task and Habit controls with completed and intentionally stopped Sessions for the current captured local date. It shows actual elapsed Focus time, available linked Task/Habit/First Move labels, the current canonical or Guest-local point balance, total focused time, all five direction totals, and a chronological activity timeline for Task completions, Habit check-ins, and closed Sessions. Timeline point changes and readable times appear where the existing canonical or local data provides them. The screen uses React Native primitives and introduces no chart or native dependency.
+
+The current-day Reflection / Mini Journal is editable from Today. Guest entries remain in Guest-local persistence. For authenticated users, Journal create/edit/delete snapshots enter the existing owner-scoped durable Mobile queue and `sync_cloud_workspace_v1`; the server retains stable date identity, owner privacy, and the idempotent first-save reward, then returns the authoritative reward ledger and point balance. Mobile does not calculate or mutate authenticated Reflection rewards or authoritative points, and Journal text is not sent to AI, logs, analytics, or notifications.
+
+Today membership uses existing captured local-date facts and IANA timezones for completions, check-ins, rewards, and Sessions. Historical day membership is not recalculated from the viewer's current timezone.
 
 The Focus parent selector is one compact field that opens a searchable modal with separate Tasks and Habits, No linked item, and a clear selected state. It reads the current owner’s authoritative working set and still writes only `linkedTaskId` or `linkedHabitId`.
 
@@ -222,7 +231,7 @@ M1E reuses `cloud_workspace_status`, `get_cloud_workspace_v2`, and `sync_cloud_w
 
 M1E deliberately enables writes only for an already-initialized account that has successfully hydrated. Empty-account Start fresh / Import this device / Use cloud progress setup choices remain unimplemented on Mobile and write-disabled. Guest is still fully local. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance is the remaining release gate; `/mobile/README.md` contains the exact checklist.
 
-Other remaining M1 work includes post-session choices, Today rewards/history, daily plans, Morning metadata, Mini Journal, cat/inventory presentation, and server-authoritative economy commands beyond Task/Habit completion rewards.
+Other remaining M1 work includes post-session choices, Mobile Trends/Calendar history parity, daily plans, Morning metadata, cat/inventory presentation, and server-authoritative economy commands beyond the currently implemented mutation families.
 
 ### M2 — Native capabilities
 
