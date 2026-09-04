@@ -153,6 +153,8 @@ export function validateCanonicalWorkspace(value: unknown): CanonicalWorkspace {
       linkedHabitId: optionalUuid(row.linked_habit_id),
       linkedIntentId: optionalUuid(row.linked_intent_id),
       startedAt: instant(row.started_at),
+      localDate: date(row.local_date),
+      timezone: timezone(row.timezone),
       lastResumedAt: optionalInstant(row.last_resumed_at),
       accumulatedElapsedMs: finiteNumber(row.accumulated_elapsed_ms),
       endedAt: optionalInstant(row.ended_at),

@@ -43,6 +43,8 @@ test("hydration retains a historical Session link to a completed Web Task UUID",
   assert.deepEqual(workspace.state.tasks[0]?.completedOn, ["2026-07-29"]);
   assert.equal(workspace.state.sessions[0]?.id, sessionId);
   assert.equal(workspace.state.sessions[0]?.linkedTaskId, TASK_ID);
+  assert.equal(workspace.state.sessions[0]?.localDate, "2026-07-29");
+  assert.equal(workspace.state.sessions[0]?.timezone, "Europe/Berlin");
   assert.equal(
     (workspace.canonicalPayload.tasks as Record<string, unknown>[])[0]?.id,
     TASK_ID,
