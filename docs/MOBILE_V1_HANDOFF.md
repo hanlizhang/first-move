@@ -260,23 +260,25 @@ Status: **not started**. Complete privacy disclosures, data export/deletion, sub
 
 ## 17. Files a new Codex session must read first
 
-1. `AGENTS.md`
-2. `PRD.md`
-3. `TASKS.md`
-4. `docs/MOBILE_V1_HANDOFF.md`
-5. `docs/CLOUD_SYNC_ARCHITECTURE.md`
-6. `docs/CLOUD_SYNC_MAPPING.md`
-7. `docs/CLOUD_SYNC_IMPORT_MAPPING.md`
-8. `docs/CLOUD_SYNC_PHASE_B_PLAN.md`
-9. All files in `supabase/migrations/`, in timestamp order
-10. `src/lib/models.ts`, `src/lib/app-state.ts`, `src/lib/store.ts`, `src/lib/repository.ts`, and `src/lib/daily-plan-state.ts`
-11. `src/lib/cloud-backup.ts`, `src/lib/cloud-import.ts`, `src/lib/cloud-setup.ts`, `src/lib/cloud-hydration.ts`, and `src/lib/cloud-runtime.ts`
-12. `src/lib/auth-flow.ts`, `src/lib/supabase/`, `src/proxy.ts`, `src/app/auth/callback/route.ts`, `src/app/auth-settings.tsx`, and `src/app/first-move-app.tsx`
-13. `mobile/package.json`, `mobile/app.json`, `mobile/eas.json`, and `mobile/README.md`
-14. `mobile/src/app-state/`, `mobile/src/cloud/`, `mobile/src/domain/`, `mobile/src/local/`, and `mobile/src/supabase/`
-15. Relevant current Mobile screens and components under `mobile/src/app/` and `mobile/src/components/`, plus the matching current Mobile `*.test.ts` files
+Always read:
 
-Read the implementation and migration tests alongside these files before changing a contract. Some older design/status wording outside the four handoff documents may describe a pre-implementation state.
+- `AGENTS.md`
+- `PRD.md`
+- `TASKS.md`
+- `docs/MOBILE_V1_HANDOFF.md`
+
+Then read only the implementation files relevant to the current feature.
+
+Only when a task changes or inspects Auth, cloud sync, Supabase schema/RPC/RLS, UUID mapping, import/hydration, the offline queue, or backend contracts, additionally read:
+
+- `docs/CLOUD_SYNC_ARCHITECTURE.md`
+- `docs/CLOUD_SYNC_MAPPING.md`
+- `docs/CLOUD_SYNC_IMPORT_MAPPING.md`
+- `docs/CLOUD_SYNC_PHASE_B_PLAN.md`
+- relevant Supabase migrations
+- relevant Web/Mobile sync runtime and tests
+
+For ordinary UI/product work such as Today, Cat, or release polish, do not require reading all cloud-sync documents and migrations.
 
 ## 18. Things the mobile implementation must not redesign or break
 
