@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { validateCanonicalWorkspace } from "../cloud/canonical-workspace.ts";
 import { createPendingIntent, getPendingIntent } from "../domain/app-state.ts";
+import { localDateKey } from "../domain/dates.ts";
 import { createEmptyState } from "../domain/models.ts";
 import {
   addHabit,
@@ -256,6 +257,8 @@ test("completion is persisted before optional review and retains its historical 
   const savedBeforeReview = await repository.loadLocalWorkspace(owner);
   assert.equal(savedBeforeReview.sessions[0]?.status, "completed");
   assert.equal(savedBeforeReview.sessions[0]?.actualElapsedMs, 120_000);
+  assert.equal(savedBeforeReview.sessions[0]?.localDate, localDateKey(new Date(startMs)));
+  assert.ok(savedBeforeReview.sessions[0]?.timezone);
   assert.equal(savedBeforeReview.sessions[0]?.reviewedAt, undefined);
   assert.equal(savedBeforeReview.activityIntents[0]?.status, "consumed");
   assert.equal(savedBeforeReview.activityIntents[0]?.moveText, "Open the saved draft.");

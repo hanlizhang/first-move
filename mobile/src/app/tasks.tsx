@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { useFirstMoveApp } from "../app-state/app-provider.tsx";
 import {
@@ -31,6 +31,9 @@ import { colors, radii, spacing, touchTarget, typography } from "../theme/tokens
 
 export default function TasksScreen() {
   const router = useRouter();
+  const { edit: requestedEdit } = useLocalSearchParams<{
+    edit?: string | string[];
+  }>();
   const {
     auth,
     localWorkspace,
@@ -41,11 +44,18 @@ export default function TasksScreen() {
     workspaceEditable,
   } = useFirstMoveApp();
   const today = useCurrentLocalDate();
-  const [editingId, setEditingId] = useState<string>();
-  const [title, setTitle] = useState("");
-  const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
+  const requestedId = Array.isArray(requestedEdit) ? requestedEdit[0] : requestedEdit;
+  const requestedTask = localWorkspace.tasks.find(
+    (candidate) => candidate.id === requestedId,
+  );
+  const [editingId, setEditingId] = useState<string | undefined>(requestedTask?.id);
+  const [title, setTitle] = useState(requestedTask?.title ?? "");
+  const [direction, setDirection] = useState<Direction>(
+    requestedTask?.direction ?? DIRECTIONS[0],
+  );
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+
   if (localWorkspaceStatus === "loading") {
     return (
       <Screen title="Tasks">

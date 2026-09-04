@@ -79,6 +79,9 @@ export interface ActivitySession {
   linkedIntentId?: string;
   status: SessionStatus;
   startedAt: string;
+  /** Captured when the Session starts; never recompute historical membership. */
+  localDate?: string;
+  timezone?: string;
   lastResumedAt?: string;
   accumulatedElapsedMs: number;
   endedAt?: string;
@@ -93,6 +96,7 @@ export interface RewardEvent {
   source: RewardSource;
   sourceId: string;
   dateKey: string;
+  timezone?: string;
   points: number;
   createdAt: string;
 }

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createPendingIntent } from "../domain/app-state.ts";
 import { createEmptyState, type AppState, type DailyPlanRecord } from "../domain/models.ts";
+import { deleteReflection, saveReflection } from "../domain/reflections.ts";
 import {
   addHabit,
   addTask,
@@ -101,6 +102,7 @@ class FakeCloud {
   private taskParents = new Map<string, Record<string, unknown>>();
   private habitParents = new Map<string, Record<string, unknown>>();
   private intentParents = new Map<string, Record<string, unknown>>();
+  private journalRows = new Map<string, Record<string, unknown>>();
   private rewards = new Map<string, Record<string, unknown>>();
 
   async rpc(name: string, parameters?: Record<string, unknown>) {
@@ -214,6 +216,34 @@ class FakeCloud {
         );
       }
     }
+    const activeJournalDates = new Set(state.journalEntries.map((entry) => entry.dateKey));
+    for (const [dateKey, row] of this.journalRows) {
+      if (!activeJournalDates.has(dateKey)) row.deleted_at = NOW;
+    }
+    for (const entry of state.journalEntries) {
+      const existing = this.journalRows.get(entry.dateKey);
+      const id = String(existing?.id ?? stableUuid(0xd1, this.journalRows.size));
+      this.journalRows.set(entry.dateKey, {
+        id,
+        local_date: entry.dateKey,
+        timezone: "Europe/Zurich",
+        mood: entry.mood ?? null,
+        energy: entry.energy ?? null,
+        what_helped: entry.whatHelped ?? null,
+        completed: entry.completed ?? null,
+        difficult: entry.difficult ?? null,
+        next_step: entry.nextStep ?? null,
+        free_text: entry.freeText ?? null,
+        updated_at: NOW,
+        deleted_at: null,
+      });
+      if (!this.rewards.has(`reflection:${entry.dateKey}`)) {
+        this.rewards.set(
+          `reflection:${entry.dateKey}`,
+          rewardRow(id, "reflection", 20, entry.dateKey),
+        );
+      }
+    }
     const rewards = [...this.rewards.values()];
 
     return emptyCanonical({
@@ -271,6 +301,7 @@ class FakeCloud {
           deleted_at: null,
         })),
       ),
+      journal_entries: [...this.journalRows.values()],
       reward_ledger: rewards,
       points_tenths: rewards.reduce(
         (total, reward) => total + Number(reward.points_tenths),
@@ -305,12 +336,21 @@ function completionRow(
 
 function rewardRow(
   sourceId: string,
-  sourceType: "task" | "habit" | "session",
+  sourceType: "task" | "habit" | "session" | "reflection",
   pointsTenths: number,
   date: string,
 ) {
   return {
-    id: stableUuid(sourceType === "task" ? 0xa1 : sourceType === "habit" ? 0xb1 : 0xc1, sourceId.charCodeAt(0)),
+    id: stableUuid(
+      sourceType === "task"
+        ? 0xa1
+        : sourceType === "habit"
+          ? 0xb1
+          : sourceType === "session"
+            ? 0xc1
+            : 0xe1,
+      sourceId.charCodeAt(0),
+    ),
     source_type: sourceType,
     source_id: sourceId,
     local_date: date,
@@ -522,6 +562,79 @@ test("Habit create, schedule edit, check-in, and deletion sync through canonical
     [TODAY],
   );
   assert.equal((await fixture.queue.load(USER_A)).pending.length, 0);
+});
+
+test("authenticated Journal create, edit, delete, and recreate keep reward authority on the server", async () => {
+  const fixture = harness();
+  await fixture.runtime.start();
+  fixture.online(false);
+
+  await fixture.runtime.mutate((state) =>
+    saveReflection(
+      state,
+      TODAY,
+      { mood: 4, whatHelped: "A quiet start" },
+      { rewardAuthority: "server-authoritative", clock: () => NOW },
+    ),
+  );
+  const queuedCreate = (await fixture.queue.load(USER_A)).pending[0]?.state;
+  assert.equal(queuedCreate?.journalEntries[0]?.whatHelped, "A quiet start");
+  assert.equal(queuedCreate?.rewardEvents.length, 0);
+  assert.equal(queuedCreate?.progress.points, 0);
+
+  fixture.online(true);
+  await fixture.runtime.retry();
+  let canonical = await fixture.repository.loadLocalWorkspace({
+    kind: "account",
+    userId: USER_A,
+  });
+  assert.equal(canonical.journalEntries[0]?.mood, 4);
+  assert.equal(canonical.progress.points, 2);
+  assert.equal(canonical.rewardEvents[0]?.sourceId, TODAY);
+  const journalId = String((fixture.cloud.raw.journal_entries as { id: string }[])[0]?.id);
+
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    saveReflection(
+      state,
+      TODAY,
+      { energy: 3, completed: "Edited once" },
+      { rewardAuthority: "server-authoritative", clock: () => NOW },
+    ),
+  );
+  fixture.online(true);
+  await fixture.runtime.retry();
+  canonical = await fixture.repository.loadLocalWorkspace({ kind: "account", userId: USER_A });
+  assert.equal(canonical.journalEntries[0]?.completed, "Edited once");
+  assert.equal(canonical.progress.points, 2);
+  assert.equal(canonical.rewardEvents.filter((event) => event.source === "reflection").length, 1);
+
+  fixture.online(false);
+  await fixture.runtime.mutate((state) => deleteReflection(state, TODAY));
+  fixture.online(true);
+  await fixture.runtime.retry();
+  canonical = await fixture.repository.loadLocalWorkspace({ kind: "account", userId: USER_A });
+  assert.equal(canonical.journalEntries.length, 0);
+  assert.equal(canonical.progress.points, 2);
+
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    saveReflection(
+      state,
+      TODAY,
+      { nextStep: "Return tomorrow" },
+      { rewardAuthority: "server-authoritative", clock: () => NOW },
+    ),
+  );
+  fixture.online(true);
+  await fixture.runtime.retry();
+  canonical = await fixture.repository.loadLocalWorkspace({ kind: "account", userId: USER_A });
+  assert.equal(canonical.progress.points, 2);
+  assert.equal(canonical.rewardEvents.filter((event) => event.source === "reflection").length, 1);
+  assert.equal(
+    (fixture.cloud.raw.journal_entries as { id: string }[])[0]?.id,
+    journalId,
+  );
 });
 
 test("scoped Mobile writes pass canonical daily plans through unchanged", async () => {

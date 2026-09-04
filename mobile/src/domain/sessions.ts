@@ -7,6 +7,7 @@ import {
   type Direction,
 } from "./models.ts";
 import { createUuidV4 } from "./ids.ts";
+import { captureLocalDay } from "./dates.ts";
 
 type IdFactory = () => string;
 
@@ -320,10 +321,12 @@ function appendSession(
   nowMs: number,
 ): AppState {
   const timestamp = new Date(nowMs).toISOString();
+  const capturedDay = captureLocalDay(new Date(nowMs));
   const session: ActivitySession = {
     ...input,
     status: "running",
     startedAt: timestamp,
+    ...capturedDay,
     lastResumedAt: timestamp,
     accumulatedElapsedMs: 0,
   };

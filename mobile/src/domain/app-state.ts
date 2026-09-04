@@ -212,6 +212,8 @@ function isActivitySession(value: unknown): value is ActivitySession {
     links.length <= 1 &&
     (open || closed) &&
     typeof value.startedAt === "string" &&
+    optionalDateKey(value.localDate) &&
+    optionalTimezone(value.timezone) &&
     optionalString(value.lastResumedAt) &&
     finiteNonnegative(value.accumulatedElapsedMs) &&
     optionalString(value.endedAt) &&
@@ -236,6 +238,7 @@ function isRewardEvent(value: unknown): value is RewardEvent {
       value.source === "store") &&
     typeof value.sourceId === "string" &&
     typeof value.dateKey === "string" &&
+    optionalTimezone(value.timezone) &&
     typeof value.points === "number" &&
     Number.isFinite(value.points) &&
     typeof value.createdAt === "string"
@@ -421,6 +424,21 @@ function nonemptyBoundedString(value: unknown, limit: number): value is string {
 
 function optionalString(value: unknown): boolean {
   return value === undefined || typeof value === "string";
+}
+
+function optionalDateKey(value: unknown): boolean {
+  return value === undefined || isDateKey(value);
+}
+
+function optionalTimezone(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== "string" || value.length === 0) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function stringArrayValue(value: unknown): value is string[] {

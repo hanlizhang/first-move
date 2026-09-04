@@ -8,6 +8,7 @@ import {
   type IntendedDuration,
 } from "./models.ts";
 import { isUuidV4 } from "./ids.ts";
+import { localDateKey } from "./dates.ts";
 import {
   cancelSession,
   completeSessionIfElapsed,
@@ -62,6 +63,8 @@ test("a pending intent starts one bounded schema-v8 countdown", () => {
       linkedIntentId: "intent-local",
       status: "running",
       startedAt: "2026-08-09T09:00:00.000Z",
+      localDate: localDateKey(new Date(startMs)),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       lastResumedAt: "2026-08-09T09:00:00.000Z",
       accumulatedElapsedMs: 0,
     });
@@ -70,6 +73,22 @@ test("a pending intent starts one bounded schema-v8 countdown", () => {
       1,
     );
   }
+});
+
+test("a new Session captures its local date and IANA timezone once", () => {
+  const started = startStopwatch(
+    createEmptyState(),
+    { direction: "Rest", label: "Pause" },
+    startMs,
+    () => "captured-session",
+  );
+  const session = started.sessions[0];
+  assert.ok(session);
+  assert.equal(session.localDate, localDateKey(new Date(startMs)));
+  assert.ok(session.timezone);
+  assert.doesNotThrow(() =>
+    new Intl.DateTimeFormat("en-US", { timeZone: session.timezone }).format(),
+  );
 });
 
 test("default Mobile Session IDs are canonical UUID v4 values", () => {

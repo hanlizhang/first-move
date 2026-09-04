@@ -5,6 +5,18 @@ export function localDateKey(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+export interface CapturedLocalDay {
+  localDate: string;
+  timezone: string;
+}
+
+export function captureLocalDay(date = new Date()): CapturedLocalDay {
+  return {
+    localDate: localDateKey(date),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  };
+}
+
 export function isLocalDateKey(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
