@@ -140,7 +140,8 @@ function validateSyncState(value: unknown): asserts value is AppState {
     state.tasks.length !== collectionLength(value.tasks) ||
     state.habits.length !== collectionLength(value.habits) ||
     state.activityIntents.length !== collectionLength(value.activityIntents) ||
-    state.sessions.length !== collectionLength(value.sessions)
+    state.sessions.length !== collectionLength(value.sessions) ||
+    state.journalEntries.length !== collectionLength(value.journalEntries)
   ) {
     throw new Error("The local sync workspace is invalid.");
   }

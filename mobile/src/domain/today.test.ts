@@ -109,10 +109,29 @@ function todayState(): AppState {
     ],
     rewardEvents: [
       {
+        id: "reward-task",
+        source: "task",
+        sourceId: "task-later",
+        dateKey: TODAY,
+        timezone: "Pacific/Auckland",
+        points: 5,
+        createdAt: "2026-09-03T21:10:00.000Z",
+      },
+      {
+        id: "reward-habit",
+        source: "habit",
+        sourceId: "habit-friday",
+        dateKey: TODAY,
+        timezone: "Pacific/Auckland",
+        points: 3,
+        createdAt: "2026-09-03T21:20:00.000Z",
+      },
+      {
         id: "reward-legacy-session",
         source: "session",
         sourceId: "session-without-date",
         dateKey: TODAY,
+        timezone: "Pacific/Auckland",
         points: 0.1,
         createdAt: "2026-09-04T20:00:00.000Z",
       },
@@ -149,6 +168,23 @@ test("Today uses captured Session dates instead of the viewer's current timezone
   assert.equal(view.focusItems[2]?.linkedKind, "Task");
   assert.equal(view.focusItems[2]?.linkedLabel, "First Task");
   assert.equal(view.focusItems.some((item) => item.id === "session-other-day"), false);
+  assert.equal(view.directionTotals["Work & Study"], 164_000);
+  assert.equal(view.directionTotals.Rest, 0);
+  assert.deepEqual(
+    view.timeline.map((item) => item.id),
+    [
+      "session:session-without-date",
+      "session:session-intent",
+      "session:session-task",
+      `habit:habit-friday:${TODAY}`,
+      `task:task-later:${TODAY}`,
+    ],
+  );
+  assert.equal(view.timeline.find((item) => item.kind === "Habit")?.points, 3);
+  assert.equal(
+    view.timeline.find((item) => item.id === "session:session-without-date")?.timezone,
+    "Pacific/Auckland",
+  );
 });
 
 test("Today does not guess a historical date when no captured date fact exists", () => {

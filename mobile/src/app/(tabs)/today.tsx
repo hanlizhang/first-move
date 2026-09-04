@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 
 import type { AuthState } from "../../auth/auth-state.ts";
 import { useFirstMoveApp, type AppSyncState } from "../../app-state/app-provider.tsx";
+import { ReflectionEditor } from "../../components/reflection-editor.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import {
   Body,
@@ -12,7 +13,13 @@ import {
   PrimaryButton,
   Screen,
 } from "../../components/ui.tsx";
-import type { AppState, Habit, JournalEntry, Task } from "../../domain/models.ts";
+import { captureLocalDay } from "../../domain/dates.ts";
+import { DIRECTIONS, type AppState, type Habit, type Task } from "../../domain/models.ts";
+import {
+  deleteReflection,
+  saveReflection,
+  type ReflectionInput,
+} from "../../domain/reflections.ts";
 import {
   isHabitActive,
   isTaskActive,
@@ -21,8 +28,10 @@ import {
 } from "../../domain/tasks-habits.ts";
 import {
   formatFocusedDuration,
+  formatTimelineTime,
   getTodayView,
   type TodayFocusItem,
+  type TodayTimelineItem,
 } from "../../domain/today.ts";
 import { colors, radii, spacing, touchTarget, typography } from "../../theme/tokens.ts";
 
@@ -84,6 +93,12 @@ export default function TodayScreen() {
           <Body>Today is read-only until this account finishes loading.</Body>
         </Card>
       ) : null}
+
+      <TodaySummary
+        directionTotals={view.directionTotals}
+        points={localWorkspace.progress.points}
+        totalFocusedMs={view.totalFocusedMs}
+      />
 
       <SectionHeader
         count={view.tasks.length}
@@ -163,7 +178,25 @@ export default function TodayScreen() {
         )}
       </Card>
 
-      {view.reflection ? <ReflectionCard reflection={view.reflection} /> : null}
+      <StaticSectionHeader detail={`${view.timeline.length}`} title="Activity timeline" />
+      <Card>
+        {view.timeline.length === 0 ? (
+          <EmptyRow message="Your completed Tasks, Habit check-ins, and closed Focus Sessions will appear here." />
+        ) : (
+          view.timeline.map((item, index) => (
+            <TimelineRow first={index === 0} item={item} key={item.id} />
+          ))
+        )}
+      </Card>
+
+      <StaticSectionHeader title="Reflection" />
+      <ReflectionEditor
+        disabled={Boolean(savingId) || !workspaceEditable}
+        existing={view.reflection}
+        key={today}
+        onDelete={removeTodayReflection}
+        onSave={saveTodayReflection}
+      />
     </Screen>
   );
 
@@ -185,6 +218,99 @@ export default function TodayScreen() {
     if (next && changed) setNotice(successNotice);
     else if (next) setNotice("That item is no longer available. Nothing was changed.");
   }
+
+  async function saveTodayReflection(input: ReflectionInput): Promise<boolean> {
+    if (savingId) return false;
+    setSavingId("reflection");
+    setNotice("");
+    const captured = captureLocalDay();
+    const next = await updateLocalWorkspace((state) =>
+      saveReflection(state, today, input, {
+        rewardAuthority:
+          auth.status === "authenticated" ? "server-authoritative" : "guest-local",
+        timezone: captured.timezone,
+      }),
+    );
+    setSavingId(undefined);
+    if (!next) return false;
+    setNotice(
+      auth.status === "authenticated"
+        ? "Reflection saved to your private workspace."
+        : "Reflection saved on this device.",
+    );
+    return true;
+  }
+
+  async function removeTodayReflection(): Promise<boolean> {
+    if (savingId) return false;
+    setSavingId("reflection");
+    setNotice("");
+    let changed = false;
+    const next = await updateLocalWorkspace((state) => {
+      const updated = deleteReflection(state, today);
+      changed = updated !== state;
+      return updated;
+    });
+    setSavingId(undefined);
+    if (!next || !changed) return false;
+    setNotice("Reflection deleted. Any first-save points remain unchanged.");
+    return true;
+  }
+}
+
+function TodaySummary({
+  directionTotals,
+  points,
+  totalFocusedMs,
+}: {
+  directionTotals: ReturnType<typeof getTodayView>["directionTotals"];
+  points: number;
+  totalFocusedMs: number;
+}) {
+  return (
+    <Card tone="primary">
+      <View style={styles.metricsRow}>
+        <View style={styles.metric}>
+          <Text style={styles.metricLabel}>Current points</Text>
+          <Text style={styles.metricValue}>{formatPoints(points)}</Text>
+        </View>
+        <View style={styles.metric}>
+          <Text style={styles.metricLabel}>Focused today</Text>
+          <Text style={styles.metricValue}>{formatFocusedDuration(totalFocusedMs)}</Text>
+        </View>
+      </View>
+      <View style={styles.directionList}>
+        {DIRECTIONS.map((direction) => {
+          const duration = directionTotals[direction];
+          const width = `${
+            totalFocusedMs > 0 ? Math.round((duration / totalFocusedMs) * 100) : 0
+          }%` as `${number}%`;
+          return (
+            <View key={direction} style={styles.directionRow}>
+              <View style={styles.directionHeading}>
+                <Text numberOfLines={1} style={styles.directionLabel}>{direction}</Text>
+                <Text style={styles.directionDuration}>{formatFocusedDuration(duration)}</Text>
+              </View>
+              <View style={styles.directionTrack}>
+                <View style={[styles.directionFill, { width }]} />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </Card>
+  );
+}
+
+function StaticSectionHeader({ detail, title }: { detail?: string; title: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionTitleRow}>
+        <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
+        {detail ? <Text style={styles.count}>{detail}</Text> : null}
+      </View>
+    </View>
+  );
 }
 
 function SectionHeader({
@@ -347,23 +473,30 @@ function FocusRow({ first, item }: { first: boolean; item: TodayFocusItem }) {
   );
 }
 
-function ReflectionCard({ reflection }: { reflection: JournalEntry }) {
-  const fields = reflectionFields(reflection);
+function TimelineRow({ first, item }: { first: boolean; item: TodayTimelineItem }) {
   return (
-    <>
-      <View style={styles.sectionHeader}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>Reflection</Text>
-        <Text style={styles.savedLabel}>Saved today</Text>
+    <View style={[styles.timelineRow, !first && styles.itemBorder]}>
+      <View style={styles.timelineTimeColumn}>
+        <Text style={styles.timelineTime}>
+          {formatTimelineTime(item.occurredAt, item.timezone)}
+        </Text>
+        <Text style={styles.timelineKind}>{item.kind}</Text>
       </View>
-      <Card tone="primary">
-        {fields.map((field) => (
-          <View key={field.label} style={styles.reflectionField}>
-            <Text style={styles.reflectionLabel}>{field.label}</Text>
-            <Text style={styles.reflectionValue}>{field.value}</Text>
-          </View>
-        ))}
-      </Card>
-    </>
+      <View style={styles.timelineCopy}>
+        <Text numberOfLines={2} style={styles.itemTitle}>{item.label}</Text>
+        <Text style={styles.itemMeta}>
+          {item.direction}
+          {item.durationMs !== undefined
+            ? ` · ${formatFocusedDuration(item.durationMs)} · ${
+                item.sessionStatus === "stopped" ? "Stopped intentionally" : "Completed"
+              }`
+            : ""}
+        </Text>
+      </View>
+      {item.points !== undefined ? (
+        <Text style={styles.pointChange}>{formatPointChange(item.points)}</Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -405,24 +538,20 @@ function syncDisplay(
   return { label: "Loading", tone: "caution" };
 }
 
-function reflectionFields(reflection: JournalEntry): { label: string; value: string }[] {
-  return [
-    reflection.whatHelped ? { label: "What helped", value: reflection.whatHelped } : undefined,
-    reflection.completed ? { label: "What I did", value: reflection.completed } : undefined,
-    reflection.difficult ? { label: "What felt difficult", value: reflection.difficult } : undefined,
-    reflection.nextStep ? { label: "Small next step", value: reflection.nextStep } : undefined,
-    reflection.freeText ? { label: "Notes", value: reflection.freeText } : undefined,
-    reflection.mood ? { label: "Mood", value: `${reflection.mood}/5` } : undefined,
-    reflection.energy ? { label: "Energy", value: `${reflection.energy}/5` } : undefined,
-  ].filter((field): field is { label: string; value: string } => Boolean(field));
-}
-
 function formatCurrentDate(dateKey: string): string {
   return new Intl.DateTimeFormat(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
   }).format(new Date(`${dateKey}T12:00:00`));
+}
+
+function formatPoints(points: number): string {
+  return Number.isInteger(points) ? String(points) : points.toFixed(1);
+}
+
+function formatPointChange(points: number): string {
+  return `${points > 0 ? "+" : ""}${formatPoints(points)} pts`;
 }
 
 const styles = StyleSheet.create({
@@ -452,6 +581,22 @@ const styles = StyleSheet.create({
     fontSize: typography.small,
     padding: spacing.sm,
   },
+  metricsRow: { flexDirection: "row", gap: spacing.md },
+  metric: { flex: 1 },
+  metricLabel: { color: colors.primary, fontSize: typography.small, fontWeight: "800" },
+  metricValue: { color: colors.text, fontSize: 26, fontWeight: "900", marginTop: 2 },
+  directionList: { gap: spacing.sm, marginTop: spacing.xs },
+  directionRow: { gap: spacing.xs },
+  directionHeading: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
+  directionLabel: { color: colors.text, flex: 1, fontSize: typography.small },
+  directionDuration: { color: colors.textMuted, fontSize: typography.small, fontWeight: "800" },
+  directionTrack: {
+    backgroundColor: "#D9D0F7",
+    borderRadius: radii.pill,
+    height: 6,
+    overflow: "hidden",
+  },
+  directionFill: { backgroundColor: colors.primary, borderRadius: radii.pill, height: 6 },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -514,10 +659,12 @@ const styles = StyleSheet.create({
   focusTitle: { flex: 1 },
   duration: { color: colors.text, fontSize: typography.body, fontWeight: "800" },
   linkedLabel: { color: colors.primary, fontSize: typography.small, lineHeight: 20, marginTop: spacing.xs },
-  savedLabel: { color: colors.success, fontSize: typography.small, fontWeight: "800" },
-  reflectionField: { gap: 2 },
-  reflectionLabel: { color: colors.primary, fontSize: typography.small, fontWeight: "800" },
-  reflectionValue: { color: colors.text, fontSize: typography.body, lineHeight: 23 },
+  timelineRow: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, paddingVertical: spacing.sm },
+  timelineTimeColumn: { width: 64 },
+  timelineTime: { color: colors.text, fontSize: typography.small, fontWeight: "800" },
+  timelineKind: { color: colors.textMuted, fontSize: typography.label, marginTop: 2 },
+  timelineCopy: { flex: 1 },
+  pointChange: { color: colors.success, fontSize: typography.small, fontWeight: "800" },
   emptyText: { color: colors.textMuted, fontSize: typography.body, lineHeight: 23, paddingVertical: spacing.sm },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.5 },

@@ -96,6 +96,7 @@ export interface RewardEvent {
   source: RewardSource;
   sourceId: string;
   dateKey: string;
+  timezone?: string;
   points: number;
   createdAt: string;
 }

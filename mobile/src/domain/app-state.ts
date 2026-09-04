@@ -238,6 +238,7 @@ function isRewardEvent(value: unknown): value is RewardEvent {
       value.source === "store") &&
     typeof value.sourceId === "string" &&
     typeof value.dateKey === "string" &&
+    optionalTimezone(value.timezone) &&
     typeof value.points === "number" &&
     Number.isFinite(value.points) &&
     typeof value.createdAt === "string"

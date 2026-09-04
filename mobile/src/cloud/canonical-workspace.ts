@@ -165,14 +165,23 @@ export function validateCanonicalWorkspace(value: unknown): CanonicalWorkspace {
     return session;
   });
 
-  const mappedRewards: RewardEvent[] = rewards.map((row) => ({
-    id: uuid(row.id),
-    source: rewardSource(row.source_type),
-    sourceId: optionalUuid(row.source_id) ?? uuid(row.id),
-    dateKey: date(row.local_date),
-    points: finiteNumber(row.points_tenths) / 10,
-    createdAt: instant(row.created_at),
-  }));
+  const mappedRewards: RewardEvent[] = rewards.map((row) => {
+    const source = rewardSource(row.source_type);
+    return {
+      id: uuid(row.id),
+      source,
+      sourceId: canonicalRewardSourceId(
+        row,
+        source,
+        taskCompletions,
+        habitCompletions,
+      ),
+      dateKey: date(row.local_date),
+      timezone: timezone(row.timezone),
+      points: finiteNumber(row.points_tenths) / 10,
+      createdAt: instant(row.created_at),
+    };
+  });
 
   const mappedJournals: JournalEntry[] = journals.map((row) => ({
     dateKey: date(row.local_date),
@@ -537,6 +546,31 @@ function rewardSource(value: unknown): RewardEvent["source"] {
     return value;
   }
   throw new Error("Cloud reward source is invalid.");
+}
+
+function canonicalRewardSourceId(
+  row: Record<string, unknown>,
+  source: RewardEvent["source"],
+  taskCompletions: Record<string, unknown>[],
+  habitCompletions: Record<string, unknown>[],
+): string {
+  if (source === "reflection" || source === "morning") {
+    return date(row.local_date);
+  }
+  const rawSourceId = optionalUuid(row.source_id);
+  if (source === "task" && rawSourceId) {
+    const completion = taskCompletions.find(
+      (candidate) => uuid(candidate.id) === rawSourceId,
+    );
+    if (completion) return uuid(completion.task_id);
+  }
+  if (source === "habit" && rawSourceId) {
+    const completion = habitCompletions.find(
+      (candidate) => uuid(candidate.id) === rawSourceId,
+    );
+    if (completion) return uuid(completion.habit_id);
+  }
+  return rawSourceId ?? uuid(row.id);
 }
 
 function captureMethod(value: unknown): MorningCheck["captureMethod"] {

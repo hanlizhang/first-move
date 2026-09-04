@@ -7,15 +7,28 @@ const todaySource = readFileSync(
   "utf8",
 );
 const taskSource = readFileSync(new URL("./app/tasks.tsx", import.meta.url), "utf8");
+const reflectionSource = readFileSync(
+  new URL("./components/reflection-editor.tsx", import.meta.url),
+  "utf8",
+);
 
-test("Mobile Today exposes compact Task, Habit, Focus, and existing Reflection content", () => {
-  for (const label of ["Tasks", "Habits", "Focus today", "Reflection"]) {
+test("Mobile Today exposes compact points, direction, activity, and Reflection content", () => {
+  for (const label of [
+    "Current points",
+    "Focused today",
+    "Tasks",
+    "Habits",
+    "Focus today",
+    "Activity timeline",
+    "Reflection",
+  ]) {
     assert.match(todaySource, new RegExp(label));
   }
   assert.match(todaySource, /getTodayView\(localWorkspace, today\)/);
   assert.match(todaySource, /formatFocusedDuration/);
-  assert.match(todaySource, /view\.reflection \? <ReflectionCard/);
-  assert.doesNotMatch(todaySource, /saveReflection|journalEntries\s*:/);
+  assert.match(todaySource, /DIRECTIONS\.map/);
+  assert.match(todaySource, /view\.timeline\.map/);
+  assert.doesNotMatch(todaySource, /react-native-svg|victory|chart/i);
 });
 
 test("Today Task and Habit checks reuse the owner workspace mutation path", () => {
@@ -23,6 +36,15 @@ test("Today Task and Habit checks reuse the owner workspace mutation path", () =
   assert.match(todaySource, /toggleTaskCompletion/);
   assert.match(todaySource, /toggleHabitCompletion/);
   assert.doesNotMatch(todaySource, /\.rpc\(/);
+});
+
+test("Reflection uses the durable workspace mutation path and keeps authenticated rewards server-owned", () => {
+  assert.match(todaySource, /saveReflection\(state, today, input/);
+  assert.match(todaySource, /"server-authoritative"/);
+  assert.match(todaySource, /"guest-local"/);
+  assert.match(todaySource, /updateLocalWorkspace/);
+  assert.match(reflectionSource, /Never sent to AI/);
+  assert.doesNotMatch(`${todaySource}\n${reflectionSource}`, /console\.|analytics|\.rpc\(/i);
 });
 
 test("tapping a Today Task opens that Task in the existing editor", () => {
@@ -37,6 +59,6 @@ test("Today shows simple sync language without developer-facing architecture cop
   }
   assert.doesNotMatch(
     todaySource,
-    /canonical workspace|UUID working copy|storage boundary|server-authoritative/i,
+    /canonical workspace|UUID working copy|storage boundary/i,
   );
 });

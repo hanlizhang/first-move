@@ -9,11 +9,52 @@ test("canonical v2 payload preserves UUID mapping, date, timezone source, and ba
   assert.equal(workspace.state.tasks[0]?.id, TASK_ID);
   assert.deepEqual(workspace.state.tasks[0]?.completedOn, ["2026-07-29"]);
   assert.equal(workspace.state.progress.points, 5);
+  assert.equal(workspace.state.rewardEvents[0]?.sourceId, TASK_ID);
+  assert.equal(workspace.state.rewardEvents[0]?.timezone, "Europe/Berlin");
   assert.deepEqual(workspace.state.inventory.items, [{ itemId: "kitten-milk", quantity: 2 }]);
   assert.equal(
     (workspace.canonicalPayload.task_completions as Record<string, unknown>[])[0]?.timezone,
     "Europe/Berlin",
   );
+});
+
+test("canonical Journal rewards use the stable local date identity", () => {
+  const journalId = "15000000-0000-4000-8000-000000000001";
+  const workspace = validateCanonicalWorkspace(
+    canonicalPayload({
+      journal_entries: [
+        {
+          id: journalId,
+          local_date: "2026-07-29",
+          timezone: "Europe/Berlin",
+          mood: 4,
+          energy: null,
+          what_helped: "A short walk",
+          completed: null,
+          difficult: null,
+          next_step: null,
+          free_text: null,
+          updated_at: "2026-07-29T18:00:00Z",
+        },
+      ],
+      reward_ledger: [
+        {
+          id: "16000000-0000-4000-8000-000000000001",
+          source_type: "reflection",
+          source_id: journalId,
+          local_date: "2026-07-29",
+          timezone: "Europe/Berlin",
+          points_tenths: 20,
+          created_at: "2026-07-29T18:00:00Z",
+        },
+      ],
+      points_tenths: 20,
+    }),
+  );
+
+  assert.equal(workspace.state.journalEntries[0]?.whatHelped, "A short walk");
+  assert.equal(workspace.state.rewardEvents[0]?.source, "reflection");
+  assert.equal(workspace.state.rewardEvents[0]?.sourceId, "2026-07-29");
 });
 
 test("hydration retains a historical Session link to a completed Web Task UUID", () => {

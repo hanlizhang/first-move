@@ -1,12 +1,13 @@
 import { isLocalDateKey } from "./dates.ts";
 import { isHabitScheduled } from "./tasks-habits.ts";
-import type {
-  ActivitySession,
-  AppState,
-  Direction,
-  Habit,
-  JournalEntry,
-  Task,
+import {
+  DIRECTIONS,
+  type ActivitySession,
+  type AppState,
+  type Direction,
+  type Habit,
+  type JournalEntry,
+  type Task,
 } from "./models.ts";
 
 export interface TodayFocusItem {
@@ -18,6 +19,21 @@ export interface TodayFocusItem {
   linkedKind?: "Task" | "Habit" | "First Move";
   linkedLabel?: string;
   endedAt: string;
+  timezone?: string;
+}
+
+export type TodayTimelineKind = "Task" | "Habit" | "Focus";
+
+export interface TodayTimelineItem {
+  id: string;
+  kind: TodayTimelineKind;
+  label: string;
+  direction: Direction;
+  occurredAt?: string;
+  timezone?: string;
+  points?: number;
+  durationMs?: number;
+  sessionStatus?: "completed" | "stopped";
 }
 
 export interface TodayView {
@@ -25,6 +41,8 @@ export interface TodayView {
   habits: Habit[];
   focusItems: TodayFocusItem[];
   totalFocusedMs: number;
+  directionTotals: Record<Direction, number>;
+  timeline: TodayTimelineItem[];
   reflection?: JournalEntry;
 }
 
@@ -35,6 +53,8 @@ export function getTodayView(state: AppState, dateKey: string): TodayView {
         .map((session) => toFocusItem(state, session))
         .sort((left, right) => Date.parse(right.endedAt) - Date.parse(left.endedAt))
     : [];
+  const directionTotals = emptyDirectionTotals();
+  for (const item of focusItems) directionTotals[item.direction] += item.durationMs;
 
   return {
     tasks: [...state.tasks].sort((left, right) => left.order - right.order),
@@ -43,10 +63,30 @@ export function getTodayView(state: AppState, dateKey: string): TodayView {
       : [],
     focusItems,
     totalFocusedMs: focusItems.reduce((total, item) => total + item.durationMs, 0),
+    directionTotals,
+    timeline: isLocalDateKey(dateKey)
+      ? buildTimeline(state, focusItems, dateKey)
+      : [],
     reflection: isLocalDateKey(dateKey)
       ? state.journalEntries.find((entry) => entry.dateKey === dateKey)
       : undefined,
   };
+}
+
+export function formatTimelineTime(timestamp?: string, timezone?: string): string {
+  if (!timestamp || Number.isNaN(Date.parse(timestamp))) return "Today";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      ...(timezone ? { timeZone: timezone } : {}),
+    }).format(new Date(timestamp));
+  } catch {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(timestamp));
+  }
 }
 
 export function formatFocusedDuration(durationMs: number): string {
@@ -102,8 +142,87 @@ function toFocusItem(
     status: session.status,
     durationMs: session.actualElapsedMs,
     endedAt: session.endedAt,
+    timezone: session.timezone,
     ...linked,
   };
+}
+
+function buildTimeline(
+  state: AppState,
+  focusItems: TodayFocusItem[],
+  dateKey: string,
+): TodayTimelineItem[] {
+  const taskItems: TodayTimelineItem[] = state.tasks
+    .filter((task) => task.completedOn.includes(dateKey))
+    .map((task) => {
+      const reward = matchingReward(state, "task", task.id, dateKey);
+      return {
+        id: `task:${task.id}:${dateKey}`,
+        kind: "Task",
+        label: task.title,
+        direction: task.direction,
+        occurredAt: reward?.createdAt,
+        timezone: reward?.timezone,
+        points: reward?.points,
+      };
+    });
+  const habitItems: TodayTimelineItem[] = state.habits
+    .filter((habit) => habit.completedOn.includes(dateKey))
+    .map((habit) => {
+      const reward = matchingReward(state, "habit", habit.id, dateKey);
+      return {
+        id: `habit:${habit.id}:${dateKey}`,
+        kind: "Habit",
+        label: habit.title,
+        direction: habit.direction,
+        occurredAt: reward?.createdAt,
+        timezone: reward?.timezone,
+        points: reward?.points,
+      };
+    });
+  const sessionItems: TodayTimelineItem[] = focusItems.map((session) => {
+    const reward = matchingReward(state, "session", session.id, dateKey);
+    return {
+      id: `session:${session.id}`,
+      kind: "Focus",
+      label: session.title,
+      direction: session.direction,
+      occurredAt: session.endedAt,
+      timezone: session.timezone ?? reward?.timezone,
+      points: reward?.points,
+      durationMs: session.durationMs,
+      sessionStatus: session.status,
+    };
+  });
+
+  return [...taskItems, ...habitItems, ...sessionItems].sort(
+    (left, right) => timestampValue(right.occurredAt) - timestampValue(left.occurredAt),
+  );
+}
+
+function matchingReward(
+  state: AppState,
+  source: "task" | "habit" | "session",
+  sourceId: string,
+  dateKey: string,
+) {
+  return state.rewardEvents.find(
+    (event) =>
+      event.source === source && event.sourceId === sourceId && event.dateKey === dateKey,
+  );
+}
+
+function emptyDirectionTotals(): Record<Direction, number> {
+  return Object.fromEntries(DIRECTIONS.map((direction) => [direction, 0])) as Record<
+    Direction,
+    number
+  >;
+}
+
+function timestampValue(value?: string): number {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function linkedItem(
