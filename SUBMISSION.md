@@ -1,5 +1,7 @@
 # First Move — Build Week Submission
 
+> Archived Build Week snapshot. This document intentionally preserves the historical Web-only submission text and does not describe the current cross-platform Web + native Mobile implementation. See `PRD.md`, `TASKS.md`, and `docs/MOBILE_V1_HANDOFF.md` for current product and delivery status.
+
 ## One-sentence pitch
 
 First Move helps someone break out of passive scrolling or inactivity by choosing one tiny intentional action, tracking a bounded session, and caring for a forgiving virtual kitten.

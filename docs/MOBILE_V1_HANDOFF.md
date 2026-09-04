@@ -1,6 +1,6 @@
 # First Move Mobile v1 handoff
 
-Status: frozen Web Sync v1 MVP checkpoint on 2026-08-01 from development branch `cloud-sync`, based on recorded commit `eddce4ba75c1d3ffb9c0da32e8bd4cb13d8cf19b` plus the documented checkpoint changes. The checkpoint has pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization.
+Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-04 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization.
 
 Status vocabulary used here:
 
@@ -8,10 +8,11 @@ Status vocabulary used here:
 - **Automated tested:** corresponding application/database test coverage exists; this documentation pass did not rerun it.
 - **Manually verified:** explicitly recorded as verified in the repository documents.
 - **Designed only / not started:** architecture exists, but production implementation does not.
+- **Intentionally deferred:** deliberately outside the current release scope and not implemented.
 
 ## 1. Product summary
 
-First Move is a gentle, responsive productivity app for moving from passive scrolling or inactivity into one intentionally small action. Guest Mode provides the complete non-AI product without an account. Core Web features include the I'm Stuck flow, five intentional directions, local First Move templates, tasks, habits, countdown/stopwatch sessions, daily planning, Morning Start, Mini Journal, history, rewards, and the virtual cat/store experience.
+First Move is a gentle cross-platform Web and native Mobile productivity product for moving from passive scrolling or inactivity into one intentionally small action. Guest Mode provides the complete non-AI product without an account. Core Web features include the I'm Stuck flow, five intentional directions, local First Move templates, tasks, habits, countdown/stopwatch sessions, daily planning, Morning Start, Mini Journal, history, rewards, and the virtual cat/store experience; current Mobile scope is recorded separately below.
 
 The product is not medical treatment and does not diagnose or claim to repair or stimulate the brain. Rest and Intentional Entertainment are valid directions. AI is optional, explicit, and always has a manual/local fallback.
 
@@ -39,7 +40,13 @@ Once cloud mode is activated, Supabase is canonical and the schema-v8 local work
 
 Immutable pre-setup guest backups live in IndexedDB. Cloud runtime metadata and pending full-snapshot mutations live in localStorage under a versioned runtime key. Neither mechanism is automatically erased.
 
-## 4. Supabase Auth and data flow
+### Repository build boundary
+
+- The repository root is the Next.js Web project; Vercel builds that root application.
+- `/mobile` is an independent Expo project with its own package/configuration files; EAS builds the `/mobile` application.
+- Root TypeScript and ESLint explicitly exclude `/mobile`. Do not convert the repository into a package workspace or move the Web app.
+
+## 4. Supabase Auth and Web setup data flow
 
 1. The server renders the restored email from the Supabase cookie session.
 2. **Sync across devices** submits email through `signInWithOtp` with `<current-origin>/auth/callback`.
@@ -52,7 +59,30 @@ Immutable pre-setup guest backups live in IndexedDB. Cloud runtime metadata and 
 
 Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID with platform-secure token persistence, not web cookies.
 
-## 5. Applied migration list
+## 5. Current Mobile v1 state
+
+### Implemented
+
+- Web and Mobile use the same Supabase Auth UUID.
+- Mobile authenticated business writes are enabled for the implemented Task, Habit/check-in, ActivityIntent, and ActivitySession mutations.
+- Mobile writes only after an already-initialized account has successfully hydrated; empty-account Start fresh and Import this device remain deferred and write-disabled on Mobile.
+- Mobile reuses the existing Web Sync v1 backend, RPCs, schema-v8 snapshot, and canonical-response contract; no new SQL, RPC, RLS, or Auth architecture was introduced for Mobile sync.
+- Guest Mode remains local-only. Mobile queue, canonical cache, and editable working workspace are owner-scoped by Supabase Auth UUID; Guest and other accounts are never merged.
+- Authenticated writes queue ordered full snapshots in AsyncStorage, flush pending writes before reads, revalidate the current session UUID, and replace the working/cache state only after canonical responses pass validation.
+- A running timer is owned by the device that started it. Persisted Session state converges through normal sync; running timers are not realtime synchronized between devices.
+
+### Manually verified where known
+
+- On iOS Simulator, `firstmove://auth/callback`, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration are manually verified.
+- The repository records passing automated Mobile coverage and export checks. True-device iOS/Android acceptance is not complete; the M1E Mobile↔Web, offline/restart, and account-switch checklist remains pending.
+- Web-side setup/import/hydration and core two-browser Task/Habit convergence remain the manually verified cross-platform evidence recorded in Sections 2 and 11.
+
+### Intentionally deferred
+
+- Mobile Today production usability, Cat interaction polish, RevenueCat Pro entitlement, server-controlled AI quota, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
+- Mobile empty-account setup/import, post-session choices, rewards/history presentation, Cat/Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
+
+## 6. Applied migration list
 
 The repository contains these migrations in order:
 
@@ -66,7 +96,9 @@ The repository contains these migrations in order:
 
 Manual `npx supabase migration list` verification shows `20260731180000_continuous_cloud_sync.sql` in both Local and Remote. Cloud setup, import, hydration, refresh, retry, and continuous-sync RPCs are deployed. This documentation correction did not query or modify Supabase.
 
-## 6. Cloud-mode lifecycle
+## 7. Web cloud lifecycle
+
+The setup/import lifecycle in this section is implemented on Web. Mobile currently reuses the resulting initialized account and does not offer empty-account Start fresh or Import this device.
 
 - Feature flag absent/false: authenticated users remain local; setup choices and continuous sync are hidden; the UI never says Synced.
 - Empty account: **Set up sync** → Preparing backup → Importing → Verifying → Cloud copy ready.
@@ -78,7 +110,7 @@ Manual `npx supabase migration list` verification shows `20260731180000_continuo
 
 Visible states are **Sign in to sync**, **Set up sync**, **Preparing backup**, **Importing**, **Verifying**, **Cloud copy ready**, **Syncing**, **Synced**, **Offline · saved locally**, and **Sync needs attention**. Authentication alone is never Synced. Settings shows the last successful sync time, Refresh cloud data, and a retry action when appropriate.
 
-## 7. Data ownership and RLS rules
+## 8. Data ownership and RLS rules
 
 - Every user-owned table includes `user_id`; ownership is always the authenticated `auth.uid()`.
 - RLS is enabled on all exposed user-owned tables. Policies explicitly target `authenticated` and prevent cross-user SELECT/INSERT/UPDATE/DELETE.
@@ -89,7 +121,7 @@ Visible states are **Sign in to sync**, **Set up sync**, **Preparing backup**, *
 - Mini Journal rows are owner-private and excluded from AI, logs, analytics, notification previews, and support payloads.
 - No toothbrush image, image hash, blob, or storage path exists in the cloud schema.
 
-## 8. Reward and inventory authority rules
+## 9. Reward and inventory authority rules
 
 Clients may request product actions but never set a total point balance or arbitrary inventory quantity. Point balance is the sum of append-only `reward_ledger.points_tenths`. Task, habit, session, Morning Start, and first-reflection rewards are created server-side with semantic uniqueness so retries or two devices cannot duplicate them.
 
@@ -97,7 +129,7 @@ Purchases use a mutation UUID, server catalog price/unlock checks, an account tr
 
 Imported inventory uses documented opening correction events because schema v8 does not retain complete historical inventory events. Existing rewards are preserved; reward-only task/habit completions are imported as tombstoned completion rows so historical ledger foreign keys remain valid without making the item appear completed.
 
-## 9. Environment-variable names only
+## 10. Environment-variable names only
 
 | Name | Client/server | Current purpose |
 | --- | --- | --- |
@@ -111,7 +143,7 @@ Imported inventory uses documented opening correction events because schema v8 d
 
 No RevenueCat environment contract is implemented yet. `NODE_ENV` is framework/runtime configuration, not a First Move secret or deployment decision.
 
-## 10. Manual Web acceptance checklist and recorded results
+## 11. Manual Web acceptance checklist and recorded results
 
 | Check | Recorded result |
 | --- | --- |
@@ -131,24 +163,24 @@ No RevenueCat environment contract is implemented yet. `NODE_ENV` is framework/r
 | Header says Synced only after successful cloud activity | Automated coverage present; manual verification pending. |
 | Continuous migration is applied remotely | **Verified.** Listed in both Local and Remote. |
 
-Remaining manual checks are known verification items and do not block Mobile M0 architecture work. They must remain visible in Web QA tracking; this MVP checkpoint is not fully QA-complete.
+Remaining manual checks are known verification items and do not block the current Mobile v1 implementation. They must remain visible in Web QA tracking; this MVP checkpoint is not fully QA-complete.
 
-## 11. Known limitations and deferred features
+## 12. Known limitations and deferred features
 
-- The continuous MVP queues complete workspace snapshots in localStorage, not normalized per-entity IndexedDB mutations.
+- The continuous Web MVP queues complete workspace snapshots in localStorage, not normalized per-entity IndexedDB mutations; Mobile uses the corresponding owner-scoped AsyncStorage queue.
 - Conflict handling is server-receipt-time last-write-wins; there is no long-offline conflict UI, field merge, or monotonic change cursor.
 - There is no realtime subscription. Startup, focus, online retry, and manual refresh trigger convergence.
 - There is no automatic merge of guest data from a second initialized device.
 - Logout does not yet offer a cache keep/remove choice. Export, account deletion, backup management, and recovery UI are not implemented.
-- A running session has no explicit cross-device takeover workflow beyond canonical refresh/LWW behavior.
+- A running timer has no realtime cross-device takeover workflow; it remains owned by the device that started it and persisted Session state converges through normal sync.
 - Continuous sync remains feature-gated for controlled rollout. Its migration is remotely applied and core task/habit convergence is manually verified; the documented smoke tests remain pending.
-- Guest data, immutable IndexedDB backups, the runtime retry queue, transient planning drafts, local First Move templates, toothbrush image previews, and development-only controls remain device-local by design.
+- Guest data, immutable IndexedDB backups, Web runtime metadata, the Mobile AsyncStorage retry queue, transient planning drafts, local First Move templates, toothbrush image previews, and development-only controls remain device-local by design.
 - Toothbrush photos are transient only; they are never synchronized or stored.
-- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, and native mobile are not started.
+- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, Mobile Today/Cat release polish, true-device testing, and store release work remain deferred.
 - Current optional live AI routes are server-side and user-initiated, with mock/manual fallback and no automatic retries, but they are not the designed authenticated paid-AI gateway.
 - The architecture documents describe a more complete B5 conflict/outbox design than the implemented MVP.
 
-## 12. Mobile architecture constraints
+## 13. Mobile architecture constraints
 
 - Use the existing Supabase project, normalized schema, RLS, RPC contracts, and Supabase Auth UUID. Do not create a parallel identity or database model.
 - Store mobile access/refresh tokens using Keychain/Keystore-backed platform storage. Do not copy the web cookie adapter.
@@ -162,11 +194,11 @@ Remaining manual checks are known verification items and do not block Mobile M0 
 - Keep server-only keys and service-role credentials out of mobile builds.
 - Maintain manual/local fallback for every AI feature and treat Rest/Intentional Entertainment as valid directions.
 
-## 13. Mobile roadmap
+## 14. Mobile roadmap
 
 ### M0 — Foundation and authentication
 
-Status: **implemented on `mobile/expo-v1`; automated checks pass, manual device acceptance pending**. An independent Expo SDK 57/React Native/TypeScript project now lives under `/mobile` without moving Web or creating a workspace. Expo Router provides First Moves, Today, Focus, Cat, and Settings placeholders. The app implements loading, signed-out, Guest Mode, authenticated, and privacy-safe error states; email magic links use `firstmove://auth/callback`; Supabase session values use a chunked `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage.
+Status: **implemented in the current `/mobile` tree; automated checks pass; callback/sign-in/restart persistence/hydration are manually verified on iOS Simulator; true-device acceptance remains pending**. An independent Expo SDK 57/React Native/TypeScript project now lives under `/mobile` without moving Web or creating a workspace. Expo Router provides First Moves, Today, Focus, Cat, and Settings placeholders. The app implements loading, signed-out, Guest Mode, authenticated, and privacy-safe error states; email magic links use `firstmove://auth/callback`; Supabase session values use a chunked `expo-secure-store` adapter backed by iOS Keychain and Android Keystore-encrypted storage.
 
 M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate. Authentication restores the existing Supabase Auth UUID. An initialized account is detected with `cloud_workspace_status` and hydrated read-only with the exact existing `get_cloud_workspace_v2` canonical payload, including UUID/reference, tombstone, balance, date, and captured timezone validation. An empty account receives a clear M1 setup boundary. No initialization, import, merge, continuous-sync, or other business-data write RPC exists in mobile M0. See `/mobile/README.md` for environment names, local commands, the manual acceptance checklist, and the exact redirect URL that the user must add manually.
 
@@ -174,13 +206,13 @@ M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate
 
 Status: **M1A through M1E implemented; automated Mobile checks pass and manual cross-platform M1E acceptance remains pending**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
 
-Focus has three entries through the same local `ActivitySession` engine: the pending First Move at its 2/5/10/25-minute intended duration, standalone Countdown with 2/5/10/25/50-minute presets or validated 1–720 custom minutes, and standalone Stopwatch. Standalone tools accept an optional title, one of the five directions, and one existing Task or Habit link or no link; they do not create an `ActivityIntent`. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic countdown completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention.
+Focus has three entries through the same local `ActivitySession` engine: the pending First Move at its 2/5/10/25-minute intended duration, standalone Countdown with 2/5/10/25/50-minute presets or validated 1–720 custom minutes, and standalone Stopwatch. Standalone tools accept an optional title, one of the five directions, and one existing Task or Habit link or no link; they do not create an `ActivityIntent`. Selecting Intentional Entertainment as the standalone direction does not narrow these normal Focus durations; only the separate dedicated Intentional Entertainment flow is limited to 5/10 minutes. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic countdown completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention.
 
-Completed and intentionally stopped Sessions persist before optional review. Review can change title and direction; standalone Sessions can link, relink, or unlink an existing Task/Habit without creating a parent. An assisted Session retains `linkedIntentId`, while its full Intent record becomes historical/consumed and retains any Task/Habit relationship. Session cancellation removes the open Session and keeps the assisted Intent pending.
+Completed and intentionally stopped Sessions persist before optional review; no second `Save session` action is required, and `Edit details` is optional. Review can change title and direction; standalone Sessions can link, relink, or unlink an existing Task/Habit without creating a parent. An assisted Session retains `linkedIntentId`, while its full Intent record becomes historical/consumed and retains any Task/Habit relationship. Session cancellation removes the open Session without creating a completed/stopped result and keeps the assisted Intent pending.
 
 Guest local state and each Supabase Auth UUID’s local working/cache state use separate namespaces; switching owners exposes only that owner without merging data. For an initialized account, a completely validated canonical hydration becomes the editable working copy under the same stable UUIDs. An unreconciled pre-M1E account-local array is never submitted or merged into the full-snapshot RPC; canonical state replaces it on first successful activation. Validated canonical caches and durable retry records remain UUID-scoped.
 
-Tasks and Habits are directly usable from Today in both Guest and authenticated account-local workspaces. They retain the Web/schema-v8 fields and exact directions, use UUID-v4 parent identities and ISO timestamps, keep Task ordering, store completion facts in `completedOn` by current local date, and use daily or non-empty selected-weekday Habit schedules. Removing an item removes it only from the active schema-v8 local list while historical Session/Intent relationship IDs remain unchanged; the existing Web snapshot contract translates omission of an already-canonical parent into a database tombstone. M1D creates no reward/history records and performs no authenticated cloud mutation.
+Dedicated Mobile Tasks and Habits screens are directly usable from the current Today navigation in both Guest and authenticated account-local workspaces; the production-usable Today screen remains deferred. They retain the Web/schema-v8 fields and exact directions, use UUID-v4 parent identities and ISO timestamps, keep Task ordering, store completion facts in `completedOn` by current local date, and use daily or non-empty selected-weekday Habit schedules. New Focus link eligibility matches Web: only incomplete active Tasks and unchecked-today active Habits are selectable; completed, checked-today, deleted, or inactive items are excluded. Removing an item removes it only from the active schema-v8 local list while historical Session/Intent relationship IDs remain unchanged; the existing Web snapshot contract translates omission of an already-canonical parent into a database tombstone. M1D introduced no reward/history records; M1E now persists its authenticated mutations through the existing sync contract.
 
 The Focus parent selector is one compact field that opens a searchable modal with separate Tasks and Habits, No linked item, and a clear selected state. It reads the current owner’s authoritative working set and still writes only `linkedTaskId` or `linkedHabitId`.
 
@@ -198,33 +230,35 @@ Status: **not started**. Add camera/photo-picker permission flows with memory-on
 
 ### M3 — RevenueCat and AI access
 
-Status: **designed only**. Integrate RevenueCat with Supabase Auth UUID as App User ID; implement purchase/restore/account-change lifecycle and trusted entitlement verification. Build the server AI provider interface, supported-region gate, idempotent usage ledger, rate limits, five lifetime Free actions, Pro daily quotas, short structured `gpt-5.6-luna` outputs, and no automatic retries.
+Status: **designed only**. Integrate RevenueCat with Supabase Auth UUID as App User ID; implement purchase/restore/account-change lifecycle and trusted entitlement verification. Build the server AI provider interface, supported-region gate, idempotent usage ledger, rate limits, five lifetime actions for authenticated Free users, Pro daily quotas, short structured `gpt-5.6-luna` outputs, and no automatic retries. Guest is also intended to receive five introductory actions, but durable server-side Guest identity and enforcement remain unresolved in TASK-11.
 
 ### M4 — Store release
 
 Status: **not started**. Complete privacy disclosures, data export/deletion, subscription copy, app-store products and review notes, accessibility/device matrix, security review, incident/rollback plan, analytics consent decisions, production migration verification, staged rollout, and App Store/Play Store submission.
 
-## 14. Monetization decisions already made
+## 15. Monetization decisions already made
 
 - Core non-AI productivity, manual planning, local templates, tasks, habits, timers, Mini Journal, core cat content, and cross-device sync remain Free.
-- Free accounts receive five lifetime introductory paid AI actions shared across AI features.
+- Authenticated Free users receive five lifetime introductory paid AI actions shared across AI features.
+- Guest is also intended to receive five introductory actions, but durable server-side Guest identity and enforcement remain unresolved TASK-11 design work.
 - Pro allows one AI daily-plan request, three toothbrush-verification attempts, and five Make this smaller requests per local day.
 - Pro may add advanced history and premium cat content without degrading or removing Free/earned core content.
 - RevenueCat is authoritative for the `pro` entitlement; the Supabase Auth UUID is the RevenueCat App User ID.
-- Client entitlement/counter claims are never authoritative. The server checks auth, entitlement or introductory credit, feature quota, region, and rate limit before dispatch.
+- Client entitlement/counter claims are never authoritative. The planned server gateway must check identity, entitlement or introductory credit, feature quota, region, and rate limit before dispatch; this quota system is not implemented.
 - OpenAI-backed features launch only in supported international markets; Mainland China is excluded initially.
 
-## 15. Monetization decisions still open
+## 16. Monetization decisions still open
 
 - Subscription prices, billing periods, introductory/trial offers, storefront products, and launch currencies.
 - Exact advanced-history and premium-cat feature scope.
 - RevenueCat account-transfer/alias policy, webhook retention, grace period, refund, family-sharing, and outage behavior.
 - Whether introductory credits survive account deletion/recreation and the abuse-prevention policy.
+- Durable Guest identity, reset/reinstall behavior, and server-side enforcement for the intended five introductory Guest actions.
 - Supported-country allowlist, legal/privacy review, tax/storefront availability, and any future region-specific AI provider.
 - Usage display, upgrade timing/copy, manage-subscription UX, and customer-support/refund process.
 - Cost budgets, model-change policy, and production rate-limit values.
 
-## 16. Files a new Codex session must read first
+## 17. Files a new Codex session must read first
 
 1. `AGENTS.md`
 2. `PRD.md`
@@ -238,10 +272,13 @@ Status: **not started**. Complete privacy disclosures, data export/deletion, sub
 10. `src/lib/models.ts`, `src/lib/app-state.ts`, `src/lib/store.ts`, `src/lib/repository.ts`, and `src/lib/daily-plan-state.ts`
 11. `src/lib/cloud-backup.ts`, `src/lib/cloud-import.ts`, `src/lib/cloud-setup.ts`, `src/lib/cloud-hydration.ts`, and `src/lib/cloud-runtime.ts`
 12. `src/lib/auth-flow.ts`, `src/lib/supabase/`, `src/proxy.ts`, `src/app/auth/callback/route.ts`, `src/app/auth-settings.tsx`, and `src/app/first-move-app.tsx`
+13. `mobile/package.json`, `mobile/app.json`, `mobile/eas.json`, and `mobile/README.md`
+14. `mobile/src/app-state/`, `mobile/src/cloud/`, `mobile/src/domain/`, `mobile/src/local/`, and `mobile/src/supabase/`
+15. Relevant current Mobile screens and components under `mobile/src/app/` and `mobile/src/components/`, plus the matching current Mobile `*.test.ts` files
 
 Read the implementation and migration tests alongside these files before changing a contract. Some older design/status wording outside the four handoff documents may describe a pre-implementation state.
 
-## 17. Things the mobile implementation must not redesign or break
+## 18. Things the mobile implementation must not redesign or break
 
 - Guest Mode as a complete, usable, no-login product.
 - The five exact intentional directions and non-punitive treatment of Rest and Intentional Entertainment.

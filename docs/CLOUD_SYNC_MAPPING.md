@@ -1,6 +1,6 @@
 # First Move schema-v8 to Supabase mapping
 
-Status: Phase B1 audit. This document maps the current code to the prepared schema; it does not enable sync or authorize SQL execution. The first developer initialization is **Start fresh**, so existing local test records are neither imported nor deleted.
+Status: historical Phase B1 mapping audit and current schema reference. Since this audit, the frozen Web Sync v1 runtime and every repository migration through `20260731180000_continuous_cloud_sync.sql` have been implemented and remotely applied; Mobile M1E reuses the same RPC/canonical contract for already-initialized accounts. The mapping tables below are preserved rather than rewritten; current delivery status lives in `PRD.md`, `TASKS.md`, and `docs/MOBILE_V1_HANDOFF.md`.
 
 ## Mapping conventions
 

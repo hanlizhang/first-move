@@ -1,6 +1,19 @@
 # First Move — Delivery Plan
 
-> The Next.js, TypeScript, Tailwind CSS, ESLint, and responsive shell foundation exists. Implementation now centers the always-available “I'm Stuck” loop; feature behavior remains to be built.
+> The Next.js Web app and the independent Expo Mobile app are implemented through the current Mobile v1 Focus, Tasks/Habits, and authenticated sync increments. Remaining work is tracked explicitly below and in the release backlog.
+
+## Current implementation status
+
+- [x] Mobile M0 auth/development foundation: Expo Router shell, Guest Mode, Supabase Auth magic links, secure session storage, owner separation, and initialized-account canonical hydration; callback/sign-in/restart persistence/hydration manually verified on iOS Simulator.
+- [x] M1A First Move / `ActivityIntent`: local I’m Stuck flow with one validated pending Intent and Focus handoff.
+- [x] M1B persisted countdown `ActivitySession` engine: timestamp-based countdown, pause/resume, restart recovery, completion, stop, and cancellation.
+- [x] M1C standalone Countdown + Stopwatch + Focus linking: shared Session semantics, 2/5/10/25/50 presets, validated custom duration, optional title/direction, and optional eligible Task/Habit link.
+- [x] Mobile Tasks/Habits CRUD: owner-local create, edit, current-date completion/check-in, schedules, active-list deletion, and Focus link selection.
+- [x] Authenticated Mobile writes using existing Web Sync v1 contracts for Task, Habit/check-in, ActivityIntent, and ActivitySession mutations.
+- [x] Web/Mobile Focus link eligibility parity for new sessions, with historical relationships preserved after completion, check-in, or deletion.
+- [x] Mobile → Web and Web → Mobile canonical sync through owner-scoped queued snapshots and validated canonical replacement.
+
+The implementation is complete for the checked items above. Recorded Mobile manual acceptance remains a release gate where noted; the unchecked release backlog is intentionally deferred.
 
 ## TASK-01: Local data foundation, manual tasks, habits, and local First Move templates
 
@@ -34,11 +47,11 @@
 - The user can change direction, choose a different/local/manual move, shorten the session, or exit at every appropriate step.
 - Completion, early stop, and cancellation use non-punitive language and never remove progress.
 
-**Status:** Intent-building portion complete. A validated pending `ActivityIntent`, optional task/habit linking, Focus handoff, and neutral pre-session cancellation are implemented. Running sessions and post-session outcomes remain in TASK-03.
+**Status:** Intent-building portion complete. A validated pending `ActivityIntent`, optional Task/Habit linking, Focus handoff, and neutral pre-session cancellation are implemented. The shared running-session engine is complete under TASK-03A; post-session choices and broader outcomes remain in TASK-03.
 
 ## TASK-03A: Countdown timers, stopwatch tracking, and persisted ActivitySessions
 
-> **Cross-platform Focus rule:** Focus can be entered directly without “I'm Stuck.” Quick Countdown and Stopwatch remain normal standalone tools with an optional title, one of five directions, and an optional existing Task or Habit link, even when “I'm Stuck” has supplied a separate prefilled pending First Move card. Ordinary Focus does not create an `ActivityIntent`.
+> **Cross-platform Focus rule:** Focus can be entered directly without “I'm Stuck.” Quick Countdown and Stopwatch remain normal standalone tools with an optional title, one of five directions, and an optional existing Task or Habit link, even when “I'm Stuck” has supplied a separate prefilled pending First Move card. Ordinary Focus does not create an `ActivityIntent`. Selecting Intentional Entertainment as the direction does not narrow normal standalone Focus durations; only the dedicated Intentional Entertainment flow is limited to 5/10 minutes.
 
 - [x] Start a timestamp-based Quick Countdown with 2/5/10/25/50-minute presets or a validated custom duration, or start the pending First Move at its intended duration.
 - [x] Add an independent stopwatch with an optional Task or Habit link, or no link, and editable inherited direction.
@@ -54,9 +67,9 @@
 - A standalone session may link to one Task or Habit or remain unlinked; an assisted countdown retains its pending ActivityIntent link and inherits its prefilled values.
 - A pending First Move never hides or preselects Quick Countdown, and its historical Intent relationship remains after the active pending state is cleared.
 - Completing or starting repeatedly cannot create duplicate completed or simultaneously open sessions.
-- Early stop saves elapsed time without a failure, penalty, reward, chart, or statistic.
+- Early stop saves actual elapsed time without failure or penalty. Current product/server semantics may award the documented reduced stopped-Session rate; M1B itself did not introduce client-authoritative reward or history behavior.
 
-**Status:** Complete. TASK-03 remains open for rewards, timeline, intentional-entertainment outcomes, and completion feedback beyond basic elapsed-time saving.
+**Status:** Complete. TASK-03 remains open only for intentional-entertainment outcomes and optional completion-feedback controls beyond the saved Session result.
 
 ## TASK-03B: Post-session review, Today timeline, rewards, and daily summaries
 
@@ -73,7 +86,7 @@
 - Each Session creates at most one reward rounded to one decimal; less than 60 seconds earns zero time points.
 - Linking changes only Session metadata and never creates, completes, or merges Tasks.
 
-**Status:** Complete. TASK-03 remains open for intentional-entertainment outcomes and optional completion feedback controls.
+**Status:** Complete. TASK-03 remains open for intentional-entertainment outcomes and optional completion-feedback controls.
 
 ## TASK-03C: Trends and Calendar history
 
@@ -94,17 +107,17 @@
 
 ## TASK-03: Timer, rewards, activity timeline, and intentional entertainment
 
-- [ ] Implement timestamp-based start, pause, resume, cancel, finish, tab-throttling correction, and reload recovery.
-- [ ] Centralize fixed reward values and build an idempotent local points ledger.
-- [ ] Build the chronological Today timeline for stuck declarations, First Moves, sessions, tasks, habits, Morning Start, reflection, and cat activity.
-- [ ] Implement Intentional Entertainment with an activity choice, 5/10 minute bounds, and neutral return choice.
+- [x] Implement timestamp-based start, pause, resume, cancel, finish, tab-throttling correction, and reload recovery.
+- [x] Centralize fixed reward values and build an idempotent local points ledger.
+- [x] Build the chronological Today timeline for stuck declarations, First Moves, sessions, tasks, habits, Morning Start, reflection, and cat activity.
+- [ ] Implement the dedicated Intentional Entertainment flow with an activity choice, 5/10 minute bounds, and neutral return choice; normal standalone Focus retains its existing duration rules when Intentional Entertainment is the selected direction.
 - [ ] Add visual completion plus optional in-page sound/vibration controls.
 
 ### Acceptance criteria
 
 - All bounded sessions remain accurate across pause, backgrounding, and reload; cancelled sessions do not receive completion rewards.
 - Each eligible action changes points and creates its intended timeline event at most once.
-- Intentional Entertainment permits only 5 or 10 minutes and is never labeled as failure.
+- The dedicated Intentional Entertainment flow permits only 5 or 10 minutes and is never labeled as failure; normal standalone Focus is not subject to that duration restriction.
 - Every entertainment session ends with continue intentionally, another direction, rest, or finish.
 
 ## TASK-04: Cat room, store, return flow, and milestones
@@ -127,7 +140,7 @@
 - Store items unlock at their configured active-day boundaries; hidden legacy furniture inventory remains loadable but is not part of the current Cat Room UI.
 - Idle and action timers clean up on unmount; reduced motion disables automatic idle changes and walking translation.
 
-**Status:** Complete and visually refined. Morning Check and Daily Reflection will automatically qualify through their reserved local records when those later tasks are implemented.
+**Status:** Complete for the current core Cat/store baseline. Further interaction polish is intentionally deferred to the release backlog. Morning Check and Daily Reflection qualify through their reserved local records.
 
 ## TASK-05: Daily Reflection
 
@@ -180,7 +193,7 @@
 
 **Status:** Complete. Mock remains the default; live verification requires explicit server configuration and a user click, uses one non-retried low-detail Responses API request, and preserves the three-attempt daily limit.
 
-## TASK-08: Mobile polish, testing, deployment, and submission
+## TASK-08: Web polish, Build Week deployment, and submission
 
 - [x] TASK-08A: Polish the 375–1440 px responsive shell, cards, forms, charts, calendar, Cat Room, and compact scrollable navigation at 100% browser zoom.
 - [x] TASK-08B: Add distinct kitten food/toy/trick interactions, the simplified four-category store, idempotent 21/50/100 active-day grants, milestone cards, and the day-100 garden.
@@ -200,6 +213,8 @@
 - Tests confirm no punishment for missed/failed sessions, no persisted toothbrush images, and no reflection leakage to AI.
 - Lint, type checks, tests, and production build pass; deployed behavior and submission documentation match the PRD.
 
+**Status:** This is the historical Web/Build Week polish task. It is not the native Mobile release task; current Mobile release work remains under TASK-12 and the release backlog.
+
 ## TASK-09: Optional account and cross-device sync foundation
 
 - [x] Add email OTP under **Sync across devices** while preserving complete guest mode.
@@ -209,12 +224,12 @@
 - [x] Add sign out while retaining local data.
 - [x] Protect and continuously synchronize private Mini Journal rows without sending their content to AI or logs.
 - [ ] Add export, logout cache choice, account deletion, and explicit backup/cache management.
-- [ ] Verify web/iOS/Android identity and secure token-storage adapters.
+- [ ] Complete true-device iOS/Android identity and secure token-storage acceptance; iOS Simulator authentication and restart persistence are verified under TASK-12 M0.
 - [x] Apply `20260731180000_continuous_cloud_sync.sql` remotely and manually verify two-browser task creation, task updates, and habits.
 - [x] Verify owner isolation through automated database RLS and cross-user tests.
 - [ ] Manually verify Start fresh with a second empty account, offline edit/retry/second-browser convergence, and a remote user-A/user-B isolation smoke test.
 
-**Cloud-sync status:** Frozen Web Sync v1 MVP checkpoint. All migrations are remotely applied; Phase B2 setup/import/hydration and core two-browser task/habit convergence are manually verified. Automated application/database suites, including RLS isolation, are recorded as passing. The three remaining manual smoke checks are tracked above and do not block Mobile M0 architecture work, but Web Sync v1 is not production-perfect or fully QA-complete.
+**Cloud-sync status:** Frozen Web Sync v1 MVP checkpoint. All migrations are remotely applied; Phase B2 setup/import/hydration and core two-browser task/habit convergence are manually verified. Automated application/database suites, including RLS isolation, are recorded as passing. The three remaining manual smoke checks are tracked above and do not block the current Mobile v1 implementation, but Web Sync v1 is not production-perfect or fully QA-complete.
 
 ## TASK-10: RevenueCat subscriptions and product access
 
@@ -228,7 +243,8 @@
 
 - [ ] Define provider contracts for daily plan, toothbrush verification, and Make this smaller, with OpenAI, manual/local, and fake future regional implementations.
 - [ ] Before dispatch, verify authenticated user, supported region, RevenueCat Pro or remaining introductory credit, feature daily quota, and server rate limit.
-- [ ] Add append-only, idempotent server-side AI usage events; enforce 5 lifetime Free actions and Pro limits of 1/3/5 per local day under concurrency.
+- [ ] Add append-only, idempotent server-side AI usage events; enforce 5 lifetime actions for authenticated Free users and Pro limits of 1/3/5 per local day under concurrency.
+- [ ] Design a durable server-side Guest identity and enforcement model so Guest can receive its intended 5 introductory actions without trusting a client-resettable counter.
 - [ ] Use `gpt-5.6-luna`, short validated structured outputs, bounded inputs/outputs, explicit user action, timeouts, and no automatic retries.
 - [ ] Preserve manual fallback for every AI feature and consume no usage when rejected before provider dispatch.
 - [ ] Launch only in an approved supported-international-market allowlist; exclude Mainland China initially.
@@ -247,9 +263,10 @@
 - [x] Detect existing workspaces with `cloud_workspace_status` and hydrate them read-only with `get_cloud_workspace_v2`.
 - [x] Stop empty accounts before any setup write and show that cloud setup is unavailable until M1.
 - [x] Cover config, auth transitions, callback handling, session restore, secure storage, local separation, and read-only hydration with focused tests.
-- [ ] Complete the manual iOS/Android M0 acceptance checklist in `/mobile/README.md` after adding the redirect URL in Supabase.
+- [x] Manually verify `firstmove://auth/callback`, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration on iOS Simulator.
+- [ ] Complete true-device iOS/Android M0 acceptance; the simulator result does not close the device release gate.
 
-**M0 status:** Implementation and automated checks complete on `mobile/expo-v1`; manual device acceptance and the user-owned Supabase redirect allow-list change remain pending. The narrow M1A increment is tracked below.
+**M0 status:** Implementation and automated checks are complete in the current `/mobile` tree. The callback, magic-link sign-in, authenticated restart persistence, and canonical initialized-workspace hydration are manually verified on iOS Simulator. True-device iOS/Android acceptance remains pending.
 
 ### M1A — Local I’m Stuck intent builder
 
@@ -259,18 +276,18 @@
 - [x] Create at most one validated pending `ActivityIntent` and show it in Focus without starting a timer.
 - [x] Keep authenticated cloud data read-only and Guest Mode fully local; add focused domain, migration, and serialized-write tests.
 
-**M1A status:** Implemented on `mobile/expo-v1`; automated checks pass. Running timers are tracked separately in M1B below; Tasks/Habits UI, cloud business-data writes, Cat, Morning Start, and AI remain outside M1A.
+**M1A status:** Implemented in the current `/mobile` tree; automated checks pass. Running timers are tracked separately in M1B below; Tasks/Habits UI, cloud business-data writes, Cat, Morning Start, and AI remain outside M1A.
 
 ### M1B — Local Focus countdown
 
 - [x] Separate Guest local state from per-Supabase-UUID local state while retaining both and keeping the canonical cloud cache independent.
 - [x] Start the pending `ActivityIntent` as one local schema-v8 countdown `ActivitySession` restricted to 2/5/10/25 minutes.
 - [x] Derive elapsed and remaining time from persisted timestamps; restore running/paused state and reconcile elapsed countdowns after restart.
-- [x] Add pause, resume, automatic completion, neutral early stop, and cancellation without rewards or punishment.
+- [x] Add pause, resume, automatic completion, neutral early stop, and cancellation without client-authoritative reward/history behavior or punishment.
 - [x] Persist actual elapsed time and prevent duplicate open sessions or duplicate completion.
 - [x] Add Focus ready, running, paused, completed, and stopped states with focused ownership/timing/persistence tests.
 
-**M1B status:** Implemented on `mobile/expo-v1`; focused and full Mobile tests, lint, strict TypeScript, Expo dependency validation, and iOS/Android exports pass. Rewards, post-session choices, Today/history, Tasks/Habits UI, cloud writes, notifications/background services, and later M1 features remain out of scope.
+**M1B status:** Implemented in the current `/mobile` tree; focused and full Mobile tests, lint, strict TypeScript, Expo dependency validation, and iOS/Android exports pass. M1B itself did not introduce client-authoritative rewards or history presentation; current authenticated server semantics may derive the documented reduced reward for stopped Sessions. Post-session choices, Today/history presentation, notifications/background services, and later M1 features remain out of scope for this increment.
 
 ### M1C — Complete local Focus
 
@@ -282,7 +299,7 @@
 - [x] Reuse active local parents plus active Tasks/Habits from the current authenticated UUID’s validated read-only canonical cache without copying or creating parent records.
 - [x] Preserve Guest/account-local namespaces, canonical-cache isolation, actual elapsed time, restart recovery, duplicate prevention, and the no-cloud-business-write boundary.
 
-**M1C status:** Implemented on `mobile/m1c-focus`. Mobile Focus now matches the current cross-platform Focus entry and review contract without adding rewards, Today/history, Tasks/Habits CRUD, cloud writes, native dependencies, or SQL/RPC changes.
+**M1C status:** Implemented in the current `/mobile` tree. Mobile Focus matches the current cross-platform Focus entry and review contract; authenticated writes are now enabled by M1E without changing the Focus domain contract or adding SQL/RPC architecture.
 
 ### M1D — Local Tasks and Habits
 
@@ -293,7 +310,7 @@
 - [x] Replace each long inline Focus parent list with one compact field and a searchable modal containing No linked item, Tasks, Habits, source labels, and an explicit selected state.
 - [x] Preserve existing `linkedTaskId` / `linkedHabitId` relationships and add no cloud business writes, rewards/history, dependencies, SQL, or RPCs.
 
-**M1D status:** Implemented on `mobile/m1d-tasks-habits`. Focus and local Task/Habit CRUD remain schema-v8 compatible while canonical cloud business data stays read-only pending M1E authenticated writes.
+**M1D status:** Implemented in the current `/mobile` tree. Focus and local Task/Habit CRUD remain schema-v8 compatible; M1E now enables authenticated writes for these mutations through the existing canonical contract.
 
 ### M1E — Authenticated Mobile cloud writes
 
@@ -306,7 +323,27 @@
 - [x] Keep Task/Habit/Session reward authority on the existing server contract and leave empty-account Start fresh / Import this device outside M1E.
 - [x] Cover hydration, all scoped mutation families, restart/offline/idempotent retry, flush-before-read, owner isolation, Guest/no-write, uninitialized, invalid/stale responses, UUIDs, passthrough state, and no-private-logging boundaries.
 
-**M1E status:** Implemented on `mobile/m1e-cloud-sync`; automated Mobile checks pass. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance remains required before release. No backend or native dependency change was made.
+**M1E status:** Implemented in the current `/mobile` tree; automated Mobile checks pass. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance remains required before release. No backend or native dependency change was made.
+
+## Release backlog
+
+These items are intentionally deferred and are not implemented:
+
+1. Mobile Today production-usable screen.
+2. Cat core interaction/polish:
+   - purchased toys must be visibly usable;
+   - the laser pointer should create a visible target;
+   - the cat should turn/move toward it and occasionally pounce/reach;
+   - toy/equipped state should persist;
+   - purchases must remain server-authoritative/idempotent.
+3. Release UI polish:
+   - remove developer-facing `Storage boundary` / architecture explanations;
+   - replace them with simple user-facing Local / Pending / Synced / Offline states;
+   - consider dedicated/full-screen active Focus session UI.
+4. RevenueCat Pro entitlement.
+5. Server-controlled AI quota.
+6. True-device iOS/Android testing.
+7. App Store / Google Play release requirements.
 
 ## Explicitly excluded
 

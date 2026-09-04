@@ -1,8 +1,6 @@
 # First Move guest import mapping
 
-Status: pre-implementation design. No SQL has been executed and no remote project has been linked.
-
-Implementation note: Phase B2 now implements this design locally through `20260730120000_import_workspace.sql`. That migration has not been pushed to the remote project; the UI remains disabled unless `NEXT_PUBLIC_CLOUD_SETUP_ENABLED=true`.
+Status: import-mapping design/reference. Phase B2 and the frozen Web Sync v1 runtime are implemented, and every repository migration through `20260731180000_continuous_cloud_sync.sql` is remotely applied. Web setup/import remains gated by `NEXT_PUBLIC_CLOUD_SETUP_ENABLED`; Mobile currently reuses already-initialized accounts and does not implement this empty-account setup/import lifecycle.
 
 ## 1. First-sync choices
 
@@ -98,4 +96,4 @@ Cloud data exists when any workspace/import/core/ledger row exists for the user.
 
 ## 7. Trust boundary
 
-Clients may read their import audit and mapping rows but cannot write them directly. A future narrow authenticated server endpoint or security-definer RPC validates the normalized payload, derives ownership from `auth.uid()`, performs the transaction, and writes server-authoritative tables. Service-role, database, OpenAI, and RevenueCat secrets never enter clients.
+Clients may read their import audit and mapping rows but cannot write them directly. The implemented narrow authenticated security-definer RPC validates the normalized payload, derives ownership from `auth.uid()`, performs the transaction, and writes server-authoritative tables. Service-role, database, OpenAI, and RevenueCat secrets never enter clients.

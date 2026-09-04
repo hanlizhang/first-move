@@ -1,22 +1,22 @@
 # First Move cloud sync architecture
 
-Status: approved product architecture; implementation still requires staged delivery and security review. Optional authentication, cross-device sync, AI quotas, and subscription entitlements are now in product scope.
+Status: approved architecture and design reference. The frozen Web Sync v1 MVP and its remotely applied migrations are implemented; Mobile M1E now uses the same Supabase Auth UUID, RPCs, schema-v8 snapshot, and canonical-response contract for already-initialized accounts. The normalized B5 outbox/change-cursor/conflict design, realtime timer takeover, RevenueCat, server-controlled AI quotas, and release hardening remain deferred and are not claims about current behavior.
 
 ## 1. Goals and boundaries
 
-First Move remains fully usable in guest mode. The account entry point is phrased **Sync across devices**, not “Sign up to continue.” Email OTP is the first login method. Supabase Auth provides one user identity usable by the web client and future iOS and Android clients; platform clients use the public project URL and publishable/anon key, never the service-role key.
+First Move remains fully usable in guest mode. The account entry point is phrased **Sync across devices**, not “Sign up to continue.” Email OTP is the first login method. Supabase Auth provides one user identity used by the Web and current Expo Mobile clients; platform clients use the public project URL and publishable/anon key, never the service-role key.
 
 Cloud sync stores structured product records, not a single JSON state row. Toothbrush photos are never uploaded to Supabase Storage or retained in the database. The existing live verification route may send a transient image to OpenAI after explicit consent and must continue to discard it. Mini Journal rows are private user data, excluded from AI input, logs, analytics payloads, support tooling, and notification previews. OpenAI credentials remain server-only environment variables in Next.js route handlers (or another trusted server runtime).
 
 RevenueCat is the source of truth for the `pro` entitlement. The authenticated Supabase Auth user UUID, serialized as a string, is the RevenueCat App User ID on web, iOS, and Android. Clients may display cached subscription state for responsiveness, but clients never authorize paid features.
 
-## 2. Current local architecture and risks
+## 2. Original local architecture and pre-sync risks
 
-The inspected application persists `AppState` schema version 8 as one `first-move:app-state` JSON value in `localStorage`. `useSyncExternalStore` holds one in-memory snapshot and every mutation rewrites the aggregate. Validation and recovery are centralized in `normalizeAppState`.
+This section records the Web architecture inspected before Sync v1 implementation. The Web application persists `AppState` schema version 8 as one `first-move:app-state` JSON value in `localStorage`. `useSyncExternalStore` holds one in-memory snapshot and every mutation rewrites the aggregate. Validation and recovery are centralized in `normalizeAppState`.
 
 Current entities are tasks, habits, pending activity intents, sessions, reward events, one journal entry per local date, morning checks/attempt counts, inventory, and derived progress. Task/habit completion dates are embedded arrays. Points are partly derived from the reward events but also cached in progress; inventory changes are mutable quantities, while purchases also create negative reward events. Active dates are derived from qualifying rewards, sessions of at least 60 seconds, and journal entries. Running sessions recover from `startedAt`, `lastResumedAt`, and accumulated elapsed milliseconds.
 
-Risks to resolve before sync:
+Risks identified before sync:
 
 - Concurrent devices can overwrite the aggregate, and localStorage has no durable pending-operation queue.
 - Current prefixed string IDs are not database UUIDs; import must map every local ID and foreign key deterministically within an import batch.
@@ -154,6 +154,8 @@ The milestone RPC recomputes active-day count inside the transaction, inserts th
 
 ## 12. Running-session recovery
 
+Current Web/Mobile v1 does not implement realtime cross-device timer takeover: a running timer is owned by the device that started it, and persisted Session state converges through normal sync. The fuller takeover/conflict behavior below is deferred B5 target architecture.
+
 Persist `started_at`, `status`, `last_resumed_at`, `accumulated_elapsed_ms`, target duration, and a version. For a running session, displayed elapsed time is accumulated time plus server-adjusted time since last resume. Clients should estimate server clock offset from response `Date`/RPC time and must clamp countdown completion to its target. A pause transaction converts the running interval to accumulated milliseconds. Close stores immutable outcome timing and creates its session reward in the same transaction.
 
 If the app was offline, local timer behavior continues. On reconnect, state transition mutations replay with their captured occurrence instant. If another device already closed the session, canonical closure wins and the local result is shown as a conflict note, not duplicated.
@@ -173,14 +175,16 @@ Account deletion requires recent authentication and a confirmation step describi
 - Do not use journal fields in telemetry. Redact request bodies and tokens from logs. Encrypt transport and rely on Supabase encryption at rest; document that RLS is access control, not end-to-end encryption.
 - Do not create a toothbrush-photo bucket. Verification endpoints use `Cache-Control: no-store`, bounded payloads, no body logging, and immediate memory disposal.
 
-## 15. Free, Pro, entitlement, and AI quota model
+## 15. Deferred Free, Pro, entitlement, and AI quota design
+
+This section records product and target-server behavior, not an implemented quota or entitlement system. Authenticated Free users are allotted five lifetime introductory actions; Guest is intended to receive five as well, but durable server-side Guest identity/enforcement remains unresolved in TASK-11. RevenueCat and the server-controlled AI quota gateway remain deferred.
 
 | Capability | Free | Pro |
 | --- | --- | --- |
 | Core non-AI productivity | Included | Included |
 | Manual daily planning and local First Move templates | Included | Included |
 | Tasks, habits, timers, Mini Journal, cat, and cross-device sync | Included | Included |
-| Introductory AI actions | 5 lifetime total per account across all AI features | Not applicable while Pro is active; unused introductory credits remain if Pro lapses |
+| Introductory AI actions | Authenticated Free: 5 lifetime total per account. Guest: 5 intended, with durable identity/enforcement unresolved. | Not applicable while Pro is active; unused introductory credits remain if Pro lapses |
 | AI daily plan | Uses a remaining lifetime introductory action | 1 per local day |
 | AI toothbrush verification | Uses a remaining lifetime introductory action; manual/mock fallback remains | Up to 3 per local day |
 | AI “Make this smaller” | Uses a remaining lifetime introductory action | Up to 5 per local day |
@@ -189,11 +193,11 @@ Account deletion requires recent authentication and a confirmation step describi
 
 An “AI action” is one server-dispatched provider request. Local templates, manual planning, manual toothbrush fallback, deterministic local shrinking, validation failures before dispatch, entitlement checks, quota checks, and unsupported-region checks do not consume an action. Once a request is dispatched to a paid provider it consumes quota even if the provider times out or rejects it, because cost may already have been incurred. There are no automatic model retries.
 
-Maximum paid calls are therefore 5 lifetime for a Free account and 9 per local day for an active Pro account. These are product ceilings, not concurrency or abuse limits; server-side minute/hour rate limits can be lower.
+The product ceilings are therefore 5 lifetime calls for an authenticated Free account and 9 per local day for an active Pro account. The intended Guest allowance is also five, subject to the unresolved durable identity/enforcement design. These are target product ceilings, not implemented concurrency or abuse limits; future server-side minute/hour rate limits can be lower.
 
 ### Server-side authorization and reservation flow
 
-Every paid AI route uses the following order:
+The future paid AI gateway must use the following order:
 
 1. Validate the Supabase access token on the trusted server and derive `auth.uid()`; never accept a user UUID from the client body.
 2. Validate feature input, payload size, requested timezone/local date, and launch-region availability before spending quota.
@@ -203,7 +207,7 @@ Every paid AI route uses the following order:
 6. Dispatch exactly one provider request using `gpt-5.6-luna`, short structured output, bounded input/output, a timeout, and `maxRetries: 0`.
 7. Validate the structured response and return a reviewable proposal. Never apply an AI result automatically.
 
-Concurrent devices cannot exceed quotas because reservation and counting are serialized. Repeating the same request UUID never causes another provider call; the server returns a stored safe status or an “already dispatched” response if model output is deliberately not retained. Different payload or feature with a reused request UUID is rejected.
+The design requires reservation and counting to serialize concurrent devices at quota boundaries. Repeating the same request UUID must never cause another provider call; the server should return a stored safe status or an “already dispatched” response if model output is deliberately not retained. Different payload or feature with a reused request UUID must be rejected.
 
 Daily quotas use the request’s server-validated IANA timezone and `local_date`. The server checks plausibility against its current time and profile timezone, permits a documented travel transition, and prevents arbitrary historic/future dates from evading limits.
 
@@ -223,7 +227,9 @@ Define a trusted-server `AiProvider` interface for daily planning, toothbrush ve
 
 Region gating occurs server-side before entitlement/quota reservation using the production launch allowlist and applicable legal/provider availability signals. The client may hide unavailable controls but is not authoritative. Do not offer OpenAI-backed features in unsupported regions. Mainland China is excluded from the initial production launch. The first launch targets supported international markets only. Subscription copy must not promise AI where regional restrictions apply; non-AI features and manual fallbacks remain usable where the overall product launches.
 
-## 16. Remaining decisions requiring approval
+## 16. Original open decisions
+
+This list is retained as architecture history. Decisions already resolved—including empty-account-only v1 import and Expo React Native for Mobile—are superseded by `PRD.md`, `TASKS.md`, and `docs/MOBILE_V1_HANDOFF.md`; unresolved release decisions remain tracked there.
 
 1. Confirm whether v1 import is allowed only into an empty cloud account (recommended) or must merge two populated histories.
 2. Confirm soft-delete retention and account backup/deletion retention language for target launch jurisdictions.
@@ -232,7 +238,9 @@ Region gating occurs server-side before entitlement/quota reservation using the 
 5. Approve the exact supported-country allowlist, prices, grace-period behavior, and advanced-history/premium-cat inventory.
 6. Approve integer-tenths points and the no-reward-clawback rule.
 
-## 17. Staged implementation plan
+## 17. Original staged implementation plan
+
+This sequence is preserved as design history. Web Sync v1 and Mobile M1E implement the documented full-snapshot compatibility path; B5, RevenueCat, AI quota, platform hardening, and store release stages remain deferred.
 
 1. **Product specification:** finalize remaining decisions, regional allowlist, subscription copy, privacy disclosures, and store policies.
 2. **Repository boundary:** introduce normalized domain DTOs, UUID generation, a repository interface, legacy-ID mapper, and migration tests without enabling auth.

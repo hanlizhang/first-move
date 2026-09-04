@@ -1,6 +1,8 @@
 # First Move sync test plan
 
-Status: pre-implementation test specification. No Supabase project or deployed environment is assumed.
+Status: living test-plan reference. Web Sync v1 migrations/RPCs, automated application/database coverage including RLS isolation, and automated Mobile M0–M1E coverage are implemented and recorded as passing; Phase B2 import/hydration, core two-browser Task/Habit convergence, and Mobile M0 authentication/hydration on iOS Simulator are manually verified. This documentation pass did not rerun those checks.
+
+Remaining release gates include the documented Web smoke tests, Mobile M1E cross-platform/offline/restart/account-switch acceptance, true-device iOS/Android testing, B5 conflict/outbox work, RevenueCat, server-controlled AI quotas, and store-release coverage. The plan below intentionally retains both implemented coverage and future acceptance specifications.
 
 ## Test strategy
 
@@ -112,6 +114,8 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 
 ## 10. Running-session recovery
 
+Current Web/Mobile v1 keeps a running timer on the device that started it and does not provide realtime cross-device takeover. The takeover/conflict cases below remain future B5 acceptance tests; persisted Session convergence and duplicate-safe closure tests still apply to the current sync contract.
+
 - Recover running and paused countdown/stopwatch sessions after refresh, process death, offline duration, and device clock changes.
 - Compute elapsed from accumulated time and last resume; compare using known server clock offset.
 - Countdown completion clamps actual elapsed to target; stopwatch does not.
@@ -146,9 +150,11 @@ For each user-owned table, test as anon, owner A, non-owner B, and service/trust
 - Logs redact Authorization, cookies, OTPs, email addresses where possible, journal fields, AI request bodies, and mutation payload text.
 - Export contains journal only after explicit confirmation and is protected from accidental analytics upload.
 
-## 14. Free, Pro, entitlement, and quota enforcement
+## 14. Deferred Free, Pro, entitlement, and quota enforcement
 
-- Free receives exactly 5 lifetime introductory AI dispatches across daily plan, toothbrush verification, and Make this smaller; the sixth is rejected before dispatch.
+RevenueCat and server-controlled AI quota enforcement are not implemented. These are future acceptance tests for the product decision that authenticated Free users receive five lifetime introductory actions and Guest is intended to receive five once durable server-side Guest identity/enforcement is designed in TASK-11.
+
+- Authenticated Free receives exactly 5 lifetime introductory AI dispatches across daily plan, toothbrush verification, and Make this smaller; the sixth is rejected before dispatch.
 - Active Pro receives exactly 1 daily-plan, 3 toothbrush-verification, and 5 Make this smaller dispatches per valid local day; each next request is rejected.
 - A Pro user can therefore dispatch at most 9 paid calls per local day. Advanced history and premium cat access generate no model calls.
 - Manual planning, local templates, manual toothbrush fallback, deterministic local shrinking, validation failures, unsupported-region failures, quota rejection, and rate-limit rejection create no usage event.

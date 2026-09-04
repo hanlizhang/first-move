@@ -2,6 +2,10 @@
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
+Current status: M0 through M1E are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration are manually verified on iOS Simulator. True-device iOS/Android acceptance and the full Mobile↔Web/offline/restart/account-switch M1E checklist remain pending.
+
+The M0–M1D sections below preserve each increment’s historical boundary. M1E supersedes their authenticated read-only/no-business-write constraints for the current app.
+
 ## M0 boundary
 
 - Expo SDK 57, React Native, TypeScript, and Expo Router.
@@ -30,7 +34,7 @@ M0 does not import, merge, initialize, or write business data. It does not call 
 - Countdown creation is restricted to the intent’s 2, 5, 10, or 25 minute bound.
 - Elapsed and remaining time derive from persisted timestamps, so running and paused sessions restore after reload or app restart.
 - Pause, resume, automatic zero completion, neutral early stop, and cancellation are local and duplicate-safe.
-- Completed and stopped sessions save actual elapsed time. M1B adds no rewards, points, timeline, history, or statistics.
+- Completed and stopped sessions save actual elapsed time. M1B itself introduced no client-authoritative reward or history behavior; the current server contract may derive the documented reduced reward for a stopped Session.
 - Signing out exposes neither the account-local intent nor its session in Guest Mode; neither workspace is deleted or merged.
 
 ## M1C boundary
@@ -38,11 +42,13 @@ M0 does not import, merge, initialize, or write business data. It does not call 
 - Focus keeps a pending First Move in its own prominent card while standalone Countdown and Stopwatch remain available.
 - Quick Countdown offers 2/5/10/25/50-minute presets and validated whole custom minutes from 1 through 720.
 - Standalone Countdown and Stopwatch accept an optional title, one of the five directions, and one existing Task or Habit link or no link. They never create an `ActivityIntent`.
+- Selecting Intentional Entertainment as the standalone direction keeps those normal Focus duration options. Only the separate dedicated Intentional Entertainment flow is limited to 5/10 minutes.
 - The same M1B timestamp engine handles Countdown and Stopwatch start, pause, resume, recovery, stop/cancel, duplicate prevention, and actual elapsed time.
+- A running timer is owned by the device that started it. Persisted Session state converges through normal sync; running timers are not synchronized or taken over in realtime across devices.
 - Completed and intentionally stopped Sessions are saved before review. `Edit details` is optional and can update title/direction; standalone Sessions can also link, relink, or unlink an existing Task/Habit.
 - Completing or stopping an assisted Session clears its pending state but retains the full historical Intent as consumed. Cancelling the Session creates no closed result and keeps the First Move pending.
 - Guest and per-Supabase-UUID local workspaces remain separate. Active canonical Tasks/Habits are offered only from the current UUID’s validated read-only cache and retain their UUID without being copied.
-- A later cloud writer must preserve ordered assisted start/close mutations and serialize only the active pending Intent view to the current snapshot RPC; retained local `consumed` history must never be sent back as pending.
+- M1E now preserves ordered assisted start/close mutations and serializes only the active pending Intent view to the current snapshot RPC; retained local `consumed` history is never sent back as pending.
 
 ## M1D boundary
 
@@ -52,10 +58,10 @@ M0 does not import, merge, initialize, or write business data. It does not call 
 - Daily and non-empty selected-weekday schedules use the canonical `sun` through `sat` values. Titles normalize whitespace and remain bounded to 160 characters; timestamps remain ISO instants.
 - Active canonical Tasks/Habits from the current authenticated UUID are shown separately as read-only. They retain their canonical UUID and are never copied into account-local state.
 - Focus uses one compact linked-item field that opens a searchable modal with No linked item, Tasks, Habits, local/canonical source labels, and an explicit selected state.
-- Active-list deletion leaves historical `linkedTaskId` / `linkedHabitId` values intact. A later authenticated writer must translate deletion of an already-canonical row to the existing `deleted_at` tombstone contract.
+- Active-list deletion leaves historical `linkedTaskId` / `linkedHabitId` values intact. M1E now translates deletion of an already-canonical row through the existing `deleted_at` tombstone contract.
 - M1D creates no rewards or history and calls no business-write RPC.
 
-M1A/M1B/M1C/M1D do not implement authenticated cloud business writes, Phase B2 setup choices, post-session choices, rewards/history, Cat, Morning Start, AI, RevenueCat, notifications, background services, or SQL/RPC changes.
+At their original milestone boundaries, M1A/M1B/M1C/M1D did not implement authenticated cloud business writes, Phase B2 setup choices, post-session choices, rewards/history presentation, Cat, Morning Start, AI, RevenueCat, notifications, background services, or SQL/RPC changes. M1E now supplies the scoped authenticated writes described below.
 
 ## M1E authenticated writes
 
@@ -66,6 +72,7 @@ M1A/M1B/M1C/M1D do not implement authenticated cloud business writes, Phase B2 s
 - Startup, foreground, manual retry, and manual refresh flush pending writes before any canonical read. A failed or invalid response leaves the mutation queued and never replaces valid local state; only a fully validated response becomes canonical and updates the working/cache copy.
 - Mobile reuses `sync_cloud_workspace_v1` with schema-v8 state, unchanged canonical daily-plan passthrough, empty economic-command arrays, current IANA timezone, and stable relationship UUIDs. Retained local consumed Intent history is filtered from the wire so the RPC receives only the active pending Intent view.
 - Task/Habit completion and Session rewards remain server-derived. Mobile never calculates or submits a point balance, reward ledger mutation, purchase, or inventory consumption command.
+- Running timers remain device-owned and non-realtime; only persisted Session state converges through this sync runtime.
 - Deliberately still local or unavailable: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, RevenueCat, notifications, and background services.
 
 ## Local setup
@@ -123,16 +130,18 @@ git diff --check
 
 ## Manual M0 acceptance
 
-The M0–M1D checklists below record their milestone boundaries. M1E supersedes their authenticated read-only assertions; use the final M1E checklist for the current cloud behavior.
+These checklists preserve milestone-specific checks. The recorded iOS Simulator verification is marked below; true-device acceptance remains open.
 
 - [ ] A clean launch shows loading, then signed-out state when no secure session exists.
 - [ ] Continue as guest opens all five placeholder tabs without a network request.
-- [ ] A valid email request says to check email and uses `firstmove://auth/callback`.
-- [ ] Opening a valid link reaches the callback screen, restores the same Supabase Auth UUID, and survives app restart.
-- [ ] An initialized account loads a verified read-only summary from `get_cloud_workspace_v2`.
+- [x] A valid `firstmove://auth/callback` deep link reaches the callback screen on iOS Simulator.
+- [x] Magic-link sign-in restores the expected Supabase Auth UUID on iOS Simulator.
+- [x] The authenticated session persists across an iOS Simulator app restart.
+- [x] An initialized account completes validated canonical workspace hydration from `get_cloud_workspace_v2` on iOS Simulator; M1E now makes that hydrated workspace editable.
 - [ ] An empty account shows that Mobile cloud setup/import is unavailable and makes no setup/import RPC.
 - [ ] Invalid/expired links and failed hydration show generic errors without exposing email, token, journal, or payload data.
 - [ ] Sign out returns to signed-out state while Guest Mode data and the account-scoped validated cache remain present.
+- [ ] Complete equivalent true-device iOS and Android acceptance.
 
 ## Manual M1A acceptance
 

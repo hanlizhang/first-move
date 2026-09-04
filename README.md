@@ -1,6 +1,6 @@
 # First Move
 
-First Move is a private, mobile-first web app for people who notice they are stuck in passive scrolling or inactivity but still find it difficult to switch into something intentional. It reduces the next decision to one small action, a bounded period of time, and a neutral choice about what comes next.
+First Move is a private cross-platform product with a Next.js Web app and an Expo React Native Mobile app. It helps people who notice they are stuck in passive scrolling or inactivity reduce the next decision to one small action, a bounded period of time, and a neutral choice about what comes next.
 
 The app is inspired by behavioral activation and intentional-use design. It is not medical treatment, a diagnostic tool, or a substitute for professional care, and it makes no claim to stimulate or repair the brain.
 
@@ -18,6 +18,8 @@ Morning Start adds a fixed toothbrush-photo check before daily planning. “I’
 
 ## Features
 
+Web provides the complete feature set below. Mobile currently implements Guest/auth foundations, I’m Stuck and First Move, Countdown and Stopwatch Focus, Tasks/Habits, and authenticated sync for already-initialized accounts; remaining Mobile release work is tracked in `TASKS.md`.
+
 - Current-photo toothbrush check with camera and upload fallback
 - Local First Move templates for six stuck states and five directions
 - Editable manual tasks and daily or selected-weekday habits
@@ -31,10 +33,12 @@ Morning Start adds a fixed toothbrush-photo check before daily planning. “I’
 
 ## Architecture
 
-- Next.js 16 App Router, React 19, strict TypeScript, and Tailwind CSS
+- Next.js 16 App Router, React 19, strict TypeScript, and Tailwind CSS for the root Web project
+- Independent Expo SDK 57, React Native, TypeScript, and Expo Router project under `/mobile`
+- Supabase Auth and the existing Web Sync v1 backend/RPC/canonical contract shared by authenticated Web and Mobile clients
 - Client-side application shell in `src/app/first-move-app.tsx`
 - Small domain modules under `src/lib` for dates, models, repository validation, sessions, rewards, history, planning, Morning Check, and cat progress
-- Versioned browser persistence with safe normalization and migration
+- Versioned Web browser persistence and owner-scoped Mobile AsyncStorage persistence with validation and migration
 - Two Node.js route handlers: `/api/verify-toothbrush` and `/api/organize-day`
 - Official OpenAI JavaScript SDK using the Responses API and strict structured outputs
 - Dependency-free SVG/CSS charts and original SVG kitten artwork
@@ -43,7 +47,9 @@ Timers persist timestamps rather than decrement-only counters, so refreshes and 
 
 ## Local data and privacy
 
-Tasks, habits, intents, sessions, rewards, journal entries, inventory, and progress stay in this browser’s `localStorage`. Clearing browser data removes them; there is currently no account, cloud backup, or cross-device sync.
+Guest Mode remains local-only. Web keeps its versioned working/cache state in browser `localStorage` and its immutable pre-setup guest backup in IndexedDB; clearing browser site data can remove unsynced Web progress. Mobile keeps Guest data, per-account working/cache state, and its durable sync queue in device-local AsyncStorage, while auth sessions use platform-secure storage; clearing app/device storage can remove that local Mobile data.
+
+Authenticated Web and Mobile clients use the same Supabase Auth UUID and canonical Supabase workspace. Web supports the feature-gated Start fresh, Import this device, and Use cloud progress lifecycle. Mobile currently hydrates and writes implemented Task, Habit, ActivityIntent, and ActivitySession mutations only for already-initialized accounts; Mobile empty-account setup/import remains deferred.
 
 Toothbrush images are resized in the browser to JPEG with a maximum dimension of 768 pixels. They are not written to local storage. In live mode, the selected image is sent only after the user clicks **Verify photo** and is not logged or retained by this application. Mini Journal text, habits, history, cat state, and images are excluded from daily-planning requests.
 
@@ -98,12 +104,17 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Auth/sync only | unset | Public Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Auth/sync only | unset | Public Supabase client key protected by RLS |
+| `NEXT_PUBLIC_CLOUD_SETUP_ENABLED` | Web cloud setup/sync | unset | Enables the Web Sync v1 setup/runtime when exactly `true` |
 | `OPENAI_API_KEY` | Live AI only | unset | Server-side OpenAI credential |
 | `OPENAI_MODEL` | No | `gpt-5.6-luna` | Model used by both live routes |
 | `OPENAI_LIVE_VISION` | No | `false` | Set exactly `true` to enable live toothbrush verification |
 | `OPENAI_LIVE_PLANNING` | No | `false` | Set exactly `true` to enable live daily planning |
 
 Never commit `.env.local` or credentials. Enabling a live flag without `OPENAI_API_KEY` returns a safe configuration error and does not fall back to an undisclosed paid call.
+
+Mobile uses its separate public Expo environment contract documented in `mobile/README.md`.
 
 ## Testing
 
@@ -127,25 +138,23 @@ Tests mock OpenAI clients and make no live requests. For a manual mock test, lea
 
 The API routes require a Node.js runtime. A static-only host cannot provide live AI verification or planning.
 
+Vercel builds the root Next.js Web app. EAS builds the independent `/mobile` Expo app; the repository is intentionally not a package workspace.
+
 ## Current limitations
 
-- Single anonymous browser profile; no authentication, sync, export/import, or backup
+- Mobile empty-account Start fresh/Import and production-ready Today/Cat/release polish remain deferred
+- True-device iOS/Android and remaining Mobile↔Web/offline/restart/account-switch acceptance remain release gates
+- Running timers are device-owned and are not taken over or synchronized in realtime across devices
 - Browser timers cannot guarantee system-level alarms when the browser or device suspends the page
-- No app/site blocking, native mobile app, payments, social features, or shared pet
+- RevenueCat, server-controlled AI quotas, payments, app/site blocking, social features, and shared pets are not implemented
 - Camera behavior depends on browser support, HTTPS, and user permission
 - AI output can be wrong and always requires user review
 - The kitten is intentionally lightweight SVG/CSS animation rather than a full game
 - Accessibility has received semantic, keyboard, contrast, touch-target, and reduced-motion attention, but has not received a formal third-party audit
 
-## Post-hackathon roadmap
+## Release backlog
 
-- Add local export/import and optional encrypted sync
-- Add opt-in sound and vibration completion cues with clearer browser limitations
-- Expand end-to-end accessibility testing and screen-reader validation
-- Improve offline/PWA support and installability
-- Add more local First Move templates and user-authored template packs
-- Run user research on the stuck-to-intent flow and simplify it further
-- Add transparent per-request cost estimates and administrator usage caps for live AI
+The current deferred release work—including Mobile Today, Cat interaction polish, release UI, RevenueCat, server-controlled AI quotas, true-device testing, and store submission—is tracked in `TASKS.md`.
 
 ## License
 
