@@ -16,7 +16,9 @@ import {
   editHabit,
   editTask,
   getPendingIntent,
+  isHabitActive,
   isHabitScheduled,
+  isTaskActive,
   localDateKey,
   moveTask,
   toggleHabit,
@@ -70,6 +72,7 @@ import { companionEventsForTransition, companionIdleAction, createCompanionEvent
 import { accountSyncLabel, type CloudSyncStatus } from "@/lib/account-sync-status";
 import { getCloudSetupEnabled } from "@/lib/cloud-setup-feature";
 import { useCloudRuntime } from "@/lib/cloud-runtime";
+import { buildFocusLinkOptions, findFocusLinkOption, focusLinkFields } from "@/lib/focus-links";
 import {
   ADDITIONAL_NOTE_LABEL,
   DEFAULT_REFLECTION_PROMPTS,
@@ -481,6 +484,8 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
   const pendingIntent = getPendingIntent(state);
   const openSession = getOpenSession(state);
   const lastClosedSession = [...state.sessions].reverse().find((session) => session.status === "completed" || session.status === "stopped");
+  const today = localDateKey();
+  const focusLinkOptions = buildFocusLinkOptions(state, today);
   const [countdownDuration, setCountdownDuration] = useState<number>(25);
   const [customDuration, setCustomDuration] = useState("");
   const [countdownLink, setCountdownLink] = useState("");
@@ -508,10 +513,7 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
   }, [openSession, update]);
 
   function sourceForLink(value: string) {
-    const [kind, id] = value.split(":");
-    if (kind === "task") return state.tasks.find((task) => task.id === id);
-    if (kind === "habit") return state.habits.find((habit) => habit.id === id);
-    return undefined;
+    return findFocusLinkOption(focusLinkOptions, value);
   }
 
   function chooseCountdownLink(value: string) {
@@ -541,28 +543,26 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
   }
 
   function beginCountdown() {
-    const [kind, id] = countdownLink.split(":");
-    update((current) =>
-      startCountdown(current, {
+    update((current) => {
+      const linkedFields = focusLinkFields(buildFocusLinkOptions(current, localDateKey()), countdownLink);
+      return startCountdown(current, {
         direction: countdownDirection,
         label: countdownLabel || undefined,
         durationMinutes: customDuration ? Number(customDuration) : countdownDuration,
-        linkedTaskId: kind === "task" ? id : undefined,
-        linkedHabitId: kind === "habit" ? id : undefined,
-      }),
-    );
+        ...linkedFields,
+      });
+    });
   }
 
   function beginStopwatch() {
-    const [kind, id] = stopwatchLink.split(":");
-    update((current) =>
-      startStopwatch(current, {
+    update((current) => {
+      const linkedFields = focusLinkFields(buildFocusLinkOptions(current, localDateKey()), stopwatchLink);
+      return startStopwatch(current, {
         direction: stopwatchDirection,
         label: stopwatchLabel || undefined,
-        linkedTaskId: kind === "task" ? id : undefined,
-        linkedHabitId: kind === "habit" ? id : undefined,
-      }),
-    );
+        ...linkedFields,
+      });
+    });
   }
 
   const displayMs = openSession
@@ -610,10 +610,9 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
             <h3 className="text-xl font-bold">Quick Countdown</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">Use Focus on its own without creating or consuming an ActivityIntent.</p>
             <label htmlFor="countdown-link" className="mt-4 block text-sm font-semibold">Link <span className="font-normal text-stone-500">(optional)</span>
-              <select id="countdown-link" name="countdown-link" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={countdownLink} onChange={(event) => chooseCountdownLink(event.target.value)}>
+              <select id="countdown-link" name="countdown-link" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={findFocusLinkOption(focusLinkOptions, countdownLink)?.key ?? ""} onChange={(event) => chooseCountdownLink(event.target.value)}>
                 <option value="">No linked item</option>
-                {state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
-                {state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
+                {focusLinkOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "task" ? "Task" : "Habit"}: {option.title}</option>)}
               </select>
             </label>
             <label htmlFor="countdown-label" className="mt-4 block text-sm font-semibold">Activity title <span className="font-normal text-stone-500">(optional)</span>
@@ -640,10 +639,9 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
             <h3 className="text-xl font-bold">Stopwatch</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">Track open-ended time with or without a linked item.</p>
             <label htmlFor="stopwatch-link" className="mt-4 block text-sm font-semibold">Link <span className="font-normal text-stone-500">(optional)</span>
-              <select id="stopwatch-link" name="stopwatch-link" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={stopwatchLink} onChange={(event) => chooseStopwatchLink(event.target.value)}>
+              <select id="stopwatch-link" name="stopwatch-link" className="mt-2 block w-full rounded-xl border border-sky-200 px-3 py-2.5 font-normal outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" value={findFocusLinkOption(focusLinkOptions, stopwatchLink)?.key ?? ""} onChange={(event) => chooseStopwatchLink(event.target.value)}>
                 <option value="">No linked item</option>
-                {state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}
-                {state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}
+                {focusLinkOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "task" ? "Task" : "Habit"}: {option.title}</option>)}
               </select>
             </label>
             <label htmlFor="stopwatch-label" className="mt-4 block text-sm font-semibold">Activity title <span className="font-normal text-stone-500">(optional)</span>
@@ -980,7 +978,7 @@ function TaskEditor({ state, today, update }: { state: AppState; today: string; 
         {tasks.length === 0 ? <EmptyState>No tasks yet. Add one small, concrete action.</EmptyState> : (
           <ul className="space-y-3">
             {tasks.map((task, index) => {
-              const complete = task.completedOn.includes(today);
+              const complete = !isTaskActive(task, today);
               return (
                 <li key={task.id} className="rounded-2xl border border-stone-200 p-4">
                   <div className="flex items-start gap-3">
@@ -1056,7 +1054,7 @@ function HabitEditor({ habits, today, update }: { habits: Habit[]; today: string
           <ul className="space-y-3">
             {habits.map((habit) => {
               const scheduled = isHabitScheduled(habit, today);
-              const complete = habit.completedOn.includes(today);
+              const complete = !isHabitActive(habit, today);
               const scheduleLabel = habit.schedule.kind === "daily" ? "Daily" : habit.schedule.weekdays.map((day) => weekdayLabels[day]).join(", ");
               return (
                 <li key={habit.id} className={`rounded-2xl border p-4 ${scheduled ? "border-stone-200" : "border-dashed border-stone-200 bg-stone-50/70"}`}>
