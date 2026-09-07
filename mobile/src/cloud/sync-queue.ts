@@ -1,4 +1,6 @@
 import { normalizeAppState } from "../domain/app-state.ts";
+import { isCatItemId, type CatItemId } from "../domain/cat-items.ts";
+import { isLocalDateKey } from "../domain/dates.ts";
 import { createUuidV4, isUuid } from "../domain/ids.ts";
 import type { AppState, DailyPlanRecord } from "../domain/models.ts";
 import type { AsyncKeyValueStore } from "../local/repository.ts";
@@ -7,8 +9,16 @@ export const MOBILE_SYNC_QUEUE_KEY_PREFIX = "first-move:mobile:cloud-sync:v1:";
 export const MOBILE_SYNC_QUEUE_VERSION = 1 as const;
 
 export interface SyncEconomicCommands {
-  purchases: [];
-  consumptions: [];
+  purchases: {
+    mutationId: string;
+    itemId: CatItemId;
+    localDate: string;
+  }[];
+  consumptions: {
+    itemId: CatItemId;
+    quantity: number;
+    localDate: string;
+  }[];
 }
 
 export interface PendingWorkspaceMutation {
@@ -122,11 +132,30 @@ function validatePendingMutation(
     !Array.isArray(value.dailyPlans) ||
     !isRecord(value.commands) ||
     !Array.isArray(value.commands.purchases) ||
-    value.commands.purchases.length !== 0 ||
-    !Array.isArray(value.commands.consumptions) ||
-    value.commands.consumptions.length !== 0
+    !Array.isArray(value.commands.consumptions)
   ) {
     throw new Error("The local pending mutation is invalid.");
+  }
+  for (const purchase of value.commands.purchases) {
+    if (
+      !isRecord(purchase) ||
+      !isUuidValue(purchase.mutationId) ||
+      !isCatItemId(purchase.itemId) ||
+      !isLocalDateKey(purchase.localDate)
+    ) {
+      throw new Error("The local purchase command is invalid.");
+    }
+  }
+  for (const consumption of value.commands.consumptions) {
+    if (
+      !isRecord(consumption) ||
+      !isCatItemId(consumption.itemId) ||
+      !Number.isInteger(consumption.quantity) ||
+      (consumption.quantity as number) < 1 ||
+      !isLocalDateKey(consumption.localDate)
+    ) {
+      throw new Error("The local consumption command is invalid.");
+    }
   }
   validateSyncState(value.state);
 }

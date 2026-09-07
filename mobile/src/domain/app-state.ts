@@ -20,6 +20,7 @@ import {
   type Task,
 } from "./models.ts";
 import { createUuidV4 } from "./ids.ts";
+import { canonicalCatItemId, catItem } from "./cat-items.ts";
 
 type Clock = () => string;
 type IdFactory = () => string;
@@ -320,11 +321,16 @@ function normalizeInventory(value: unknown): AppState["inventory"] {
       ) {
         continue;
       }
-      const quantity = Math.min(
-        999,
-        (quantities.get(item.itemId) ?? 0) + (item.quantity as number),
-      );
-      quantities.set(item.itemId, quantity);
+      const itemId = canonicalCatItemId(item.itemId);
+      const catalogItem = itemId ? catItem(itemId) : undefined;
+      if (!itemId || !catalogItem) continue;
+      const quantity = catalogItem.durable
+        ? 1
+        : Math.min(
+            999,
+            (quantities.get(itemId) ?? 0) + (item.quantity as number),
+          );
+      quantities.set(itemId, quantity);
     }
   }
   const items = [...quantities].map(([itemId, quantity]) => ({
@@ -332,11 +338,16 @@ function normalizeInventory(value: unknown): AppState["inventory"] {
     quantity,
   }));
   const selectedFurnitureId =
-    typeof value.selectedFurnitureId === "string" &&
-    quantities.has(value.selectedFurnitureId)
-      ? value.selectedFurnitureId
+    typeof value.selectedFurnitureId === "string"
+      ? canonicalCatItemId(value.selectedFurnitureId)
       : undefined;
-  return { items, selectedFurnitureId };
+  const validSelectedFurnitureId =
+    selectedFurnitureId &&
+    catItem(selectedFurnitureId)?.kind === "furniture" &&
+    quantities.has(selectedFurnitureId)
+      ? selectedFurnitureId
+      : undefined;
+  return { items, selectedFurnitureId: validSelectedFurnitureId };
 }
 
 function isSchedule(value: unknown): value is HabitSchedule {

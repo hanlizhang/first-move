@@ -18,22 +18,10 @@ import {
   type Task,
   type Weekday,
 } from "../domain/models.ts";
+import { isCatItemId } from "../domain/cat-items.ts";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const CAT_ITEM_IDS = new Set([
-  "kitten-milk",
-  "cat-food",
-  "cat-treat",
-  "yarn-toy",
-  "teaser-wand",
-  "high-five",
-  "paw-shake",
-  "outdoor-garden",
-  "butterfly",
-  "cat-bed",
-  "window-cushion",
-]);
 
 export interface CanonicalWorkspace {
   state: AppState;
@@ -596,7 +584,7 @@ function milestone(value: unknown): 21 | 50 | 100 {
 
 function catItemId(value: unknown): string {
   const parsed = text(value);
-  if (!CAT_ITEM_IDS.has(parsed)) throw new Error("Cloud inventory item is invalid.");
+  if (!isCatItemId(parsed)) throw new Error("Cloud inventory item is invalid.");
   return parsed;
 }
 

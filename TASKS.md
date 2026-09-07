@@ -348,7 +348,9 @@ These items are intentionally deferred and are not implemented:
    - the laser pointer should create a visible target;
    - the cat should turn/move toward it and occasionally pounce/reach;
    - toy/equipped state should persist;
-   - purchases must remain server-authoritative/idempotent.
+   - purchases must remain server-authoritative/idempotent;
+   - Cat v1B may add a litter box after the early kitten stage and show at most a few litter clumps after multiple calendar days away;
+   - any `Scoop litter` action must stay optional and playful, award no points, apply no penalty or health/happiness/item loss, create no pressure to open the app, and may trigger only a small kitten reaction.
 3. Release UI polish:
    - remove developer-facing `Storage boundary` / architecture explanations;
    - replace them with simple user-facing Local / Pending / Synced / Offline states;

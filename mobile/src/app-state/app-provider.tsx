@@ -35,6 +35,14 @@ import {
   type MobileSyncSnapshot,
 } from "../cloud/sync-runtime.ts";
 import { createMobileSyncQueue } from "../cloud/sync-queue.ts";
+import {
+  purchaseGuestCatItem,
+  purchaseAvailability,
+  consumeGuestCatFood,
+  inventoryQuantity,
+  type CatPurchaseOutcome,
+} from "../domain/cat.ts";
+import { catItem, type CatItemId } from "../domain/cat-items.ts";
 import { createEmptyState, type AppState } from "../domain/models.ts";
 import { reconcileRunningCountdown } from "../domain/sessions.ts";
 import {
@@ -67,7 +75,16 @@ interface AppContextValue {
   updateLocalWorkspace(
     recipe: (current: AppState) => AppState,
   ): Promise<AppState | undefined>;
+  buyCatItem(itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome>;
+  feedCatFood(itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome>;
 }
+
+export type CatEconomyActionOutcome =
+  | CatPurchaseOutcome
+  | "used"
+  | "empty"
+  | "queued"
+  | "error";
 
 export type AppSyncState =
   | { status: "local"; pendingCount: 0 }
@@ -510,6 +527,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [activeLocalOwnerKey, localOwner],
   );
 
+  const buyCatItem = useCallback(
+    async (itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome> => {
+      const availability = purchaseAvailability(visibleLocalWorkspace, itemId);
+      if (availability !== "available") return availability;
+      if (!localOwner || !activeLocalOwnerKey) return "error";
+      const ownerKey = activeLocalOwnerKey;
+      try {
+        if (localOwner.kind === "guest") {
+          let outcome: CatPurchaseOutcome = "invalid";
+          const next = await repository.updateLocalWorkspace(localOwner, (state) => {
+            const result = purchaseGuestCatItem(state, itemId);
+            outcome = result.outcome;
+            return result.state;
+          });
+          if (activeLocalOwnerKeyRef.current === ownerKey) {
+            setLocalWorkspace(next);
+            setLoadedLocalOwnerKey(ownerKey);
+          }
+          return outcome;
+        }
+        const result = await syncRuntimeRef.current?.purchaseInventoryItem(
+          itemId,
+          localDate,
+        );
+        if (!result) return "error";
+        return result.outcome === "applied" ? "purchased" : result.outcome;
+      } catch {
+        return "error";
+      }
+    },
+    [activeLocalOwnerKey, localOwner, visibleLocalWorkspace],
+  );
+
+  const feedCatFood = useCallback(
+    async (itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome> => {
+      const item = catItem(itemId);
+      if (!item || item.kind !== "food") return "invalid";
+      if (inventoryQuantity(visibleLocalWorkspace, itemId) < 1) return "empty";
+      if (!localOwner || !activeLocalOwnerKey) return "error";
+      const ownerKey = activeLocalOwnerKey;
+      try {
+        if (localOwner.kind === "guest") {
+          let outcome: "used" | "empty" | "invalid" = "invalid";
+          const next = await repository.updateLocalWorkspace(localOwner, (state) => {
+            const result = consumeGuestCatFood(state, itemId);
+            outcome = result.outcome;
+            return result.state;
+          });
+          if (activeLocalOwnerKeyRef.current === ownerKey) {
+            setLocalWorkspace(next);
+            setLoadedLocalOwnerKey(ownerKey);
+          }
+          return outcome;
+        }
+        const result = await syncRuntimeRef.current?.consumeInventoryItem(
+          itemId,
+          localDate,
+        );
+        if (!result) return "error";
+        return result.outcome === "applied" ? "used" : result.outcome;
+      } catch {
+        return "error";
+      }
+    },
+    [activeLocalOwnerKey, localOwner, visibleLocalWorkspace],
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       auth,
@@ -526,6 +610,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       retryAuthRestore: restore,
       refreshCloud,
       updateLocalWorkspace,
+      buyCatItem,
+      feedCatFood,
     }),
     [
       auth,
@@ -542,6 +628,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restore,
       refreshCloud,
       updateLocalWorkspace,
+      buyCatItem,
+      feedCatFood,
     ],
   );
 

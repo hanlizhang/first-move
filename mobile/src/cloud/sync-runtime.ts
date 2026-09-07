@@ -1,4 +1,6 @@
 import type { AppState } from "../domain/models.ts";
+import type { CatItemId } from "../domain/cat-items.ts";
+import { isLocalDateKey } from "../domain/dates.ts";
 import { createUuidV4, isUuid } from "../domain/ids.ts";
 import type { MobileRepository } from "../local/repository.ts";
 import {
@@ -14,6 +16,7 @@ import {
   prepareSyncState,
   type MobileSyncQueue,
   type PendingWorkspaceMutation,
+  type SyncEconomicCommands,
   type SyncAccountRecord,
 } from "./sync-queue.ts";
 
@@ -34,6 +37,21 @@ export interface MobileSyncSnapshot {
   pendingCount: number;
   lastSuccessfulSyncAt?: string;
   message?: string;
+}
+
+export type AuthenticatedCatEconomyOutcome =
+  | "applied"
+  | "queued"
+  | "insufficient"
+  | "already-owned"
+  | "locked"
+  | "empty"
+  | "invalid"
+  | "error";
+
+export interface AuthenticatedCatEconomyResult {
+  outcome: AuthenticatedCatEconomyOutcome;
+  state?: AppState;
 }
 
 export interface MobileSyncClient {
@@ -91,6 +109,10 @@ export class MobileSyncRuntime {
   private mutationTail: Promise<void> = Promise.resolve();
   private revision = 0;
   private workspaceDailyPlans: CanonicalWorkspace["dailyPlans"] = [];
+  private readonly economicResults = new Map<
+    string,
+    Exclude<AuthenticatedCatEconomyOutcome, "applied" | "queued">
+  >();
   private snapshot: MobileSyncSnapshot;
   private listeners = new Set<(snapshot: MobileSyncSnapshot) => void>();
 
@@ -216,6 +238,30 @@ export class MobileSyncRuntime {
     return operation;
   }
 
+  purchaseInventoryItem(
+    itemId: CatItemId,
+    localDate: string,
+  ): Promise<AuthenticatedCatEconomyResult> {
+    if (!isLocalDateKey(localDate)) return Promise.resolve({ outcome: "invalid" });
+    const purchaseMutationId = this.dependencies.uuid();
+    if (!isUuid(purchaseMutationId)) return Promise.resolve({ outcome: "invalid" });
+    return this.queueEconomicCommands({
+      purchases: [{ mutationId: purchaseMutationId, itemId, localDate }],
+      consumptions: [],
+    });
+  }
+
+  consumeInventoryItem(
+    itemId: CatItemId,
+    localDate: string,
+  ): Promise<AuthenticatedCatEconomyResult> {
+    if (!isLocalDateKey(localDate)) return Promise.resolve({ outcome: "invalid" });
+    return this.queueEconomicCommands({
+      purchases: [],
+      consumptions: [{ itemId, quantity: 1, localDate }],
+    });
+  }
+
   async refresh(): Promise<void> {
     if (!this.canWrite()) return;
     await this.mutationTail;
@@ -284,6 +330,60 @@ export class MobileSyncRuntime {
     return next;
   }
 
+  private async queueEconomicCommands(
+    commands: SyncEconomicCommands,
+  ): Promise<AuthenticatedCatEconomyResult> {
+    this.revision += 1;
+    const operation = this.mutationTail.then(() =>
+      this.persistEconomicMutation(commands),
+    );
+    this.mutationTail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    const queued = await operation;
+    if (!queued) return { outcome: "error" };
+    await this.flush();
+    if (!this.record || !this.isCurrent()) return { outcome: "error" };
+    if (this.record.pending.some((mutation) => mutation.mutationId === queued.mutationId)) {
+      return { outcome: "queued", state: queued.state };
+    }
+    const rejected = this.economicResults.get(queued.mutationId);
+    this.economicResults.delete(queued.mutationId);
+    if (rejected) return { outcome: rejected, state: queued.state };
+    return {
+      outcome: "applied",
+      state: await this.dependencies.repository.loadLocalWorkspace({
+        kind: "account",
+        userId: this.dependencies.userId,
+      }),
+    };
+  }
+
+  private async persistEconomicMutation(
+    commands: SyncEconomicCommands,
+  ): Promise<{ mutationId: string; state: AppState } | undefined> {
+    if (!this.canWrite() || !this.record) return undefined;
+    const state = await this.dependencies.repository.loadLocalWorkspace({
+      kind: "account",
+      userId: this.dependencies.userId,
+    });
+    if (!this.isCurrent()) return undefined;
+    const mutationId = this.dependencies.uuid();
+    if (!isUuid(mutationId)) throw new Error("Mutation identity is invalid.");
+    const mutation: PendingWorkspaceMutation = {
+      mutationId,
+      state: prepareSyncState(state),
+      dailyPlans: structuredClone(this.workspaceDailyPlans),
+      commands: structuredClone(commands),
+      queuedAt: this.dependencies.now(),
+    };
+    this.record.pending.push(mutation);
+    await this.dependencies.queue.save(this.record);
+    this.setPendingStatus();
+    return { mutationId, state };
+  }
+
   private async flush(): Promise<void> {
     if (this.flushPromise) return this.flushPromise;
     this.flushPromise = this.flushPending();
@@ -317,6 +417,7 @@ export class MobileSyncRuntime {
     }
 
     let latestWorkspace: CanonicalWorkspace | undefined;
+    let refreshAfterEconomicRejection = false;
     this.setSnapshot({
       status: "syncing",
       pendingCount: this.record.pending.length,
@@ -341,6 +442,17 @@ export class MobileSyncRuntime {
       }
       if (!response || !this.isCurrent()) return;
       if (response.error) {
+        const economicOutcome = economicOutcomeForError(
+          response.error,
+          mutation.commands,
+        );
+        if (economicOutcome) {
+          this.economicResults.set(mutation.mutationId, economicOutcome);
+          this.record.pending.shift();
+          await this.dependencies.queue.save(this.record);
+          refreshAfterEconomicRejection = true;
+          continue;
+        }
         if (isLikelyNetworkError(response.error)) this.offlineFailure();
         else this.syncFailure();
         return;
@@ -369,6 +481,11 @@ export class MobileSyncRuntime {
     if (this.record.pending.length > 0) {
       await this.flushPending();
       return;
+    }
+    if (refreshAfterEconomicRejection) {
+      const refreshed = await this.readCanonical();
+      if (!refreshed || !this.isCurrent()) return;
+      latestWorkspace = refreshed;
     }
     if (latestWorkspace) await this.applyValidatedWorkspace(latestWorkspace);
     await this.markSuccess();
@@ -557,6 +674,26 @@ function isLikelyNetworkError(error: unknown): boolean {
   if (!isRecord(error)) return true;
   const message = typeof error.message === "string" ? error.message : "";
   return !error.code || /network|fetch|offline|timeout/i.test(message);
+}
+
+function economicOutcomeForError(
+  error: unknown,
+  commands: SyncEconomicCommands,
+): Exclude<AuthenticatedCatEconomyOutcome, "applied" | "queued"> | undefined {
+  if (commands.purchases.length + commands.consumptions.length === 0) return undefined;
+  const serialized = isRecord(error)
+    ? [error.message, error.details, error.hint, error.code]
+        .filter((value): value is string => typeof value === "string")
+        .join(" ")
+    : String(error);
+  if (/insufficient_points/i.test(serialized)) return "insufficient";
+  if (/already_owned/i.test(serialized)) return "already-owned";
+  if (/item_locked/i.test(serialized)) return "locked";
+  if (/insufficient_inventory/i.test(serialized)) return "empty";
+  if (/invalid_item|invalid_consumable|invalid_consumption_quantity/i.test(serialized)) {
+    return "invalid";
+  }
+  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
