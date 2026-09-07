@@ -123,7 +123,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 ## TASK-04: Cat room, store, return flow, and milestones
 
-- [x] Build persistent cat progress, inventory, and a compact four-category reward shelf with centralized prices, active-day unlocks, and balance checks.
+- [x] Build persistent cat progress, inventory, and a compact five-category reward shelf with centralized prices, active-day unlocks, and balance checks.
 - [x] Implement a recognizable original pixel kitten with sitting, walking, sleeping, eating, playing, and happy poses plus reduced-motion-safe idle behavior.
 - [x] Refine every pose as a compact full-body SVG composition on one floor line, with a fixed-bowl eating pose and synchronized stepped two-frame walk.
 - [x] Delay idle behavior for five minutes, randomize later actions at 5–10 minute intervals, return reactions to sitting, and expose non-persistent development-only pose controls.
@@ -138,10 +138,10 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - Food, toys, furniture, and tricks are keyboard accessible and do not depend on motion.
 - Missed days and failed/cancelled sessions never harm the cat or remove points, items, milestones, or progress.
 - Each day counts at most once, and every milestone unlocks once and remains visible.
-- Store items unlock at their configured active-day boundaries; hidden legacy furniture inventory remains loadable but is not part of the current Cat Room UI.
+- Store items unlock at their configured active-day boundaries; the stable `cat-bed` and `window-cushion` rows remain compatible with historical inventory and become visible Furniture items under the approved Cat v1 catalog.
 - Idle and action timers clean up on unmount; reduced motion disables automatic idle changes and walking translation.
 
-**Status:** Complete for the current core Cat/store baseline. Further interaction polish is intentionally deferred to the release backlog. Morning Check and Daily Reflection qualify through their reserved local records.
+**Status:** Complete for the current core Cat/store baseline. The approved cross-platform Cat v1 catalog expansion and forward-only database migration are staged under TASK-12; remote migration application remains a separate reviewed action. Further interaction polish is intentionally deferred to the release backlog. Morning Check and Daily Reflection qualify through their reserved local records.
 
 ## TASK-05: Daily Reflection
 
@@ -338,19 +338,29 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 **Mobile Today v1 status:** Implemented on `main`. Reflection content remains excluded from AI, logs, analytics, and notifications; no SQL, RPC, RLS, product-rule, or native dependency change was introduced.
 
+### Mobile Cat v1A and approved catalog
+
+- [x] Replace the Mobile placeholder with the Web-aligned pixel kitten, current points, symbolic growth chapter, active-day progress, owned inventory, interaction captions, Store, and selectable owned furniture.
+- [x] Reuse the existing owner-scoped generic purchase, food-consumption, selected-furniture, canonical hydration, and retry-safe economic-command contracts for Guest and authenticated modes.
+- [x] Align Web, Mobile, and the forward-only catalog migration on the approved stable IDs, names, prices, consumable/durable semantics, and visible Food, Treats, Toys, Furniture, and Tricks categories. Purchase unlocks are milk day 1, yarn day 3, wand day 7, mouse day 14, wet food and scratching post day 21, kibble day 35, treats/high-five/bed day 50, perch day 70, tree day 75, and paw shake/garden/butterfly day 100; owned durable items remain usable regardless of the current threshold.
+- [x] Stage the day-21 transition so only future ungranted milestones receive ten `wet-kitten-food`; retain old `cat-food` grants and events without rewrite, deletion, conversion, duplication, or backfill.
+- [ ] Apply the approved Cat catalog migration remotely only after review of a successful linked-project `supabase db push --dry-run`; the implementation task must not perform the real push.
+
+**Mobile Cat v1A status:** The cross-platform implementation, migration, and automated checks are staged on `mobile/cat-v1a`. Rich Cat v1B animation, Companion Bond, Little Finds, and celebration systems remain unimplemented.
+
 ## Release backlog
 
 These items are intentionally deferred and are not implemented:
 
 1. Mobile Trends and Calendar history parity.
-2. Cat interaction/store work:
-   - purchased toys must be visibly usable;
-   - the laser pointer should create a visible target;
-   - the cat should turn/move toward it and occasionally pounce/reach;
-   - toy/equipped state should persist;
-   - purchases must remain server-authoritative/idempotent;
+2. Cat v1B interaction and engagement work:
+   - expand toy mouse chase/pounce, yarn bat/pounce, scratching-post use, cat-tree climb/perch, and touch-follow teaser-wand behavior without changing server-authoritative/idempotent ownership;
    - Cat v1B may add a litter box after the early kitten stage and show at most a few litter clumps after multiple calendar days away;
-   - any `Scoop litter` action must stay optional and playful, award no points, apply no penalty or health/happiness/item loss, create no pressure to open the app, and may trigger only a small kitten reaction.
+   - any `Scoop litter` action must stay optional and playful, award no points, apply no penalty or health/happiness/item loss, create no pressure to open the app, and may trigger only a small kitten reaction;
+   - Companion Bond is designed as a non-decreasing 0–3-heart value, never Mood, with at most one Care Day per local date after both an Active Day and meaningful Cat interaction; proposed thresholds are 3/10/21 Care Days;
+   - Little Finds are designed as no-value, unsellable collectibles eligible at most once per newly earned Care Day, with later deterministic/idempotent/server-authoritative authenticated selection and no daily-login pressure;
+   - future celebrations distinguish compact points, larger Active Day, major Bond, full chapter/milestone, and collectible-reveal moments, combining simultaneous rewards in one queued flow rather than stacked blocking modals;
+   - Companion Bond, Care Days, Little Finds, and celebration schema/code are not part of the Cat v1 catalog migration.
 3. Release UI polish:
    - remove developer-facing `Storage boundary` / architecture explanations;
    - replace them with simple user-facing Local / Pending / Synced / Offline states;

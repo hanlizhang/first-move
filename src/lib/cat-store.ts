@@ -14,10 +14,10 @@ export function purchaseCatItem(
   idFactory: IdFactory = () => crypto.randomUUID(),
 ): PurchaseResult {
   const item = catItem(itemId);
-  if (!item || !item.visible) return { state, outcome: "invalid" };
-  if (!isCatItemUnlocked(item, state.progress.totalActiveDays)) return { state, outcome: "locked" };
+  if (!item?.active || item.milestoneOnly || item.category === undefined) return { state, outcome: "invalid" };
   const owned = inventoryQuantity(state, itemId);
-  if (item.kind !== "food" && owned > 0) return { state, outcome: "already-owned" };
+  if (item.durable && owned > 0) return { state, outcome: "already-owned" };
+  if (!isCatItemUnlocked(item, state.progress.totalActiveDays)) return { state, outcome: "locked" };
   if (state.progress.points < item.price) return { state, outcome: "insufficient" };
   const purchaseId = idFactory();
   const createdAt = now.toISOString();

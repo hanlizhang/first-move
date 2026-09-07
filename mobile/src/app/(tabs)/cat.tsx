@@ -9,6 +9,7 @@ import { PixelKitten } from "../../components/pixel-kitten.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import { Body, Card, LoadingState, Screen } from "../../components/ui.tsx";
 import {
+  catActionDisableState,
   catReactionCaption,
   getCatRoomView,
   inventoryQuantity,
@@ -50,9 +51,15 @@ export default function CatScreen() {
   const [savingId, setSavingId] = useState<string>();
   const [notice, setNotice] = useState("");
   const [pose, setPose] = useState<CatPose>("sitting");
-  const pendingAuthenticatedAction =
+  const pendingAuthenticatedWrite =
     auth.status === "authenticated" && sync.pendingCount > 0;
-  const disabled = !workspaceEditable || Boolean(savingId) || pendingAuthenticatedAction;
+  const { transientInteractionDisabled, economicWriteDisabled } =
+    catActionDisableState({
+      localWorkspaceLoaded: localWorkspaceStatus === "ready",
+      workspaceEditable,
+      actionSaving: Boolean(savingId),
+      pendingAuthenticatedWrite,
+    });
 
   if (localWorkspaceStatus === "loading") {
     return (
@@ -118,7 +125,7 @@ export default function CatScreen() {
       {!workspaceEditable && auth.status === "authenticated" ? (
         <Card tone="warning"><Body>The Cat Room will be ready when this account finishes loading.</Body></Card>
       ) : null}
-      {pendingAuthenticatedAction ? (
+      {pendingAuthenticatedWrite ? (
         <Card tone="warning"><Body>Your Cat Room change is safe and waiting to sync.</Body></Card>
       ) : null}
       {notice ? (
@@ -127,7 +134,8 @@ export default function CatScreen() {
 
       {section === "room" ? (
         <CatRoom
-          disabled={disabled}
+          economicWriteDisabled={economicWriteDisabled}
+          transientInteractionDisabled={transientInteractionDisabled}
           onChooseFurniture={(itemId) => void chooseFurniture(itemId)}
           onFeed={(item) => void feed(item)}
           onPlay={play}
@@ -136,7 +144,7 @@ export default function CatScreen() {
         />
       ) : (
         <CatStore
-          disabled={disabled}
+          disabled={economicWriteDisabled}
           onBuy={(item) => void buy(item)}
           room={room}
           state={localWorkspace}
@@ -147,19 +155,21 @@ export default function CatScreen() {
 }
 
 function CatRoom({
-  disabled,
+  economicWriteDisabled,
   onChooseFurniture,
   onFeed,
   onPlay,
   pose,
   room,
+  transientInteractionDisabled,
 }: {
-  disabled: boolean;
+  economicWriteDisabled: boolean;
   onChooseFurniture(itemId?: CatItemId): void;
   onFeed(item: CatCatalogItem): void;
   onPlay(pose: CatPose): void;
   pose: CatPose;
   room: CatRoomView;
+  transientInteractionDisabled: boolean;
 }) {
   const gardenOwned = room.ownedScenes.some(({ item }) => item.id === "outdoor-garden");
   const garden = gardenOwned && (pose === "garden" || pose === "butterfly");
@@ -223,15 +233,15 @@ function CatRoom({
       <Card>
         <Text style={styles.cardTitle}>Spend time together</Text>
         <ActionGroup label="Kitten moments">
-          <ActionButton disabled={disabled} label="Sit together" onPress={() => onPlay("sitting")} />
-          <ActionButton disabled={disabled} label="Explore room" onPress={() => onPlay("walking")} />
-          <ActionButton disabled={disabled} label="Nap" onPress={() => onPlay("sleeping")} />
+          <ActionButton disabled={transientInteractionDisabled} label="Sit together" onPress={() => onPlay("sitting")} />
+          <ActionButton disabled={transientInteractionDisabled} label="Explore room" onPress={() => onPlay("walking")} />
+          <ActionButton disabled={transientInteractionDisabled} label="Nap" onPress={() => onPlay("sleeping")} />
         </ActionGroup>
         {room.ownedFood.length > 0 ? (
           <ActionGroup label="Food">
             {room.ownedFood.map(({ item, quantity }) => (
               <ActionButton
-                disabled={disabled}
+                disabled={economicWriteDisabled}
                 key={item.id}
                 label={`Feed ${item.name} · ${quantity}`}
                 onPress={() => onFeed(item)}
@@ -245,14 +255,14 @@ function CatRoom({
           <ActionGroup label="Toys">
             {yarn ? (
               <ActionButton
-                disabled={disabled}
+                disabled={transientInteractionDisabled}
                 label="Play with yarn"
                 onPress={() => onPlay("yarn")}
               />
             ) : null}
             {wand ? (
               <ActionButton
-                disabled={disabled}
+                disabled={transientInteractionDisabled}
                 label="Play with teaser wand"
                 onPress={() => onPlay("wand")}
               />
@@ -262,16 +272,16 @@ function CatRoom({
         {highFive || pawShake || butterfly || gardenOwned ? (
           <ActionGroup label="Tricks & adventures">
             {highFive ? (
-              <ActionButton disabled={disabled} label="High-five" onPress={() => onPlay("high-five")} />
+              <ActionButton disabled={transientInteractionDisabled} label="High-five" onPress={() => onPlay("high-five")} />
             ) : null}
             {pawShake ? (
-              <ActionButton disabled={disabled} label="Paw shake" onPress={() => onPlay("paw-shake")} />
+              <ActionButton disabled={transientInteractionDisabled} label="Paw shake" onPress={() => onPlay("paw-shake")} />
             ) : null}
             {gardenOwned ? (
-              <ActionButton disabled={disabled} label="Visit garden" onPress={() => onPlay("garden")} />
+              <ActionButton disabled={transientInteractionDisabled} label="Visit garden" onPress={() => onPlay("garden")} />
             ) : null}
             {butterfly ? (
-              <ActionButton disabled={disabled} label="Follow butterfly" onPress={() => onPlay("butterfly")} />
+              <ActionButton disabled={transientInteractionDisabled} label="Follow butterfly" onPress={() => onPlay("butterfly")} />
             ) : null}
           </ActionGroup>
         ) : null}
@@ -286,14 +296,14 @@ function CatRoom({
           <View style={styles.actionWrap}>
             {room.ownedFurniture.map(({ item }) => (
               <ActionButton
-                disabled={disabled || room.selectedFurniture?.id === item.id}
+                disabled={economicWriteDisabled || room.selectedFurniture?.id === item.id}
                 key={item.id}
                 label={room.selectedFurniture?.id === item.id ? `${item.name} · In room` : item.name}
                 onPress={() => onChooseFurniture(item.id)}
               />
             ))}
             {room.selectedFurniture ? (
-              <ActionButton disabled={disabled} label="Clear furnishing" onPress={() => onChooseFurniture(undefined)} />
+              <ActionButton disabled={economicWriteDisabled} label="Clear furnishing" onPress={() => onChooseFurniture(undefined)} />
             ) : null}
           </View>
         </Card>
@@ -320,7 +330,7 @@ function CatStore({
         <Text style={styles.storeBalanceValue}>{formatPoints(room.points)}</Text>
       </View>
       <Body muted>
-        Food can be bought again. Toys and tricks stay yours. Locked rewards open with active days, never streaks.
+        Food and treats can be bought again. Toys, furniture, and tricks stay yours. Locked rewards open with active days, never streaks.
       </Body>
       {CAT_STORE_CATEGORIES.map((category) => (
         <View key={category} style={styles.storeSection}>
@@ -354,9 +364,9 @@ function CatStore({
         </View>
       ))}
       <Card tone="success">
-        <Text style={styles.cardTitle}>More room rewards are coming</Text>
+        <Text style={styles.cardTitle}>Build a room at your pace</Text>
         <Body>
-          New treats, toys, and furniture will make the room even cozier in a later update.
+          Consumables can be replenished. Every toy, furnishing, and trick you buy stays yours.
         </Body>
       </Card>
     </>
@@ -429,7 +439,27 @@ function ActionButton({ disabled, label, onPress }: { disabled?: boolean; label:
 
 function FurnitureVisual({ itemId }: { itemId?: CatItemId }) {
   if (itemId === "cat-bed") return <View accessibilityLabel="Cat bed in room" style={styles.catBed} />;
-  if (itemId === "window-cushion") return <View accessibilityLabel="Window cushion in room" style={styles.windowCushion} />;
+  if (itemId === "window-cushion") return <View accessibilityLabel="Window perch in room" style={styles.windowCushion} />;
+  if (itemId === "scratching-post") {
+    return (
+      <View accessibilityLabel="Scratching post in room" style={styles.scratchingPost}>
+        <View style={styles.scratchingPostTop} />
+        <View style={styles.scratchingPostColumn} />
+        <View style={styles.scratchingPostBase} />
+      </View>
+    );
+  }
+  if (itemId === "cat-tree") {
+    return (
+      <View accessibilityLabel="Cat tree in room" style={styles.catTree}>
+        <View style={styles.catTreeTop} />
+        <View style={styles.catTreeUpperPost} />
+        <View style={styles.catTreeMiddle} />
+        <View style={styles.catTreeLowerPost} />
+        <View style={styles.catTreeBase} />
+      </View>
+    );
+  }
   return null;
 }
 
@@ -458,7 +488,7 @@ function consumptionMessage(outcome: CatEconomyActionOutcome): string {
 
 function foodPose(itemId: CatItemId): CatPose {
   if (itemId === "kitten-milk") return "milk";
-  if (itemId === "cat-treat") return "treat";
+  if (itemId === "cat-treat" || itemId === "freeze-dried-treat") return "treat";
   return "food";
 }
 
@@ -491,6 +521,16 @@ const styles = StyleSheet.create({
   roomMessageText: { color: colors.text, fontSize: typography.small, textAlign: "center" },
   catBed: { backgroundColor: "#D9A4C4", borderColor: "#8C5177", borderRadius: 34, borderWidth: 5, bottom: 59, height: 55, left: 18, position: "absolute", width: 112 },
   windowCushion: { backgroundColor: "#D79B62", borderColor: "#8F5C32", borderRadius: 8, borderWidth: 3, height: 24, left: 20, position: "absolute", top: 92, width: 116 },
+  scratchingPost: { bottom: 58, height: 135, left: 26, position: "absolute", width: 82, zIndex: 1 },
+  scratchingPostTop: { backgroundColor: "#8F5C32", borderRadius: 7, height: 14, left: 25, position: "absolute", top: 0, width: 32 },
+  scratchingPostColumn: { backgroundColor: "#C59A6D", borderColor: "#8F5C32", borderWidth: 3, height: 108, left: 31, position: "absolute", top: 10, width: 20 },
+  scratchingPostBase: { backgroundColor: "#8F5C32", borderRadius: 8, bottom: 0, height: 18, left: 2, position: "absolute", width: 78 },
+  catTree: { bottom: 57, height: 170, left: 16, position: "absolute", width: 130, zIndex: 1 },
+  catTreeTop: { backgroundColor: "#B8865B", borderColor: "#70452B", borderRadius: 9, borderWidth: 3, height: 22, left: 12, position: "absolute", top: 0, width: 74 },
+  catTreeUpperPost: { backgroundColor: "#C59A6D", borderColor: "#70452B", borderWidth: 3, height: 62, left: 42, position: "absolute", top: 19, width: 18 },
+  catTreeMiddle: { backgroundColor: "#B8865B", borderColor: "#70452B", borderRadius: 8, borderWidth: 3, height: 20, left: 28, position: "absolute", top: 75, width: 92 },
+  catTreeLowerPost: { backgroundColor: "#C59A6D", borderColor: "#70452B", borderWidth: 3, height: 63, left: 76, position: "absolute", top: 92, width: 20 },
+  catTreeBase: { backgroundColor: "#8F5C32", borderRadius: 8, bottom: 0, height: 18, left: 16, position: "absolute", width: 110 },
   cardTitle: { color: colors.text, fontSize: typography.heading, fontWeight: "800" },
   actionGroup: { gap: spacing.sm, marginTop: spacing.sm },
   actionLabel: { color: colors.textMuted, fontSize: typography.label, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase" },

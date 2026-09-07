@@ -9,6 +9,7 @@ import {
 import { canonicalPayload, USER_ID } from "../test-fixtures/canonical.ts";
 import {
   CAT_POSES,
+  catActionDisableState,
   catGrowthStory,
   catReactionCaption,
   getCatRoomView,
@@ -50,8 +51,8 @@ test("Cat Room view renders Guest points, stage, next unlock, and owned categori
   assert.equal(room.points, 100);
   assert.equal(room.stage, "New kitten");
   assert.deepEqual(room.nextUnlock, {
-    day: 21,
-    label: "Cat food and 10 free servings",
+    day: 14,
+    label: "Toy mouse",
   });
   assert.equal(room.ownedFood[0]?.quantity, 3);
   assert.equal(room.ownedToys[0]?.item.id, "yarn-toy");
@@ -88,6 +89,42 @@ test("store unlocks use exact active-day boundaries and kitten stages do not dec
   assert.equal(kittenStage(100), "Adventure milestone");
 });
 
+test("pending authenticated writes disable economic actions but not loaded transient interactions", () => {
+  assert.deepEqual(
+    catActionDisableState({
+      localWorkspaceLoaded: true,
+      workspaceEditable: true,
+      actionSaving: false,
+      pendingAuthenticatedWrite: true,
+    }),
+    {
+      transientInteractionDisabled: false,
+      economicWriteDisabled: true,
+    },
+  );
+  assert.deepEqual(
+    catActionDisableState({
+      localWorkspaceLoaded: true,
+      workspaceEditable: false,
+      actionSaving: false,
+      pendingAuthenticatedWrite: false,
+    }),
+    {
+      transientInteractionDisabled: false,
+      economicWriteDisabled: true,
+    },
+  );
+  assert.equal(
+    catActionDisableState({
+      localWorkspaceLoaded: false,
+      workspaceEditable: true,
+      actionSaving: false,
+      pendingAuthenticatedWrite: false,
+    }).transientInteractionDisabled,
+    true,
+  );
+});
+
 test("growth story follows symbolic active-day chapters without changing catalog unlocks", () => {
   assert.equal(catGrowthStory(1).title, "New kitten");
   assert.equal(catGrowthStory(21).title, "Beginning weaning");
@@ -101,12 +138,38 @@ test("growth story follows symbolic active-day chapters without changing catalog
   });
 });
 
+test("day-21 progression points to wet kitten food without rewriting owned cat food", () => {
+  const beforeDay21 = createEmptyState();
+  beforeDay21.progress = {
+    ...beforeDay21.progress,
+    totalActiveDays: 20,
+  };
+  assert.deepEqual(getCatRoomView(beforeDay21).nextUnlock, {
+    day: 21,
+    label: "Wet kitten food, scratching post, and 10 free servings",
+  });
+
+  const day21 = createEmptyState();
+  day21.progress = { ...day21.progress, totalActiveDays: 21 };
+  day21.inventory.items = [{ itemId: "cat-food", quantity: 10 }];
+  const room = getCatRoomView(day21);
+  assert.equal(room.growthStory.title, "Beginning weaning");
+  assert.match(room.growthStory.description, /Wet kitten food/);
+  assert.deepEqual(room.nextUnlock, {
+    day: 35,
+    label: "Cat food",
+  });
+  assert.deepEqual(room.ownedFood.map(({ item, quantity }) => [item.id, quantity]), [
+    ["cat-food", 10],
+  ]);
+});
+
 test("every visible kitten pose has gentle matching copy", () => {
   for (const pose of CAT_POSES) {
     assert.ok(catReactionCaption(pose).length > 20, pose);
   }
   assert.match(catReactionCaption("sleeping", "cat-bed"), /cat bed/);
-  assert.match(catReactionCaption("sleeping", "window-cushion"), /window cushion/);
+  assert.match(catReactionCaption("sleeping", "window-cushion"), /window perch/);
 });
 
 test("Guest purchase prevents insufficient and negative balances", () => {
@@ -150,6 +213,106 @@ test("Guest durable ownership is one-time while consumable quantities repeat and
   assert.equal(used.outcome, "used");
   assert.equal(inventoryQuantity(used.state, "kitten-milk"), 1);
   assert.equal(consumeGuestCatFood(used.state, "yarn-toy").outcome, "invalid");
+});
+
+test("new foods can be purchased repeatedly and consumed with their approved unlocks", () => {
+  const state = createEmptyState();
+  state.progress = { ...state.progress, points: 100, totalActiveDays: 50 };
+
+  const wetFood = purchaseGuestCatItem(
+    state,
+    "wet-kitten-food",
+    NOW,
+    () => "10000000-0000-4000-8000-000000000010",
+  );
+  const firstTreat = purchaseGuestCatItem(
+    wetFood.state,
+    "freeze-dried-treat",
+    NOW,
+    () => "10000000-0000-4000-8000-000000000011",
+  );
+  const secondTreat = purchaseGuestCatItem(
+    firstTreat.state,
+    "freeze-dried-treat",
+    NOW,
+    () => "10000000-0000-4000-8000-000000000012",
+  );
+
+  assert.equal(wetFood.outcome, "purchased");
+  assert.equal(secondTreat.outcome, "purchased");
+  assert.equal(inventoryQuantity(secondTreat.state, "wet-kitten-food"), 1);
+  assert.equal(inventoryQuantity(secondTreat.state, "freeze-dried-treat"), 2);
+  assert.equal(consumeGuestCatFood(secondTreat.state, "wet-kitten-food").outcome, "used");
+  const consumedTreat = consumeGuestCatFood(secondTreat.state, "freeze-dried-treat");
+  assert.equal(consumedTreat.outcome, "used");
+  assert.equal(inventoryQuantity(consumedTreat.state, "freeze-dried-treat"), 1);
+});
+
+test("new durable toys and furniture enforce unlocks and one-time ownership", () => {
+  const state = createEmptyState();
+  state.progress = { ...state.progress, points: 1_000, totalActiveDays: 13 };
+  assert.equal(purchaseAvailability(state, "toy-mouse"), "locked");
+  assert.equal(purchaseAvailability(state, "scratching-post"), "locked");
+  assert.equal(purchaseAvailability(state, "cat-tree"), "locked");
+
+  const day14 = {
+    ...state,
+    progress: { ...state.progress, totalActiveDays: 14 },
+  };
+  assert.equal(purchaseAvailability(day14, "toy-mouse"), "available");
+  assert.equal(purchaseAvailability(day14, "scratching-post"), "locked");
+
+  const day21 = {
+    ...state,
+    progress: { ...state.progress, totalActiveDays: 21 },
+  };
+  assert.equal(purchaseAvailability(day21, "scratching-post"), "available");
+
+  const unlocked = {
+    ...state,
+    progress: { ...state.progress, totalActiveDays: 100 },
+  };
+  for (const itemId of ["toy-mouse", "scratching-post", "cat-tree"] as const) {
+    const purchased = purchaseGuestCatItem(
+      unlocked,
+      itemId,
+      NOW,
+      () => `10000000-0000-4000-8000-0000000000${itemId.length}`,
+    );
+    assert.equal(purchased.outcome, "purchased", itemId);
+    assert.equal(inventoryQuantity(purchased.state, itemId), 1, itemId);
+    assert.equal(purchaseGuestCatItem(purchased.state, itemId, NOW).outcome, "already-owned", itemId);
+  }
+});
+
+test("historically owned durable items remain usable below current purchase thresholds", () => {
+  const state = createEmptyState();
+  state.progress = { ...state.progress, points: 1_000, totalActiveDays: 1 };
+  state.inventory.items = [
+    { itemId: "yarn-toy", quantity: 1 },
+    { itemId: "teaser-wand", quantity: 1 },
+    { itemId: "high-five", quantity: 1 },
+    { itemId: "paw-shake", quantity: 1 },
+    { itemId: "cat-tree", quantity: 1 },
+    { itemId: "outdoor-garden", quantity: 1 },
+    { itemId: "butterfly", quantity: 1 },
+  ];
+  state.inventory.selectedFurnitureId = "cat-tree";
+
+  const room = getCatRoomView(state);
+  assert.deepEqual(room.ownedToys.map(({ item }) => item.id), [
+    "yarn-toy",
+    "teaser-wand",
+  ]);
+  assert.deepEqual(room.ownedTricks.map(({ item }) => item.id), [
+    "high-five",
+    "paw-shake",
+  ]);
+  assert.equal(room.ownedScenes[0]?.item.id, "outdoor-garden");
+  assert.equal(room.ownedInteractions[0]?.item.id, "butterfly");
+  assert.equal(room.selectedFurniture?.id, "cat-tree");
+  assert.equal(purchaseAvailability(state, "yarn-toy"), "already-owned");
+  assert.equal(purchaseAvailability(state, "cat-tree"), "already-owned");
 });
 
 test("Guest purchases and food use persist without entering account storage", async () => {

@@ -49,6 +49,16 @@ export function normalizeAppState(input: unknown): AppState {
   const inventory = normalizeInventory(input.inventory);
   const progressInput = isRecord(input.progress) ? input.progress : {};
   const derivedPoints = rewardEvents.reduce((total, event) => total + event.points, 0);
+  const unlockedMilestones = Array.isArray(progressInput.unlockedMilestones)
+    ? progressInput.unlockedMilestones.filter(
+        (value): value is 21 | 50 | 100 => value === 21 || value === 50 || value === 100,
+      )
+    : [];
+  const grantedMilestones = Array.isArray(progressInput.grantedMilestones)
+    ? progressInput.grantedMilestones.filter(
+        (value): value is 21 | 50 | 100 => value === 21 || value === 50 || value === 100,
+      )
+    : [];
 
   const state: AppState = {
     ...createEmptyState(),
@@ -71,14 +81,8 @@ export function normalizeAppState(input: unknown): AppState {
           ? Math.max(progressInput.points, derivedPoints)
           : Math.max(0, derivedPoints),
       activeDateKeys: stringArray(progressInput.activeDateKeys),
-      unlockedMilestones: Array.isArray(progressInput.unlockedMilestones)
-        ? progressInput.unlockedMilestones.filter(
-            (value): value is 21 | 50 | 100 => value === 21 || value === 50 || value === 100,
-          )
-        : [],
-      grantedMilestones: Array.isArray(progressInput.grantedMilestones)
-        ? progressInput.grantedMilestones.filter((value): value is 21 | 50 | 100 => value === 21 || value === 50 || value === 100)
-        : [],
+      unlockedMilestones,
+      grantedMilestones,
       firstUseDate: typeof progressInput.firstUseDate === "string" ? progressInput.firstUseDate : undefined,
       lastActiveDate: typeof progressInput.lastActiveDate === "string" ? progressInput.lastActiveDate : undefined,
       journeyDay: finiteNonnegativeInteger(progressInput.journeyDay),
@@ -429,7 +433,7 @@ function normalizeInventory(value: unknown): AppState["inventory"] {
       if (!isCatItemId(itemId)) continue;
       const item = catItem(itemId);
       const next = (quantities.get(itemId) ?? 0) + (entry.quantity as number);
-      quantities.set(itemId, item?.kind === "food" ? Math.min(next, 999) : 1);
+      quantities.set(itemId, item?.durable ? 1 : Math.min(next, 999));
     }
   }
   const items = [...quantities].map(([itemId, quantity]) => ({ itemId, quantity }));

@@ -25,12 +25,32 @@ test("Mobile Cat presents a real room, store, balance, progress, and inventory",
     "Store",
     "Food",
     "Toys",
+    "Furniture",
     "Tricks",
   ]) {
     assert.match(source, new RegExp(label));
   }
   assert.match(source, /getCatRoomView\(localWorkspace, today\)/);
   assert.match(source, /PixelKitten/);
+});
+
+test("approved furnishings are selectable and render as static room objects", () => {
+  for (const itemId of [
+    "cat-bed",
+    "window-cushion",
+    "scratching-post",
+    "cat-tree",
+  ]) {
+    assert.match(source, new RegExp(itemId));
+  }
+  for (const label of [
+    "Cat bed in room",
+    "Window perch in room",
+    "Scratching post in room",
+    "Cat tree in room",
+  ]) {
+    assert.match(source, new RegExp(label));
+  }
 });
 
 test("owned food, yarn, wand, tricks, butterfly, and furniture expose visible actions", () => {
@@ -52,6 +72,36 @@ test("owned food, yarn, wand, tricks, butterfly, and furniture expose visible ac
   }
   assert.match(source, /selectCatFurniture/);
   assert.match(source, /foodPose/);
+});
+
+test("transient Cat poses do not share the authenticated economic-write disable state", () => {
+  assert.match(source, /pendingAuthenticatedWrite/);
+  assert.match(source, /transientInteractionDisabled/);
+  assert.match(source, /economicWriteDisabled/);
+  assert.match(source, /localWorkspaceLoaded: localWorkspaceStatus === "ready"/);
+
+  for (const label of [
+    "Sit together",
+    "Explore room",
+    "Nap",
+    "Play with yarn",
+    "Play with teaser wand",
+    "High-five",
+    "Paw shake",
+    "Visit garden",
+    "Follow butterfly",
+  ]) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(
+      source,
+      new RegExp(`disabled=\\{transientInteractionDisabled\\}[^>]+label="${escaped}"|label="${escaped}"[^>]+disabled=\\{transientInteractionDisabled\\}`),
+      label,
+    );
+  }
+
+  assert.match(source, /disabled=\{economicWriteDisabled\}\s+key=\{item\.id\}\s+label=\{`Feed/);
+  assert.match(source, /disabled=\{economicWriteDisabled \|\| room\.selectedFurniture/);
+  assert.match(source, /<CatStore\s+disabled=\{economicWriteDisabled\}/);
 });
 
 test("absence return copy and current interaction caption use separate surfaces", () => {

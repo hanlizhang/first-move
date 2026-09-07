@@ -1,9 +1,14 @@
 export const CAT_ITEM_IDS = [
   "kitten-milk",
+  "wet-kitten-food",
   "cat-food",
   "cat-treat",
+  "freeze-dried-treat",
   "yarn-toy",
+  "toy-mouse",
   "teaser-wand",
+  "scratching-post",
+  "cat-tree",
   "high-five",
   "paw-shake",
   "outdoor-garden",
@@ -20,7 +25,12 @@ export type CatItemKind =
   | "trick"
   | "scene"
   | "interaction";
-export type CatStoreCategory = "Food" | "Treats" | "Toys" | "Tricks";
+export type CatStoreCategory =
+  | "Food"
+  | "Treats"
+  | "Toys"
+  | "Furniture"
+  | "Tricks";
 
 export interface CatCatalogItem {
   id: CatItemId;
@@ -49,11 +59,11 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     durable: false,
     milestoneOnly: false,
     active: true,
-    description: "A small dish for a quiet snack.",
+    description: "A shallow dish of kitten-safe milk.",
   },
   {
-    id: "cat-food",
-    name: "Cat food",
+    id: "wet-kitten-food",
+    name: "Wet kitten food",
     kind: "food",
     category: "Food",
     price: 10,
@@ -62,11 +72,24 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     durable: false,
     milestoneOnly: false,
     active: true,
+    description: "A soft meal served in a shallow dish.",
+  },
+  {
+    id: "cat-food",
+    name: "Cat food",
+    kind: "food",
+    category: "Food",
+    price: 10,
+    unlockActiveDays: 35,
+    purchaseQuantity: 1,
+    durable: false,
+    milestoneOnly: false,
+    active: true,
     description: "A bowl of crunchy kibble.",
   },
   {
     id: "cat-treat",
-    name: "Cat treat",
+    name: "Soft cat treat",
     kind: "food",
     category: "Treats",
     price: 20,
@@ -75,7 +98,20 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     durable: false,
     milestoneOnly: false,
     active: true,
-    description: "A special treat from a little pouch.",
+    description: "A soft treat from a small pouch.",
+  },
+  {
+    id: "freeze-dried-treat",
+    name: "Freeze-dried treat",
+    kind: "food",
+    category: "Treats",
+    price: 15,
+    unlockActiveDays: 50,
+    purchaseQuantity: 1,
+    durable: false,
+    milestoneOnly: false,
+    active: true,
+    description: "A crunchy little treat, one piece at a time.",
   },
   {
     id: "yarn-toy",
@@ -88,7 +124,20 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     durable: true,
     milestoneOnly: false,
     active: true,
-    description: "A soft ball to bat and chase.",
+    description: "Pounce, bat, and roll the ball.",
+  },
+  {
+    id: "toy-mouse",
+    name: "Toy mouse",
+    kind: "toy",
+    category: "Toys",
+    price: 35,
+    unlockActiveDays: 14,
+    purchaseQuantity: 1,
+    durable: true,
+    milestoneOnly: false,
+    active: true,
+    description: "A small toy to chase and pounce on.",
   },
   {
     id: "teaser-wand",
@@ -101,7 +150,59 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     durable: true,
     milestoneOnly: false,
     active: true,
-    description: "A feather wand for a playful stretch.",
+    description: "Guide the wand tip around the room.",
+  },
+  {
+    id: "scratching-post",
+    name: "Scratching post",
+    kind: "furniture",
+    category: "Furniture",
+    price: 80,
+    unlockActiveDays: 21,
+    purchaseQuantity: 1,
+    durable: true,
+    milestoneOnly: false,
+    active: true,
+    description: "A sturdy spot for a satisfying scratch.",
+  },
+  {
+    id: "cat-bed",
+    name: "Cat bed",
+    kind: "furniture",
+    category: "Furniture",
+    price: 100,
+    unlockActiveDays: 50,
+    purchaseQuantity: 1,
+    durable: true,
+    milestoneOnly: false,
+    active: true,
+    description: "A cozy bed for peaceful naps.",
+  },
+  {
+    id: "window-cushion",
+    name: "Window perch",
+    kind: "furniture",
+    category: "Furniture",
+    price: 140,
+    unlockActiveDays: 70,
+    purchaseQuantity: 1,
+    durable: true,
+    milestoneOnly: false,
+    active: true,
+    description: "A sunny perch for watching and resting.",
+  },
+  {
+    id: "cat-tree",
+    name: "Cat tree",
+    kind: "furniture",
+    category: "Furniture",
+    price: 300,
+    unlockActiveDays: 75,
+    purchaseQuantity: 1,
+    durable: true,
+    milestoneOnly: false,
+    active: true,
+    description: "A tall place to climb, perch, and rest.",
   },
   {
     id: "high-five",
@@ -114,7 +215,7 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     durable: true,
     milestoneOnly: false,
     active: true,
-    description: "Meet one raised paw.",
+    description: "Meet a raised paw with a hand target.",
   },
   {
     id: "paw-shake",
@@ -127,7 +228,7 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     durable: true,
     milestoneOnly: false,
     active: true,
-    description: "The kitten gently offers a paw.",
+    description: "The seated kitten places a paw in your hand.",
   },
   {
     id: "outdoor-garden",
@@ -153,33 +254,15 @@ export const CAT_CATALOG: readonly CatCatalogItem[] = [
     active: true,
     description: "A butterfly to follow through the garden.",
   },
-  {
-    id: "cat-bed",
-    name: "Cat bed",
-    kind: "furniture",
-    price: 10,
-    unlockActiveDays: 0,
-    purchaseQuantity: 1,
-    durable: true,
-    milestoneOnly: false,
-    active: false,
-    description: "A tucked-away legacy bed.",
-  },
-  {
-    id: "window-cushion",
-    name: "Window cushion",
-    kind: "furniture",
-    price: 14,
-    unlockActiveDays: 0,
-    purchaseQuantity: 1,
-    durable: true,
-    milestoneOnly: false,
-    active: false,
-    description: "A tucked-away legacy window seat.",
-  },
 ];
 
-export const CAT_STORE_CATEGORIES = ["Food", "Treats", "Toys", "Tricks"] as const;
+export const CAT_STORE_CATEGORIES = [
+  "Food",
+  "Treats",
+  "Toys",
+  "Furniture",
+  "Tricks",
+] as const;
 export const CAT_STORE_ITEMS = CAT_CATALOG.filter(
   (item): item is CatCatalogItem & { category: CatStoreCategory } =>
     item.active && !item.milestoneOnly && item.category !== undefined,

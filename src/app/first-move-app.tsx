@@ -60,7 +60,7 @@ import { CAT_ITEMS, STORE_CATEGORIES, isCatItemUnlocked, type CatItemId } from "
 import { inventoryQuantity, purchaseCatItem, useFood as consumeCatFood } from "@/lib/cat-store";
 import { HAPPY_ROLL_DURATION_MS, clampRoomPoint, createCatActionSequencer, messageForPose, previewPose, scheduleIdleBehavior, type CatInteraction, type CatPose, type IdleAction } from "@/lib/cat-behavior";
 import { CAT_MILESTONES } from "@/lib/cat-items";
-import { gentleReturnMessage, kittenStage, syncProgress } from "@/lib/progress";
+import { catGrowthStory, gentleReturnMessage, syncProgress } from "@/lib/progress";
 import { deleteReflection, hasReflectionContent, saveReflection, type ReflectionInput } from "@/lib/reflections";
 import { getCalendarMonth, getDayDetail, getTrendSummary, HISTORY_CATEGORIES, type TrendSummary } from "@/lib/history";
 import { captureVideoFrame, compressImageToJpeg } from "@/lib/image-compression";
@@ -1141,7 +1141,7 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   const roomRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState(returnMessage ? `${returnMessage} The kitten is sitting calmly now.` : messageForPose("sitting"));
   const actionSequencer = useRef<ReturnType<typeof createCatActionSequencer> | undefined>(undefined);
-  const stage = kittenStage(state.progress.totalActiveDays);
+  const growthStory = catGrowthStory(state.progress.totalActiveDays);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -1234,7 +1234,8 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
         setNotice("There is none of that food in the cupboard yet.");
         return current;
       }
-      showInteraction(itemId === "kitten-milk" ? "milk" : itemId === "cat-treat" ? "treat" : "food");
+      const item = CAT_ITEMS.find((candidate) => candidate.id === itemId);
+      showInteraction(itemId === "kitten-milk" ? "milk" : item?.category === "Treats" ? "treat" : "food");
       return next;
     });
   }
@@ -1273,7 +1274,9 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
       </dl>
       <div ref={roomRef} onPointerMove={moveWand} className={`relative mt-5 overflow-hidden rounded-3xl border border-amber-200 p-4 text-center sm:p-5 ${outdoor ? "cat-garden" : "bg-gradient-to-b from-sky-100 via-amber-50 to-orange-100"} ${playMode ? "touch-none" : ""}`}>
           {outdoor && <GardenScene />}
-          <p className="text-sm font-bold text-fuchsia-800">{stage}</p>
+          <p className="text-sm font-bold text-fuchsia-800">{growthStory.title}</p>
+          <p className="mx-auto mt-1 max-w-lg text-xs text-stone-600">{growthStory.description}</p>
+          <p className="mx-auto mt-1 max-w-lg text-xs italic text-stone-500">Active days are a symbolic journey, not a literal kitten age.</p>
           <PixelKitten pose={pose} walkingLeft={walkingLeft} blinking={blinking} wandPoint={wandPoint} />
           {playMode && <div className="pointer-events-none absolute h-4 w-4 rounded-full bg-rose-500 shadow" style={{ left: wandPoint.x - 8, top: wandPoint.y - 8 }} aria-hidden="true" />}
           <p className="mx-auto max-w-md rounded-xl bg-white/80 px-3 py-2 text-sm text-stone-700" aria-live="polite">{notice}</p>
@@ -1287,7 +1290,7 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
           {ownedFood.length > 0 && <div className="mt-4"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Use food</p><div className="mt-2 flex flex-wrap justify-center gap-2">{ownedFood.map((item) => <button key={item.id} type="button" className="rounded-lg bg-white px-3 py-2 text-xs font-semibold shadow-sm focus-visible:outline-2 focus-visible:outline-fuchsia-700" onClick={() => feed(item.id)}>{item.name} × {inventoryQuantity(state, item.id)}</button>)}</div></div>}
           {process.env.NODE_ENV === "development" && <DevelopmentPosePreview onPreview={showPreview} onInteraction={showInteraction} outdoor={previewOutdoor} onOutdoor={() => setPreviewOutdoor((value) => !value)} />}
       </div>
-      <div className="mt-6"><h3 className="text-xl font-bold">Reward shelf</h3><p className="mt-1 text-sm text-stone-600">A few small things, unlocked by active days. Food can be used repeatedly; toys and tricks stay yours.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{STORE_CATEGORIES.map((category) => <section key={category} className="rounded-2xl border border-fuchsia-200 bg-white p-4" aria-labelledby={`store-${category}`}><h4 id={`store-${category}`} className="text-sm font-bold uppercase tracking-wide text-fuchsia-800">{category}</h4><ul className="mt-2 space-y-2">{CAT_ITEMS.filter((item) => item.category === category).map((item) => { const quantity = inventoryQuantity(state, item.id); const owned = item.kind !== "food" && quantity > 0; const unlocked = isCatItemUnlocked(item, state.progress.totalActiveDays); const affordable = state.progress.points >= item.price; return <li key={item.id} className="rounded-xl bg-fuchsia-50 p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-stone-500">{unlocked ? item.description : `Unlocks at ${item.unlockActiveDays} active days`}</p></div><span className="text-sm font-bold">{formatPoints(item.price)}</span></div><button type="button" disabled={!unlocked || owned || !affordable} className="mt-2 rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:cursor-not-allowed disabled:bg-stone-300" onClick={() => buy(item.id)}>{!unlocked ? `Locked · day ${item.unlockActiveDays}` : owned ? "Owned" : !affordable ? "Need more points" : "Buy"}</button>{item.kind === "food" && quantity > 0 && <span className="ml-2 text-xs text-stone-500">Owned: {quantity}</span>}</li>; })}</ul></section>)}</div></div>
+      <div className="mt-6"><h3 className="text-xl font-bold">Reward shelf</h3><p className="mt-1 text-sm text-stone-600">A few small things, unlocked by active days. Food can be used repeatedly; toys, furniture, and tricks stay yours.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{STORE_CATEGORIES.map((category) => <section key={category} className="rounded-2xl border border-fuchsia-200 bg-white p-4" aria-labelledby={`store-${category}`}><h4 id={`store-${category}`} className="text-sm font-bold uppercase tracking-wide text-fuchsia-800">{category}</h4><ul className="mt-2 space-y-2">{CAT_ITEMS.filter((item) => item.category === category).map((item) => { const quantity = inventoryQuantity(state, item.id); const owned = item.durable && quantity > 0; const unlocked = isCatItemUnlocked(item, state.progress.totalActiveDays); const affordable = state.progress.points >= item.price; return <li key={item.id} className="rounded-xl bg-fuchsia-50 p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-stone-500">{owned || unlocked ? item.description : `Unlocks at ${item.unlockActiveDays} active days`}</p></div><span className="text-sm font-bold">{formatPoints(item.price)}</span></div><button type="button" disabled={owned || !unlocked || !affordable} className="mt-2 rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:cursor-not-allowed disabled:bg-stone-300" onClick={() => buy(item.id)}>{owned ? "Owned" : !unlocked ? `Locked · day ${item.unlockActiveDays}` : !affordable ? "Need more points" : "Buy"}</button>{!item.durable && quantity > 0 && <span className="ml-2 text-xs text-stone-500">Owned: {quantity}</span>}</li>; })}</ul></section>)}</div></div>
       <MilestoneCards totalActiveDays={state.progress.totalActiveDays} completed={state.progress.grantedMilestones} />
       <p className="mt-5 text-sm text-stone-600">Active days never expire. Missing a day never removes points, items, or companionship.</p>
     </section>

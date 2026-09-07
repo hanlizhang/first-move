@@ -71,6 +71,11 @@ export interface CatGrowthStory {
   nextMilestone?: { day: number; label: string };
 }
 
+export interface CatActionDisableState {
+  transientInteractionDisabled: boolean;
+  economicWriteDisabled: boolean;
+}
+
 export const CAT_REACTION_CAPTIONS: Readonly<Record<CatPose, string>> = {
   sitting: "The kitten sits nearby, cozy and curious.",
   walking: "The kitten pads softly around the room.",
@@ -95,7 +100,7 @@ const CAT_GROWTH_CHAPTERS = [
   {
     day: 21,
     title: "Beginning weaning",
-    description: "The story opens to gentle new mealtimes alongside kitten milk.",
+    description: "Wet kitten food joins gentle new mealtimes alongside kitten milk.",
   },
   {
     day: 28,
@@ -123,10 +128,32 @@ const MEANINGFUL_UNLOCKS = [
   { day: 1, label: "Kitten milk" },
   { day: 3, label: "Yarn ball" },
   { day: 7, label: "Teaser wand" },
-  { day: 21, label: "Cat food and 10 free servings" },
-  { day: 50, label: "Treats, high-five, and 10 free treats" },
+  { day: 14, label: "Toy mouse" },
+  { day: 21, label: "Wet kitten food, scratching post, and 10 free servings" },
+  { day: 35, label: "Cat food" },
+  { day: 50, label: "Treats, high-five, cat bed, and 10 free soft treats" },
+  { day: 70, label: "Window perch" },
+  { day: 75, label: "Cat tree" },
   { day: 100, label: "Garden, butterfly, and paw shake" },
 ] as const;
+
+export function catActionDisableState({
+  localWorkspaceLoaded,
+  workspaceEditable,
+  actionSaving,
+  pendingAuthenticatedWrite,
+}: {
+  localWorkspaceLoaded: boolean;
+  workspaceEditable: boolean;
+  actionSaving: boolean;
+  pendingAuthenticatedWrite: boolean;
+}): CatActionDisableState {
+  return {
+    transientInteractionDisabled: !localWorkspaceLoaded,
+    economicWriteDisabled:
+      !workspaceEditable || actionSaving || pendingAuthenticatedWrite,
+  };
+}
 
 export function getCatRoomView(state: AppState, today?: string): CatRoomView {
   const owned = CAT_CATALOG.flatMap((item) => {
@@ -185,7 +212,7 @@ export function catReactionCaption(
     return "The kitten curls up in the cat bed for a peaceful nap.";
   }
   if (pose === "sleeping" && selectedFurnitureId === "window-cushion") {
-    return "The kitten naps on the window cushion in a patch of light.";
+    return "The kitten naps on the window perch in a patch of light.";
   }
   return CAT_REACTION_CAPTIONS[pose];
 }
@@ -214,8 +241,8 @@ export function purchaseAvailability(
   if (!item?.active || item.milestoneOnly || item.category === undefined) {
     return "invalid";
   }
-  if (!isCatItemUnlocked(item, state.progress.totalActiveDays)) return "locked";
   if (item.durable && inventoryQuantity(state, itemId) > 0) return "already-owned";
+  if (!isCatItemUnlocked(item, state.progress.totalActiveDays)) return "locked";
   if (state.progress.points < item.price) return "insufficient";
   return "available";
 }
