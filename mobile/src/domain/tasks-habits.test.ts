@@ -20,7 +20,7 @@ const secondTimestamp = "2026-09-02T09:00:00.000Z";
 const taskId = "10000000-0000-4000-8000-000000000001";
 const habitId = "20000000-0000-4000-8000-000000000001";
 
-test("Tasks use schema-v8 fields, stable UUID identity, edits, and local-date completion facts", () => {
+test("Tasks use schema-v8 fields and one-shot completion with same-day correction", () => {
   const created = addTask(
     createEmptyState(),
     { title: "  Open   the application  ", direction: "Work & Study" },
@@ -52,12 +52,35 @@ test("Tasks use schema-v8 fields, stable UUID identity, edits, and local-date co
   assert.equal(completed.tasks[0]?.title, "Send one application");
   assert.equal(completed.tasks[0]?.direction, "Daily Life");
   assert.deepEqual(completed.tasks[0]?.completedOn, ["2026-09-02"]);
+  assert.equal(
+    toggleTaskCompletion(completed, taskId, "2026-09-03", () => secondTimestamp),
+    completed,
+  );
   assert.deepEqual(
     toggleTaskCompletion(completed, taskId, "2026-09-02", () => secondTimestamp)
       .tasks[0]?.completedOn,
     [],
   );
   assert.equal(completed.rewardEvents.length, 0);
+});
+
+test("legacy Tasks with multiple completion dates remain completed and retain their history", () => {
+  const state = createEmptyState();
+  state.tasks = [{
+    id: taskId,
+    title: "Legacy Task",
+    direction: "Daily Life",
+    order: 0,
+    createdAt: firstTimestamp,
+    updatedAt: secondTimestamp,
+    completedOn: ["2026-08-30", "2026-09-01"],
+  }];
+
+  assert.equal(
+    toggleTaskCompletion(state, taskId, "2026-09-02", () => secondTimestamp),
+    state,
+  );
+  assert.deepEqual(state.tasks[0]?.completedOn, ["2026-08-30", "2026-09-01"]);
 });
 
 test("Task deletion removes only the active parent and retains stable historical relationships", () => {

@@ -68,7 +68,7 @@ export default function TodayScreen() {
       <View style={styles.topRow}>
         <SyncPill auth={auth} sync={sync} />
         <Text style={styles.summaryText}>
-          {view.tasks.filter((task) => !isTaskActive(task, today)).length} Tasks done ·{" "}
+          {view.tasks.filter((task) => task.completedOn.includes(today)).length} Tasks done ·{" "}
           {view.habits.filter((habit) => !isHabitActive(habit, today)).length} Habits checked
         </Text>
       </View>
@@ -111,7 +111,7 @@ export default function TodayScreen() {
         ) : (
           view.tasks.map((task, index) => (
             <TaskRow
-              completed={!isTaskActive(task, today)}
+              completed={!isTaskActive(task)}
               disabled={Boolean(savingId) || !workspaceEditable}
               first={index === 0}
               key={task.id}
@@ -122,9 +122,9 @@ export default function TodayScreen() {
                 void saveToggle(
                   task.id,
                   (state) => toggleTaskCompletion(state, task.id, today),
-                  isTaskActive(task, today)
-                    ? "Task completed for today."
-                    : "Task marked incomplete for today.",
+                  isTaskActive(task)
+                    ? "Task completed."
+                    : "Task marked incomplete.",
                 )
               }
               task={task}
@@ -365,6 +365,7 @@ function TaskRow({
     <View style={[styles.itemRow, !first && styles.itemBorder]}>
       <CheckButton
         checked={completed}
+        dateScoped={false}
         disabled={disabled}
         label={task.title}
         onPress={onToggle}
@@ -423,12 +424,14 @@ function HabitRow({
 
 function CheckButton({
   checked,
+  dateScoped = true,
   disabled,
   label,
   onPress,
   verb,
 }: {
   checked: boolean;
+  dateScoped?: boolean;
   disabled: boolean;
   label: string;
   onPress(): void;
@@ -436,7 +439,7 @@ function CheckButton({
 }) {
   return (
     <Pressable
-      accessibilityLabel={`${verb} ${label} for today`}
+      accessibilityLabel={`${verb} ${label}${dateScoped ? " for today" : ""}`}
       accessibilityRole="checkbox"
       accessibilityState={{ checked, disabled }}
       disabled={disabled}

@@ -53,7 +53,7 @@ M0 does not import, merge, initialize, or write business data. It does not call 
 ## M1D boundary
 
 - Today opens dedicated Tasks and Habits screens backed only by the currently selected Guest or Supabase-UUID account-local AsyncStorage namespace.
-- Tasks use the schema-v8 `Task` shape and support UUID-v4 creation, title/direction edits, complete/uncomplete for the current local date, and removal from the active list.
+- Tasks use the schema-v8 `Task` shape and support UUID-v4 creation, title/direction edits, one-shot completion, same-local-date correction, and removal from the active list. Any non-empty `completedOn` keeps a Task completed on later dates.
 - Habits use the schema-v8 `Habit` and `HabitSchedule` shapes and support UUID-v4 creation, title/direction/schedule edits, current-date check/uncheck when scheduled, and removal from the active list.
 - Daily and non-empty selected-weekday schedules use the canonical `sun` through `sat` values. Titles normalize whitespace and remain bounded to 160 characters; timestamps remain ISO instants.
 - Active canonical Tasks/Habits from the current authenticated UUID are shown separately as read-only. They retain their canonical UUID and are never copied into account-local state.
@@ -184,7 +184,7 @@ These checklists preserve milestone-specific checks. The recorded iOS Simulator 
 ## Manual M1D acceptance
 
 - [ ] In Guest Mode, open Today → Tasks, create a Task, and confirm its normalized title, chosen direction, UUID-v4 identity, created/updated ISO timestamps, order, and empty `completedOn` survive an app restart.
-- [ ] Edit that Task’s title and each of the five directions; complete and uncomplete it for the device’s current local date and confirm no reward/history record is created.
+- [ ] Edit that Task’s title and each of the five directions; complete and undo it on the device’s current local date, then confirm it cannot be reopened on a later date and that Mobile introduces no client-authored reward/history record.
 - [ ] Delete the Task through the confirmation alert and confirm it leaves the active Task list and new Focus choices while any existing Session/Intent `linkedTaskId` remains unchanged.
 - [ ] Open Today → Habits, create one daily Habit and one selected-weekday Habit; confirm an empty selected-weekday set cannot be saved and stored weekday values use `sun`–`sat`.
 - [ ] Edit a Habit’s title, direction, and schedule in both directions; on a scheduled local date check and uncheck it, and confirm an unscheduled Habit is labeled and cannot be checked.
@@ -204,7 +204,8 @@ Prerequisite: use a Web-initialized Supabase account and the same account on Mob
 
 - [ ] Sign in on Mobile and confirm the state moves through **Loading cloud progress** or **Syncing** before **Synced**; authentication alone must never display **Synced**.
 - [ ] Confirm canonical Web Tasks and Habits appear in Mobile as one editable working set with their existing UUIDs; confirm old account-local M1D rows were not merged or uploaded.
-- [ ] On Mobile, create a Task, edit its title and direction, complete/uncomplete it for today, then delete it. After each settled sync, refresh Web and confirm the same stable parent, local-date completion state, and final soft deletion.
+- [ ] On Mobile, create a Task, edit its title and direction, complete/undo it on the same local date, then delete it. After each settled sync, refresh Web and confirm the same stable parent, one-shot completion state, same-day correction, and final soft deletion.
+- [ ] Advance to a later local date and confirm the completed Task stays completed, does not appear in Today as unfinished, cannot be reopened, and is absent from new Focus link choices on both Mobile and Web.
 - [ ] On Mobile, create a daily Habit and a selected-weekday Habit, edit title/direction/schedule, check/uncheck today, then delete it. Refresh Web and confirm weekdays, completion facts, stable UUIDs, and tombstone behavior.
 - [ ] Create/cancel a pending First Move, then create another and run its Session through start, pause, resume, complete or stop, and review. Refresh Web and confirm ordered Intent/Session relationships and unchanged stable IDs.
 - [ ] Complete a Task, Habit, and qualifying Session; confirm Web shows only server-derived rewards/points and that repeated refresh/retry never duplicates them.

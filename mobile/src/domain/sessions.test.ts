@@ -308,6 +308,47 @@ test("standalone starts reject unknown or multiple relationships", () => {
   );
 });
 
+test("standalone starts reject completed Tasks and unscheduled Habits", () => {
+  const taskId = "10000000-0000-4000-8000-000000000001";
+  const habitId = "20000000-0000-4000-8000-000000000001";
+  const state = createEmptyState();
+  state.tasks = [{
+    id: taskId,
+    title: "Already done",
+    direction: "Daily Life",
+    order: 0,
+    createdAt: new Date(startMs).toISOString(),
+    updatedAt: new Date(startMs).toISOString(),
+    completedOn: ["2026-08-08"],
+  }];
+  state.habits = [{
+    id: habitId,
+    title: "Friday only",
+    direction: "Rest",
+    schedule: { kind: "weekdays", weekdays: ["fri"] },
+    createdAt: new Date(startMs).toISOString(),
+    updatedAt: new Date(startMs).toISOString(),
+    completedOn: [],
+  }];
+
+  assert.equal(
+    startCountdown(
+      state,
+      { linkedTaskId: taskId, durationMinutes: 5 },
+      Date.parse("2026-08-09T09:00:00.000Z"),
+    ),
+    state,
+  );
+  assert.equal(
+    startStopwatch(
+      state,
+      { linkedHabitId: habitId },
+      Date.parse("2026-08-09T09:00:00.000Z"),
+    ),
+    state,
+  );
+});
+
 test("stopwatch shares timestamp recovery, pause, resume, stop, and default persistence", () => {
   const started = startStopwatch(
     createEmptyState(),
@@ -455,6 +496,29 @@ test("review preserves an unavailable historical parent and an assisted Intent r
     startMs + 20_000,
   );
   assert.equal(retained.sessions[0]?.linkedTaskId, unavailableTaskId);
+
+  const completedParent = createEmptyState();
+  completedParent.tasks = [{
+    id: unavailableTaskId,
+    title: "Completed parent",
+    direction: "Daily Life",
+    order: 0,
+    createdAt: new Date(startMs).toISOString(),
+    updatedAt: new Date(startMs).toISOString(),
+    completedOn: ["2026-08-08"],
+  }];
+  completedParent.sessions = historical.sessions;
+  const retainedCompletedParent = reviewSession(
+    completedParent,
+    "historical-task-session",
+    {
+      label: "Still linked",
+      direction: "Daily Life",
+      linkedTaskId: unavailableTaskId,
+    },
+    startMs + 20_000,
+  );
+  assert.equal(retainedCompletedParent.sessions[0]?.linkedTaskId, unavailableTaskId);
 
   const completed = reconcileRunningCountdown(runningState(2), startMs + 120_000);
   const reviewed = reviewSession(

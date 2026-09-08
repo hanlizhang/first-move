@@ -48,6 +48,15 @@ function todayState(): AppState {
         updatedAt: "2026-09-01T08:00:00.000Z",
         completedOn: [],
       },
+      {
+        id: "task-previously-completed",
+        title: "Old completed Task",
+        direction: "Rest",
+        order: 2,
+        createdAt: "2026-09-01T08:00:00.000Z",
+        updatedAt: "2026-09-03T08:00:00.000Z",
+        completedOn: ["2026-09-03"],
+      },
     ],
     habits: [
       {

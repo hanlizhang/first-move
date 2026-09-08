@@ -21,6 +21,7 @@ import {
 } from "./models.ts";
 import { createUuidV4 } from "./ids.ts";
 import { canonicalCatItemId, catItem } from "./cat-items.ts";
+import { isTaskActive } from "./tasks-habits.ts";
 
 type Clock = () => string;
 type IdFactory = () => string;
@@ -102,7 +103,7 @@ export function createPendingIntent(
   const linkedHabit = input.linkedHabitId
     ? state.habits.find((habit) => habit.id === input.linkedHabitId)
     : undefined;
-  if (input.linkedTaskId && !linkedTask) return state;
+  if (input.linkedTaskId && (!linkedTask || !isTaskActive(linkedTask))) return state;
   if (input.linkedHabitId && !linkedHabit) return state;
 
   const direction = input.direction ?? linkedTask?.direction ?? linkedHabit?.direction;

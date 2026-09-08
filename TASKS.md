@@ -8,13 +8,22 @@
 - [x] M1A First Move / `ActivityIntent`: local I’m Stuck flow with one validated pending Intent and Focus handoff.
 - [x] M1B persisted countdown `ActivitySession` engine: timestamp-based countdown, pause/resume, restart recovery, completion, stop, and cancellation.
 - [x] M1C standalone Countdown + Stopwatch + Focus linking: shared Session semantics, 2/5/10/25/50 presets, validated custom duration, optional title/direction, and optional eligible Task/Habit link.
-- [x] Mobile Tasks/Habits CRUD: owner-local create, edit, current-date completion/check-in, schedules, active-list deletion, and Focus link selection.
+- [x] Mobile Tasks/Habits CRUD: owner-local create/edit, one-shot Task completion with same-day correction, local-date Habit check-in, schedules, active-list deletion, and Focus link selection.
 - [x] Authenticated Mobile writes using existing Web Sync v1 contracts for Task, Habit/check-in, ActivityIntent, and ActivitySession mutations.
-- [x] Web/Mobile Focus link eligibility parity for new sessions, with historical relationships preserved after completion, check-in, or deletion.
+- [x] Web/Mobile Focus link eligibility parity for new sessions: never-completed Tasks plus scheduled-today unchecked Habits, with historical relationships preserved after completion, check-in, or deletion.
 - [x] Mobile → Web and Web → Mobile canonical sync through owner-scoped queued snapshots and validated canonical replacement.
 - [x] Mobile Today v1: Tasks, Habits, closed Focus Sessions, current points, five-direction focused-time summary, activity timeline, and editable private Reflection / Mini Journal with captured local-date and timezone semantics.
 
 The implementation is complete for the checked items above. Recorded Mobile manual acceptance remains a release gate where noted; the unchecked release backlog is intentionally deferred.
+
+## Cross-platform one-shot Task lifecycle correction
+
+- [x] Treat `completedOn.length === 0` as an active Task and any non-empty completion history as permanently completed across later local dates.
+- [x] Keep current-date completed Tasks available in Today while excluding previously completed Tasks from today's unfinished list.
+- [x] Exclude every completed Task from new Focus and First Move link choices while preserving existing Session/Intent relationship IDs and labels where available.
+- [x] Allow same-day Task completion correction only; prevent cross-day reopen/repeat and preserve idempotent rewards.
+- [x] Retain legacy multiple-date Task history unchanged and leave Habit schedule/current-date semantics intact.
+- [x] Implement the correction in Web and Mobile domain/UI code without SQL, RPC, RLS, schema, or migration changes.
 
 ## TASK-01: Local data foundation, manual tasks, habits, and local First Move templates
 
@@ -27,7 +36,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 ### Acceptance criteria
 
 - Core state survives reload and malformed stored data recovers without losing valid data.
-- Tasks are fully editable; habits appear only on scheduled weekdays; both use exactly the five PRD directions.
+- Tasks are fully editable one-shot items and never reactivate after any completion; habits appear only on scheduled weekdays; both use exactly the five PRD directions.
 - Every stuck state and direction has a useful local template path, available offline and without AI.
 - A user can replace, edit, or manually enter a First Move before starting.
 
@@ -304,8 +313,8 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 ### M1D — Local Tasks and Habits
 
-- [x] Reuse the schema-v8 Task/Habit models and add UUID-v4 local creation, title/direction editing, local-date completion toggles, active-list soft deletion, and daily/selected-weekday Habit schedules.
-- [x] Add dedicated Mobile Tasks and Habits screens reachable from Today, with accessible current-date completion controls and deletion confirmation.
+- [x] Reuse the schema-v8 Task/Habit models and add UUID-v4 local creation, title/direction editing, one-shot Task completion with safe same-day correction, local-date Habit check-ins, active-list soft deletion, and daily/selected-weekday Habit schedules.
+- [x] Add dedicated Mobile Tasks and Habits screens reachable from Today, with accessible one-shot Task/current-date Habit completion controls and deletion confirmation.
 - [x] Keep Guest and per-Supabase-UUID account-local writes serialized through the existing AsyncStorage repository without merging namespaces.
 - [x] Show current-owner canonical Tasks/Habits separately as read-only, preserve their stable UUIDs, and never copy them into editable local state.
 - [x] Replace each long inline Focus parent list with one compact field and a searchable modal containing No linked item, Tasks, Habits, source labels, and an explicit selected state.
@@ -328,7 +337,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 ### Mobile Today v1
 
-- [x] Show current active Tasks and scheduled Habits with current-date completion/check-in controls through the existing owner-scoped mutation path.
+- [x] Show never-completed active Tasks plus Tasks completed today, and scheduled Habits with current-date check-in controls, through the existing owner-scoped mutation path.
 - [x] Show completed and intentionally stopped Focus Sessions for the captured local date, including actual elapsed time, direction, and available linked Task/Habit/First Move labels.
 - [x] Show the current canonical or Guest-local point balance without calculating or mutating authenticated authoritative points on Mobile.
 - [x] Show total focused time and all five direction totals using compact React Native primitives without a chart dependency.

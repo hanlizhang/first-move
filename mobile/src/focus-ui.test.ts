@@ -44,4 +44,6 @@ test("Focus uses one compact searchable linked-item field", () => {
   assert.match(pickerSource, /Tasks/);
   assert.match(pickerSource, /Habits/);
   assert.match(pickerSource, /Selected/);
+  assert.match(source, /Current relationship retained/);
+  assert.doesNotMatch(pickerSource, /Current relationship|Unavailable for new links/);
 });

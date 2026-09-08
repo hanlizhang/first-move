@@ -82,14 +82,15 @@ export function toggleTaskCompletion(
   if (!isLocalDateKey(dateKey)) return state;
   const task = state.tasks.find((candidate) => candidate.id === id);
   if (!task) return state;
-  const completed = task.completedOn.includes(dateKey);
+  const completedToday = task.completedOn.includes(dateKey);
+  if (!completedToday && !isTaskActive(task)) return state;
   return {
     ...state,
     tasks: state.tasks.map((candidate) =>
       candidate.id === id
         ? {
             ...candidate,
-            completedOn: completed
+            completedOn: completedToday
               ? candidate.completedOn.filter((date) => date !== dateKey)
               : unique([...candidate.completedOn, dateKey]),
             updatedAt: clock(),
@@ -99,8 +100,12 @@ export function toggleTaskCompletion(
   };
 }
 
-export function isTaskActive(task: Task, dateKey: string): boolean {
-  return !task.completedOn.includes(dateKey);
+export function isTaskActive(task: Task): boolean {
+  return task.completedOn.length === 0;
+}
+
+export function isTaskVisibleToday(task: Task, dateKey: string): boolean {
+  return isLocalDateKey(dateKey) && (isTaskActive(task) || task.completedOn.includes(dateKey));
 }
 
 export function addHabit(

@@ -40,12 +40,21 @@ export function getTodayTimeline(state: AppState, dateKey: string): TimelineEntr
     outcome: session.status as "completed" | "stopped",
     points: state.rewardEvents.find((event) => event.source === "session" && event.sourceId === session.id)?.points ?? 0,
   }));
-  for (const event of state.rewardEvents) {
-    if (event.dateKey !== dateKey || (event.source !== "task" && event.source !== "habit")) continue;
-    const item = event.source === "task"
-      ? state.tasks.find((task) => task.id === event.sourceId)
-      : state.habits.find((habit) => habit.id === event.sourceId);
-    if (item) entries.push({ id: `timeline:${event.id}`, kind: event.source, timestamp: event.createdAt, title: item.title, direction: item.direction, points: event.points });
+  for (const [kind, items] of [["task", state.tasks], ["habit", state.habits]] as const) {
+    for (const item of items) {
+      if (!item.completedOn.includes(dateKey)) continue;
+      const reward = state.rewardEvents.find(
+        (event) => event.source === kind && event.sourceId === item.id && event.dateKey === dateKey,
+      );
+      entries.push({
+        id: `timeline:${kind}:${item.id}:${dateKey}`,
+        kind,
+        timestamp: reward?.createdAt ?? item.updatedAt,
+        title: item.title,
+        direction: item.direction,
+        points: reward?.points ?? 0,
+      });
+    }
   }
   const morning = state.morningChecks.find((check) => check.dateKey === dateKey);
   if (morning) {

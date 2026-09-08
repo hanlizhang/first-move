@@ -118,7 +118,7 @@ export function createPendingIntent(
   const linkedHabit = input.linkedHabitId
     ? state.habits.find((habit) => habit.id === input.linkedHabitId)
     : undefined;
-  if (input.linkedTaskId && !linkedTask) return state;
+  if (input.linkedTaskId && (!linkedTask || !isTaskActive(linkedTask))) return state;
   if (input.linkedHabitId && !linkedHabit) return state;
 
   const direction = input.direction ?? linkedTask?.direction ?? linkedHabit?.direction;
@@ -205,27 +205,33 @@ export function moveTask(state: AppState, id: string, offset: -1 | 1): AppState 
 }
 
 export function toggleTask(state: AppState, id: string, dateKey: string, clock: Clock = now): AppState {
+  if (!isDateKey(dateKey)) return state;
   const task = state.tasks.find((candidate) => candidate.id === id);
   if (!task) return state;
-  const completed = task.completedOn.includes(dateKey);
+  const completedToday = task.completedOn.includes(dateKey);
+  if (!completedToday && !isTaskActive(task)) return state;
   const tasks = state.tasks.map((candidate) =>
     candidate.id === id
       ? {
           ...candidate,
-          completedOn: completed
+          completedOn: completedToday
             ? candidate.completedOn.filter((date) => date !== dateKey)
             : unique([...candidate.completedOn, dateKey]),
           updatedAt: clock(),
         }
       : candidate,
   );
-  return completed
+  return completedToday
     ? { ...state, tasks }
     : addReward({ ...state, tasks }, "task", task.id, dateKey, TASK_REWARD_POINTS, clock);
 }
 
-export function isTaskActive(task: Task, dateKey: string): boolean {
-  return !task.completedOn.includes(dateKey);
+export function isTaskActive(task: Task): boolean {
+  return task.completedOn.length === 0;
+}
+
+export function isTaskVisibleToday(task: Task, dateKey: string): boolean {
+  return isDateKey(dateKey) && (isTaskActive(task) || task.completedOn.includes(dateKey));
 }
 
 export function addHabit(

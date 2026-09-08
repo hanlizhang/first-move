@@ -33,7 +33,8 @@ function habit(id: string, title: string, completedOn: string[] = []): Habit {
 }
 
 test("new Focus links include only Tasks and Habits active on the current local date", () => {
-  const activeTask = task("task-active", "Active task", ["2026-09-02"]);
+  const activeTask = task("task-active", "Active task");
+  const previouslyCompletedTask = task("task-completed-before", "Previously completed task", ["2026-09-02"]);
   const completedTask = task("task-completed", "Completed task", [today]);
   const deletedTask = task("task-deleted", "Deleted task");
   const activeHabit = habit("habit-active", "Active habit", ["2026-09-02"]);
@@ -41,7 +42,7 @@ test("new Focus links include only Tasks and Habits active on the current local 
   const deletedHabit = habit("habit-deleted", "Deleted habit");
   const populated = {
     ...createEmptyState(),
-    tasks: [activeTask, completedTask, deletedTask],
+    tasks: [activeTask, previouslyCompletedTask, completedTask, deletedTask],
     habits: [activeHabit, checkedHabit, deletedHabit],
   };
   const state = deleteHabit(deleteTask(populated, deletedTask.id), deletedHabit.id);
@@ -59,7 +60,24 @@ test("new Focus links include only Tasks and Habits active on the current local 
     linkedHabitId: "habit-active",
   });
   assert.deepEqual(focusLinkFields(options, "task:task-completed"), {});
+  assert.deepEqual(focusLinkFields(options, "task:task-completed-before"), {});
   assert.deepEqual(focusLinkFields(options, "habit:habit-checked"), {});
+});
+
+test("Focus includes only Habits scheduled and unchecked on the current local date", () => {
+  const scheduled = habit("habit-scheduled", "Scheduled habit");
+  const unscheduled: Habit = {
+    ...habit("habit-unscheduled", "Unscheduled habit"),
+    schedule: { kind: "weekdays", weekdays: ["fri"] },
+  };
+
+  assert.deepEqual(
+    buildFocusLinkOptions(
+      { ...createEmptyState(), habits: [scheduled, unscheduled] },
+      "2026-09-03",
+    ).map((option) => option.key),
+    ["habit:habit-scheduled"],
+  );
 });
 
 test("deriving new Focus links leaves historical relationships unchanged", () => {

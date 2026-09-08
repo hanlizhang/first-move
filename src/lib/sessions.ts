@@ -7,6 +7,7 @@ import {
 import { calculateSessionReward, roundPoints } from "./rewards.ts";
 import { localDateKey } from "./dates.ts";
 import { syncProgress } from "./progress.ts";
+import { isHabitActive, isHabitScheduled, isTaskActive } from "./app-state.ts";
 
 type IdFactory = () => string;
 
@@ -41,7 +42,7 @@ export function startCountdown(
   idFactory: IdFactory = () => makeSessionId(),
 ): AppState {
   if (getOpenSession(state) || !validDuration(input.durationMinutes) || hasMultipleLinks(input)) return state;
-  const linked = resolveLink(state, input);
+  const linked = resolveLink(state, input, localDateKey(new Date(nowMs)));
   if (!linked.valid) return state;
   const direction = input.direction ?? linked.direction;
   if (!isDirection(direction)) return state;
@@ -71,7 +72,7 @@ export function startStopwatch(
   idFactory: IdFactory = () => makeSessionId(),
 ): AppState {
   if (getOpenSession(state) || hasMultipleLinks(input)) return state;
-  const linked = resolveLink(state, input);
+  const linked = resolveLink(state, input, localDateKey(new Date(nowMs)));
   if (!linked.valid) return state;
   const direction = input.direction ?? linked.direction;
   if (!direction || !isDirection(direction)) return state;
@@ -141,11 +142,19 @@ export function reviewSession(
   const label = cleanLabel(input.label);
   if (!label || !isDirection(input.direction)) return state;
   if (input.linkedTaskId && input.linkedHabitId) return state;
-  if (input.linkedTaskId && !state.tasks.some((task) => task.id === input.linkedTaskId)) return state;
-  if (input.linkedHabitId && !state.habits.some((habit) => habit.id === input.linkedHabitId)) return state;
   const session = state.sessions.find((candidate) => candidate.id === sessionId);
   if (!session || (session.status !== "completed" && session.status !== "stopped")) return state;
   if (session.linkedIntentId && (input.linkedTaskId || input.linkedHabitId)) return state;
+  const preservesExistingLink =
+    input.linkedTaskId === session.linkedTaskId &&
+    input.linkedHabitId === session.linkedHabitId;
+  if (
+    !session.linkedIntentId &&
+    !preservesExistingLink &&
+    !resolveLink(state, input, localDateKey(new Date(nowMs))).valid
+  ) {
+    return state;
+  }
   return {
     ...state,
     sessions: state.sessions.map((candidate) =>
@@ -257,14 +266,22 @@ function updateOpenSession(
   return { ...state, sessions: state.sessions.map((session) => (session.id === sessionId ? next : session)) };
 }
 
-function resolveLink(state: AppState, link: SessionLink): { valid: boolean; direction?: Direction; label?: string } {
+function resolveLink(
+  state: AppState,
+  link: SessionLink,
+  dateKey: string,
+): { valid: boolean; direction?: Direction; label?: string } {
   if (link.linkedTaskId) {
     const task = state.tasks.find((candidate) => candidate.id === link.linkedTaskId);
-    return task ? { valid: true, direction: task.direction, label: task.title } : { valid: false };
+    return task && isTaskActive(task)
+      ? { valid: true, direction: task.direction, label: task.title }
+      : { valid: false };
   }
   if (link.linkedHabitId) {
     const habit = state.habits.find((candidate) => candidate.id === link.linkedHabitId);
-    return habit ? { valid: true, direction: habit.direction, label: habit.title } : { valid: false };
+    return habit && isHabitScheduled(habit, dateKey) && isHabitActive(habit, dateKey)
+      ? { valid: true, direction: habit.direction, label: habit.title }
+      : { valid: false };
   }
   if (link.linkedIntentId) {
     const intent = state.activityIntents.find((candidate) => candidate.id === link.linkedIntentId);

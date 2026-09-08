@@ -126,12 +126,12 @@ test("Focus offers active Tasks and Habits but not completed or deleted items", 
     },
     {
       id: "10000000-0000-4000-8000-000000000002",
-      title: "Completed task",
+      title: "Previously completed task",
       direction: "Daily Life",
       order: 1,
       createdAt: timestamp,
       updatedAt: timestamp,
-      completedOn: [dateKey],
+      completedOn: ["2026-08-08"],
     },
     {
       id: "10000000-0000-4000-8000-000000000003",
@@ -194,12 +194,27 @@ test("Focus offers active Tasks and Habits but not completed or deleted items", 
     withoutDeletedTask.tasks[1]?.id,
     "10000000-0000-4000-8000-000000000002",
   );
-  assert.deepEqual(withoutDeletedTask.tasks[1]?.completedOn, [dateKey]);
+  assert.deepEqual(withoutDeletedTask.tasks[1]?.completedOn, ["2026-08-08"]);
   assert.equal(
     activeState.habits[1]?.id,
     "20000000-0000-4000-8000-000000000002",
   );
   assert.deepEqual(activeState.habits[1]?.completedOn, [dateKey]);
+});
+
+test("Focus excludes Habits that are not scheduled on the current local date", () => {
+  const state = createEmptyState();
+  state.habits = [{
+    id: "20000000-0000-4000-8000-000000000001",
+    title: "Friday Habit",
+    direction: "Rest",
+    schedule: { kind: "weekdays", weekdays: ["fri"] },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    completedOn: [],
+  }];
+
+  assert.deepEqual(buildFocusLinkOptions(state, "2026-08-09"), []);
 });
 
 test("custom countdown validation accepts only whole minutes from 1 through 720", () => {

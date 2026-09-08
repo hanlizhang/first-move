@@ -68,7 +68,7 @@ export default function TasksScreen() {
     <Screen
       eyebrow="Today"
       title="Tasks"
-      description="Keep one-off actions small and concrete. Completion is recorded for your current local date."
+      description="Keep one-off actions small and concrete. Once completed, a Task stays completed."
     >
       <SecondaryButton title="Back to Today" onPress={() => router.back()} />
       {localWorkspaceMessage ? (
@@ -115,7 +115,7 @@ export default function TasksScreen() {
       </Card>
 
       <View style={styles.sectionHeader}>
-        <Label>Active Tasks</Label>
+        <Label>Tasks</Label>
         <Text style={styles.count}>{localWorkspace.tasks.length}</Text>
       </View>
       {localWorkspace.tasks.length === 0 ? (
@@ -133,9 +133,9 @@ export default function TasksScreen() {
             onToggle={() =>
               void saveChange(
                 (state) => toggleTaskCompletion(state, task.id, today),
-                !isTaskActive(task, today)
-                  ? "Task marked incomplete for today."
-                  : "Task completed for today.",
+                task.completedOn.includes(today)
+                  ? "Task marked incomplete."
+                  : "Task completed.",
               )
             }
             task={task}
@@ -239,7 +239,8 @@ function EditableTaskCard({
   task: Task;
   today: string;
 }) {
-  const completed = !isTaskActive(task, today);
+  const completed = !isTaskActive(task);
+  const completedToday = task.completedOn.includes(today);
   return (
     <Card tone={completed ? "success" : "default"}>
       <View style={styles.itemHeading}>
@@ -249,9 +250,10 @@ function EditableTaskCard({
         </View>
         <CompletionButton
           completed={completed}
-          disabled={disabled}
+          disabled={disabled || (completed && !completedToday)}
           label={task.title}
           onPress={onToggle}
+          sameDay={completedToday}
         />
       </View>
       <View style={styles.actionRow}>
@@ -277,15 +279,17 @@ function CompletionButton({
   disabled,
   label,
   onPress,
+  sameDay,
 }: {
   completed: boolean;
   disabled: boolean;
   label: string;
   onPress(): void;
+  sameDay: boolean;
 }) {
   return (
     <Pressable
-      accessibilityLabel={`${completed ? "Mark incomplete" : "Complete"} ${label}`}
+      accessibilityLabel={`${completed ? sameDay ? "Mark incomplete" : "Completed" : "Complete"} ${label}`}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: completed, disabled }}
       disabled={disabled}
@@ -298,7 +302,7 @@ function CompletionButton({
       ]}
     >
       <Text style={[styles.completionText, completed && styles.completionTextSelected]}>
-        {completed ? "Completed today" : "Complete today"}
+        {completed ? sameDay ? "Completed today" : "Completed" : "Complete Task"}
       </Text>
     </Pressable>
   );
