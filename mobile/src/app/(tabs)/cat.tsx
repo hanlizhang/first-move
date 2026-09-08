@@ -1,16 +1,20 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   useFirstMoveApp,
+  type AppSyncState,
   type CatEconomyActionOutcome,
 } from "../../app-state/app-provider.tsx";
+import { formatMobileSyncDiagnostic } from "../../cloud/sync-runtime.ts";
 import { PixelKitten } from "../../components/pixel-kitten.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import { Body, Card, LoadingState, Screen } from "../../components/ui.tsx";
 import {
   catActionDisableState,
   catReactionCaption,
+  canStartCatFoodInteraction,
+  createCatPoseReturnScheduler,
   getCatRoomView,
   inventoryQuantity,
   purchaseAvailability,
@@ -49,8 +53,20 @@ export default function CatScreen() {
   );
   const [section, setSection] = useState<CatSection>("room");
   const [savingId, setSavingId] = useState<string>();
+  const [queuedPurchase, setQueuedPurchase] = useState<{
+    itemId: string;
+    lastSuccessfulSyncAt?: string;
+  }>();
   const [notice, setNotice] = useState("");
   const [pose, setPose] = useState<CatPose>("sitting");
+  const poseReturnScheduler = useMemo(
+    () =>
+      createCatPoseReturnScheduler(
+        (callback, delayMs) => setTimeout(callback, delayMs),
+        (timerId) => clearTimeout(timerId),
+      ),
+    [],
+  );
   const pendingAuthenticatedWrite =
     auth.status === "authenticated" && sync.pendingCount > 0;
   const { transientInteractionDisabled, economicWriteDisabled } =
@@ -60,6 +76,20 @@ export default function CatScreen() {
       actionSaving: Boolean(savingId),
       pendingAuthenticatedWrite,
     });
+
+  useEffect(
+    () => () => poseReturnScheduler.cancel(),
+    [poseReturnScheduler],
+  );
+
+  const currentLastSuccessfulSyncAt =
+    "lastSuccessfulSyncAt" in sync ? sync.lastSuccessfulSyncAt : undefined;
+  const queuedPurchaseItemId =
+    pendingAuthenticatedWrite &&
+    queuedPurchase &&
+    queuedPurchase.lastSuccessfulSyncAt === currentLastSuccessfulSyncAt
+      ? queuedPurchase.itemId
+      : undefined;
 
   if (localWorkspaceStatus === "loading") {
     return (
@@ -71,41 +101,58 @@ export default function CatScreen() {
 
   async function buy(item: CatCatalogItem) {
     setSavingId(item.id);
-    const outcome = await buyCatItem(item.id, today);
-    setNotice(purchaseMessage(item, outcome));
-    setSavingId(undefined);
+    try {
+      const outcome = await buyCatItem(item.id, today);
+      setNotice(purchaseMessage(item, outcome));
+      setQueuedPurchase(
+        outcome === "queued" ||
+          outcome === "queued-offline" ||
+          outcome === "queued-blocked"
+          ? { itemId: item.id, lastSuccessfulSyncAt: currentLastSuccessfulSyncAt }
+          : undefined,
+      );
+    } finally {
+      setSavingId(undefined);
+    }
   }
 
   async function feed(item: CatCatalogItem) {
-    setSavingId(item.id);
-    const outcome = await feedCatFood(item.id, today);
-    if (outcome === "used") {
-      setPose(foodPose(item.id));
-      setNotice("");
-    } else {
-      setNotice(consumptionMessage(outcome));
+    if (!canStartCatFoodInteraction(localWorkspace, item.id)) {
+      setNotice(consumptionMessage("empty"));
+      return;
     }
-    setSavingId(undefined);
+    play(foodPose(item.id));
+    setSavingId(item.id);
+    try {
+      const outcome = await feedCatFood(item.id, today);
+      setNotice(outcome === "used" ? "" : consumptionMessage(outcome));
+    } finally {
+      setSavingId(undefined);
+    }
   }
 
   function play(nextPose: CatPose) {
     setPose(nextPose);
     setNotice("");
+    poseReturnScheduler.schedule(nextPose, () => setPose("sitting"));
   }
 
   async function chooseFurniture(itemId?: CatItemId) {
     setSavingId(itemId ?? "room-clear");
-    const next = await updateLocalWorkspace((state) =>
-      selectCatFurniture(state, itemId),
-    );
-    setNotice(
-      next
-        ? itemId
-          ? `${catItem(itemId)?.name ?? "Furniture"} is now in the room.`
-          : "The room has a little more open space."
-        : "That room choice could not be saved yet.",
-    );
-    setSavingId(undefined);
+    try {
+      const next = await updateLocalWorkspace((state) =>
+        selectCatFurniture(state, itemId),
+      );
+      setNotice(
+        next
+          ? itemId
+            ? `${catItem(itemId)?.name ?? "Furniture"} is now in the room.`
+            : "The room has a little more open space."
+          : "That room choice could not be saved yet.",
+      );
+    } finally {
+      setSavingId(undefined);
+    }
   }
 
   return (
@@ -126,7 +173,13 @@ export default function CatScreen() {
         <Card tone="warning"><Body>The Cat Room will be ready when this account finishes loading.</Body></Card>
       ) : null}
       {pendingAuthenticatedWrite ? (
-        <Card tone="warning"><Body>Your Cat Room change is safe and waiting to sync.</Body></Card>
+        <Card tone="warning"><Body>{catPendingSyncMessage(sync)}</Body></Card>
+      ) : null}
+      {__DEV__ && "queueSummary" in sync && (sync.pendingCount > 0 || sync.diagnostic) ? (
+        <Card tone="warning">
+          <Text style={styles.cardTitle}>Development sync diagnostic</Text>
+          <Body>{formatMobileSyncDiagnostic(sync)}</Body>
+        </Card>
       ) : null}
       {notice ? (
         <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
@@ -146,8 +199,11 @@ export default function CatScreen() {
         <CatStore
           disabled={economicWriteDisabled}
           onBuy={(item) => void buy(item)}
+          pendingItemId={savingId}
+          queuedItemId={queuedPurchaseItemId}
           room={room}
           state={localWorkspace}
+          syncPending={pendingAuthenticatedWrite}
         />
       )}
     </Screen>
@@ -315,13 +371,19 @@ function CatRoom({
 function CatStore({
   disabled,
   onBuy,
+  pendingItemId,
+  queuedItemId,
   room,
   state,
+  syncPending,
 }: {
   disabled: boolean;
   onBuy(item: CatCatalogItem): void;
+  pendingItemId?: string;
+  queuedItemId?: string;
   room: CatRoomView;
   state: Parameters<typeof purchaseAvailability>[0];
+  syncPending: boolean;
 }) {
   return (
     <>
@@ -354,7 +416,15 @@ function CatStore({
                   <Text style={styles.price}>{formatPoints(item.price)}</Text>
                   <ActionButton
                     disabled={disabled || availability !== "available"}
-                    label={purchaseButtonLabel(availability)}
+                    label={
+                      pendingItemId === item.id
+                        ? `Buying ${item.name}…`
+                        : queuedItemId === item.id
+                          ? "Waiting to sync…"
+                          : syncPending && availability === "available"
+                            ? "Sync pending…"
+                        : purchaseButtonLabel(availability)
+                    }
                     onPress={() => onBuy(item)}
                   />
                 </View>
@@ -473,7 +543,9 @@ function purchaseButtonLabel(availability: ReturnType<typeof purchaseAvailabilit
 
 function purchaseMessage(item: CatCatalogItem, outcome: CatEconomyActionOutcome): string {
   if (outcome === "purchased") return `${item.name} is yours.`;
-  if (outcome === "queued") return `${item.name} is saved for purchase when you’re back online.`;
+  if (outcome === "queued-offline") return `${item.name} is saved for purchase and will sync when you’re back online.`;
+  if (outcome === "queued-blocked") return `${item.name} is saved behind an earlier change and waiting to sync.`;
+  if (outcome === "queued") return "Purchase is saved and waiting to sync.";
   if (outcome === "insufficient") return "Not enough points yet. Nothing was lost.";
   if (outcome === "already-owned") return `${item.name} is already yours.`;
   if (outcome === "locked") return `This opens at ${item.unlockActiveDays} active days.`;
@@ -481,9 +553,24 @@ function purchaseMessage(item: CatCatalogItem, outcome: CatEconomyActionOutcome)
 }
 
 function consumptionMessage(outcome: CatEconomyActionOutcome): string {
-  if (outcome === "queued") return "Feeding is saved and will finish when you’re back online.";
+  if (outcome === "queued-offline") return "Feeding is saved and will finish when you’re back online.";
+  if (outcome === "queued-blocked") return "Feeding is saved behind an earlier change and waiting to sync.";
+  if (outcome === "queued") return "Feeding is saved and waiting to sync.";
   if (outcome === "empty") return "There is none of that food in the cupboard yet.";
   return "That snack could not be used. Your inventory is safe.";
+}
+
+function catPendingSyncMessage(sync: AppSyncState): string {
+  if (sync.status === "offline") {
+    return "Your Cat Room change is safe on this device and will retry when the connection returns.";
+  }
+  if (sync.status === "error") {
+    return "Your Cat Room change is safe and waiting for retry.";
+  }
+  if (sync.status === "syncing") {
+    return "Your Cat Room change is safe and syncing now.";
+  }
+  return "Your Cat Room change is safe and waiting to sync.";
 }
 
 function foodPose(itemId: CatItemId): CatPose {

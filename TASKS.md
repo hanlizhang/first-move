@@ -359,11 +359,12 @@ These items are intentionally deferred and are not implemented:
    - any `Scoop litter` action must stay optional and playful, award no points, apply no penalty or health/happiness/item loss, create no pressure to open the app, and may trigger only a small kitten reaction;
    - Companion Bond is designed as a non-decreasing 0–3-heart value, never Mood, with at most one Care Day per local date after both an Active Day and meaningful Cat interaction; proposed thresholds are 3/10/21 Care Days;
    - Little Finds are designed as no-value, unsellable collectibles eligible at most once per newly earned Care Day, with later deterministic/idempotent/server-authoritative authenticated selection and no daily-login pressure;
-   - future celebrations distinguish compact points, larger Active Day, major Bond, full chapter/milestone, and collectible-reveal moments, combining simultaneous rewards in one queued flow rather than stacked blocking modals;
+   - future celebrations distinguish compact Coin gain, larger `Active Day +1`, major Bond level-up, full Cat milestone unlock, and Little Find reveal moments; simultaneous rewards use one ordered or combined celebration queue rather than stacked blocking modals;
    - Companion Bond, Care Days, Little Finds, and celebration schema/code are not part of the Cat v1 catalog migration.
 3. Release UI polish:
    - remove developer-facing `Storage boundary` / architecture explanations;
    - replace them with simple user-facing Local / Pending / Synced / Offline states;
+   - user-facing points may later be labeled `Coins` with one shared Web/Mobile icon as a presentation-only change; keep stored points, reward-ledger fields, reward values, RPCs, and economy semantics unchanged;
    - consider dedicated/full-screen active Focus session UI.
 4. RevenueCat Pro entitlement.
 5. Server-controlled AI quota.

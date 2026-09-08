@@ -84,6 +84,8 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 ### Intentionally deferred
 
 - Mobile Trends/Calendar history parity, rich Cat v1B interactions, Companion Bond, Little Finds, celebration UI, RevenueCat Pro entitlement, server-controlled AI quota, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
+- A later presentation pass may label user-facing points as `Coins` and use one shared coin icon across Web and Mobile. This does not rename or alter stored points, `reward_ledger.points_tenths`, reward values, RPC contracts, or economy semantics.
+- Celebration UI remains designed only: compact Coin gain, larger `Active Day +1`, major Bond level-up, full Cat milestone unlock, and Little Find reveal. Simultaneous rewards must use one ordered or combined celebration queue rather than stacked blocking moments.
 - Mobile empty-account setup/import, post-session choices, Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
 
 ## 6. Migration list and recorded state

@@ -3,6 +3,7 @@ import {
   type AppStateStatus,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNetworkState } from "expo-network";
 import {
   createContext,
   useCallback,
@@ -31,6 +32,8 @@ import {
 import {
   MobileSyncRuntime,
   defaultMobileSyncDependencies,
+  summarizePendingMutations,
+  type AuthenticatedCatEconomyResult,
   type MobileSyncClient,
   type MobileSyncSnapshot,
 } from "../cloud/sync-runtime.ts";
@@ -84,6 +87,8 @@ export type CatEconomyActionOutcome =
   | "used"
   | "empty"
   | "queued"
+  | "queued-offline"
+  | "queued-blocked"
   | "error";
 
 export type AppSyncState =
@@ -97,6 +102,12 @@ const defaultSyncDependencies = defaultMobileSyncDependencies();
 const guestWorkspaceKey = localWorkspaceKey({ kind: "guest" });
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const networkState = useNetworkState();
+  const networkKnownOffline =
+    networkState.isConnected === false ||
+    networkState.isInternetReachable === false;
+  const networkKnownOfflineRef = useRef(networkKnownOffline);
+  const previousNetworkKnownOfflineRef = useRef(networkKnownOffline);
   const [auth, dispatch] = useReducer(reduceAuthState, initialAuthState);
   const [cloud, setCloud] = useState<CloudHydrationState>({ status: "idle" });
   const [sync, setSync] = useState<AppSyncState>({
@@ -160,6 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           userId: auth.user.id,
           status: "loading",
           pendingCount: 0,
+          queueSummary: summarizePendingMutations([]),
         };
   }, [auth, sync]);
   const workspaceEditable =
@@ -272,6 +284,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     activeLocalOwnerKeyRef.current = activeLocalOwnerKey;
   }, [activeLocalOwnerKey]);
+
+  useEffect(() => {
+    const wasOffline = previousNetworkKnownOfflineRef.current;
+    networkKnownOfflineRef.current = networkKnownOffline;
+    previousNetworkKnownOfflineRef.current = networkKnownOffline;
+    if (wasOffline && !networkKnownOffline) {
+      void syncRuntimeRef.current?.retry();
+    }
+  }, [networkKnownOffline]);
 
   useEffect(() => {
     if (
@@ -390,6 +411,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       queue: syncQueue,
       isCurrent,
       ...defaultSyncDependencies,
+      online: () => !networkKnownOfflineRef.current,
       async applyCanonical(workspace, hydratedAt) {
         await repository.saveCloudWorkspace(userId, workspace, hydratedAt);
         if (!isCurrent()) return;
@@ -552,7 +574,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           localDate,
         );
         if (!result) return "error";
-        return result.outcome === "applied" ? "purchased" : result.outcome;
+        return authenticatedCatOutcome(result, "purchased");
       } catch {
         return "error";
       }
@@ -586,7 +608,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           localDate,
         );
         if (!result) return "error";
-        return result.outcome === "applied" ? "used" : result.outcome;
+        return authenticatedCatOutcome(result, "used");
       } catch {
         return "error";
       }
@@ -641,4 +663,15 @@ export function useFirstMoveApp(): AppContextValue {
   const context = useContext(AppContext);
   if (!context) throw new Error("useFirstMoveApp must be used inside AppProvider.");
   return context;
+}
+
+function authenticatedCatOutcome(
+  result: AuthenticatedCatEconomyResult,
+  appliedOutcome: "purchased" | "used",
+): CatEconomyActionOutcome {
+  if (result.outcome === "applied") return appliedOutcome;
+  if (result.outcome !== "queued") return result.outcome;
+  if (result.queueReason === "offline") return "queued-offline";
+  if (result.queueReason === "blocked-by-earlier") return "queued-blocked";
+  return "queued";
 }

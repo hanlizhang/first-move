@@ -9,9 +9,14 @@ import {
 import { canonicalPayload, USER_ID } from "../test-fixtures/canonical.ts";
 import {
   CAT_POSES,
+  CAT_FEEDING_POSE_DURATION_MS,
+  CAT_TRANSIENT_POSE_DURATION_MS,
   catActionDisableState,
   catGrowthStory,
+  catPoseReturnDelayMs,
   catReactionCaption,
+  canStartCatFoodInteraction,
+  createCatPoseReturnScheduler,
   getCatRoomView,
   inventoryQuantity,
   kittenStage,
@@ -123,6 +128,94 @@ test("pending authenticated writes disable economic actions but not loaded trans
     }).transientInteractionDisabled,
     true,
   );
+  assert.deepEqual(
+    catActionDisableState({
+      localWorkspaceLoaded: true,
+      workspaceEditable: true,
+      actionSaving: true,
+      pendingAuthenticatedWrite: false,
+    }),
+    {
+      transientInteractionDisabled: false,
+      economicWriteDisabled: true,
+    },
+  );
+});
+
+test("temporary Cat poses use deterministic return durations", () => {
+  for (const pose of ["milk", "food", "treat"] as const) {
+    assert.equal(catPoseReturnDelayMs(pose), CAT_FEEDING_POSE_DURATION_MS, pose);
+  }
+  for (const pose of [
+    "walking",
+    "sleeping",
+    "yarn",
+    "wand",
+    "high-five",
+    "paw-shake",
+  ] as const) {
+    assert.equal(catPoseReturnDelayMs(pose), CAT_TRANSIENT_POSE_DURATION_MS, pose);
+  }
+  assert.equal(catPoseReturnDelayMs("sitting"), undefined);
+  assert.equal(catPoseReturnDelayMs("garden"), undefined);
+});
+
+test("Cat pose return scheduling replaces stale timers and cancels cleanly", () => {
+  const callbacks = new Map<number, () => void>();
+  const cleared: number[] = [];
+  const delays: number[] = [];
+  let nextTimerId = 0;
+  let sittingCount = 0;
+  const scheduler = createCatPoseReturnScheduler(
+    (callback, delayMs) => {
+      nextTimerId += 1;
+      callbacks.set(nextTimerId, callback);
+      delays.push(delayMs);
+      return nextTimerId;
+    },
+    (timerId) => cleared.push(timerId),
+  );
+
+  scheduler.schedule("milk", () => {
+    sittingCount += 1;
+  });
+  const staleCallback = callbacks.get(1);
+  scheduler.schedule("yarn", () => {
+    sittingCount += 1;
+  });
+  assert.deepEqual(delays, [
+    CAT_FEEDING_POSE_DURATION_MS,
+    CAT_TRANSIENT_POSE_DURATION_MS,
+  ]);
+  assert.deepEqual(cleared, [1]);
+  staleCallback?.();
+  assert.equal(sittingCount, 0);
+
+  callbacks.get(2)?.();
+  assert.equal(sittingCount, 1);
+  scheduler.schedule("walking", () => {
+    sittingCount += 1;
+  });
+  const cancelledCallback = callbacks.get(3);
+  scheduler.cancel();
+  assert.deepEqual(cleared, [1, 3]);
+  cancelledCallback?.();
+  assert.equal(sittingCount, 1);
+
+  scheduler.schedule("sitting", () => {
+    sittingCount += 1;
+  });
+  assert.equal(delays.length, 3);
+});
+
+test("feeding pose eligibility validates owned local food without mutating inventory", () => {
+  const state = createEmptyState();
+  state.inventory.items = [{ itemId: "kitten-milk", quantity: 1 }];
+  const before = structuredClone(state);
+  assert.equal(canStartCatFoodInteraction(state, "kitten-milk"), true);
+  assert.equal(canStartCatFoodInteraction(state, "cat-food"), false);
+  assert.equal(canStartCatFoodInteraction(state, "yarn-toy"), false);
+  assert.deepEqual(state, before);
 });
 
 test("growth story follows symbolic active-day chapters without changing catalog unlocks", () => {

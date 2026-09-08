@@ -76,6 +76,14 @@ export interface CatActionDisableState {
   economicWriteDisabled: boolean;
 }
 
+export const CAT_FEEDING_POSE_DURATION_MS = 5_000;
+export const CAT_TRANSIENT_POSE_DURATION_MS = 6_500;
+
+export interface CatPoseReturnScheduler {
+  schedule(pose: CatPose, onSit: () => void): void;
+  cancel(): void;
+}
+
 export const CAT_REACTION_CAPTIONS: Readonly<Record<CatPose, string>> = {
   sitting: "The kitten sits nearby, cozy and curious.",
   walking: "The kitten pads softly around the room.",
@@ -152,6 +160,52 @@ export function catActionDisableState({
     transientInteractionDisabled: !localWorkspaceLoaded,
     economicWriteDisabled:
       !workspaceEditable || actionSaving || pendingAuthenticatedWrite,
+  };
+}
+
+export function catPoseReturnDelayMs(pose: CatPose): number | undefined {
+  if (pose === "milk" || pose === "food" || pose === "treat") {
+    return CAT_FEEDING_POSE_DURATION_MS;
+  }
+  if (
+    pose === "walking" ||
+    pose === "sleeping" ||
+    pose === "yarn" ||
+    pose === "wand" ||
+    pose === "high-five" ||
+    pose === "paw-shake"
+  ) {
+    return CAT_TRANSIENT_POSE_DURATION_MS;
+  }
+  return undefined;
+}
+
+export function createCatPoseReturnScheduler<TimerId>(
+  setTimer: (callback: () => void, delayMs: number) => TimerId,
+  clearTimer: (timerId: TimerId) => void,
+): CatPoseReturnScheduler {
+  let timerId: TimerId | undefined;
+  let revision = 0;
+
+  function cancel() {
+    revision += 1;
+    if (timerId !== undefined) clearTimer(timerId);
+    timerId = undefined;
+  }
+
+  return {
+    schedule(pose, onSit) {
+      cancel();
+      const delayMs = catPoseReturnDelayMs(pose);
+      if (delayMs === undefined) return;
+      const scheduledRevision = revision;
+      timerId = setTimer(() => {
+        if (scheduledRevision !== revision) return;
+        timerId = undefined;
+        onSit();
+      }, delayMs);
+    },
+    cancel,
   };
 }
 
@@ -303,6 +357,13 @@ export function consumeGuestCatFood(state: AppState, itemId: CatItemId): CatUseR
       },
     },
   };
+}
+
+export function canStartCatFoodInteraction(
+  state: AppState,
+  itemId: CatItemId,
+): boolean {
+  return catItem(itemId)?.kind === "food" && inventoryQuantity(state, itemId) > 0;
 }
 
 export function selectCatFurniture(

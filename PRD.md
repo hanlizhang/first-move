@@ -167,10 +167,11 @@ Each direction uses neutral language and can be changed before or after a sessio
 
 #### Designed future Cat engagement — deferred
 
+- **Coin presentation:** user-facing points may later be labeled `Coins` and use one shared cross-platform icon on Web and Mobile. This is presentation-only: stored points, `reward_ledger.points_tenths`, reward values, RPC contracts, and economy semantics remain unchanged.
 - **Companion Bond:** a persistent, non-punitive `Bond` display of 0–3 hearts that never decreases and is never called Mood. At most one Care Day may be earned per local date, requiring both a qualifying Active Day and at least one meaningful Cat interaction that day. Repeated feeding or play cannot farm Care Days. Proposed levels are Bond 1 at 3 Care Days, Bond 2 at 10, and Bond 3 at 21.
 - **Little Finds:** quirky collectible gifts such as a leaf, feather, pom-pom, tiny plush mouse, pebble, ribbon, acorn, shell, mysterious sock, or paperclip. They have no point value and cannot be sold. Eligibility occurs at most once per newly earned Care Day; authenticated selection must later be deterministic, idempotent, and server-authoritative rather than retryable client randomness. Finds never punish absence or require daily login, and their collection/achievement presentation is future work.
-- **Celebrations:** ordinary `+N points` may use a compact celebration; a new Active Day gets a larger `Active day +1` moment; Bond level-up gets a major 1/2/3-heart celebration; chapter or milestone unlock gets a full achievement-style animation; and a Little Find gets a collectible reveal. Simultaneous rewards use one queued or combined flow rather than stacked blocking full-screen modals.
-- These three systems are designed only. Their schema, persistence, server authority, selection logic, and UI are not implemented by the Cat v1 catalog migration.
+- **Celebrations:** a Coin gain may use a compact celebration; a new Active Day gets a larger `Active Day +1` moment; Bond level-up gets a major 1/2/3-heart celebration; a Cat milestone unlock gets a full achievement-style moment; and a Little Find gets a collectible reveal. Simultaneous rewards use one ordered or combined celebration queue rather than stacked blocking full-screen modals.
+- These future presentation and engagement systems are designed only. Their schema, persistence, server authority, selection logic, and UI are not implemented by the Cat v1 catalog migration.
 
 ### Daily Reflection
 

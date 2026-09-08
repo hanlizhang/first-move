@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(42);
+select plan(43);
 
 select has_function(
   'public', 'sync_cloud_workspace_v1',
@@ -159,6 +159,18 @@ select lives_ok(
   'inventory consumption retry is idempotent'
 );
 select is((select count(*)::integer from public.inventory_events where kind = 'consume'), 1, 'consumption retry adds one inventory event');
+select is(
+  public.sync_cloud_workspace_v1(
+    '88800000-0000-4000-8000-000000000008',
+    '88000000-0000-4000-8000-000000000008',
+    'Europe/Berlin',
+    (select state from sync_fixture),
+    (select plans from sync_fixture),
+    '{"purchases":[],"consumptions":[{"itemId":"kitten-milk","quantity":1,"localDate":"2026-07-31"}]}'::jsonb
+  ),
+  public.get_cloud_workspace_v2(),
+  'a persisted economic retry returns the exact current canonical workspace'
+);
 
 select set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000009', true);
 select lives_ok(

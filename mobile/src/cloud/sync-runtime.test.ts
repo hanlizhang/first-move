@@ -32,6 +32,7 @@ import {
 import { canonicalPayload } from "../test-fixtures/canonical.ts";
 import { createMobileSyncQueue } from "./sync-queue.ts";
 import {
+  formatMobileSyncDiagnostic,
   MobileSyncRuntime,
   SYNC_CLOUD_WORKSPACE_RPC,
   type MobileSyncClient,
@@ -830,6 +831,46 @@ test("refresh never reads over a failed pending mutation", async () => {
       .tasks[0]?.title,
     "Keep pending",
   );
+  assert.equal(fixture.runtime.getSnapshot().status, "error");
+  assert.deepEqual(fixture.runtime.getSnapshot().diagnostic, {
+    failureClass: "network",
+    safeErrorCode: "NO_ERROR_CODE",
+    safeMessageClass: "rpc-transport-failed",
+  });
+});
+
+test("an older failed mutation is surfaced as the FIFO blocker for a purchase", async () => {
+  const fixture = harness();
+  await fixture.runtime.start();
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    addTask(state, { title: "Earlier change", direction: "Rest" }, () => NOW, () => TASK_ID),
+  );
+  assert.equal((await fixture.queue.load(USER_A)).pending.length, 1);
+
+  fixture.cloud.failWrites = true;
+  fixture.online(true);
+  const result = await fixture.runtime.purchaseInventoryItem("kitten-milk", TODAY);
+
+  assert.equal(result.outcome, "queued");
+  assert.equal(result.queueReason, "blocked-by-earlier");
+  assert.equal(result.blockedByEarlierCount, 1);
+  assert.equal(fixture.runtime.getSnapshot().status, "error");
+  assert.deepEqual(fixture.runtime.getSnapshot().queueSummary, {
+    totalCount: 2,
+    workspaceCount: 1,
+    purchaseCount: 1,
+    consumptionCount: 0,
+    mixedEconomicCount: 0,
+    headType: "workspace",
+    blockedFollowerCount: 1,
+  });
+  assert.equal(syncCalls(fixture.cloud).length, 1);
+  const diagnostic = formatMobileSyncDiagnostic(fixture.runtime.getSnapshot());
+  assert.match(diagnostic, /1 workspace, 1 purchase/);
+  assert.match(diagnostic, /FIFO head: workspace; blocked followers: 1/);
+  assert.doesNotMatch(diagnostic, new RegExp(USER_A));
+  assert.doesNotMatch(diagnostic, /Earlier change/);
 });
 
 test("sign-out leaves the account queue durable and prevents dispatch", async () => {
@@ -875,6 +916,45 @@ test("the current Supabase UUID is revalidated before every queued dispatch", as
   await fixture.runtime.retry();
   assert.equal(syncCalls(fixture.cloud).length, 1);
   assert.equal((await fixture.queue.load(USER_A)).pending.length, 1);
+  assert.deepEqual(fixture.runtime.getSnapshot().diagnostic, {
+    failureClass: "auth-session",
+    safeErrorCode: "SESSION_MISMATCH",
+    safeMessageClass: "authenticated-owner-session-mismatch",
+  });
+});
+
+test("a session change after an RPC response leaves the mutation queued and reports auth", async () => {
+  const fixture = harness();
+  await fixture.runtime.start();
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    addTask(state, { title: "Stay queued", direction: "Rest" }, () => NOW, () => TASK_ID),
+  );
+  let sessionChecks = 0;
+  fixture.client.auth.getSession = async () => {
+    sessionChecks += 1;
+    return {
+      data: {
+        session:
+          sessionChecks === 1
+            ? { user: { id: USER_A } }
+            : { user: { id: USER_B } },
+      },
+      error: null,
+    };
+  };
+
+  fixture.online(true);
+  await fixture.runtime.retry();
+
+  assert.equal(syncCalls(fixture.cloud).length, 1);
+  assert.equal((await fixture.queue.load(USER_A)).pending.length, 1);
+  assert.equal(fixture.runtime.getSnapshot().status, "error");
+  assert.deepEqual(fixture.runtime.getSnapshot().diagnostic, {
+    failureClass: "auth-session",
+    safeErrorCode: "SESSION_MISMATCH",
+    safeMessageClass: "authenticated-owner-session-mismatch",
+  });
 });
 
 test("account A and account B queues and working copies never cross", async () => {
@@ -931,6 +1011,10 @@ test("invalid canonical refresh never replaces a valid local working copy", asyn
   const after = await fixture.repository.loadLocalWorkspace({ kind: "account", userId: USER_A });
   assert.deepEqual(after, before);
   assert.equal(fixture.runtime.getSnapshot().status, "error");
+  assert.equal(
+    fixture.runtime.getSnapshot().diagnostic?.failureClass,
+    "canonical-validation",
+  );
 });
 
 test("a safe no-pending refresh applies newer validated Web canonical state", async () => {
