@@ -32,8 +32,9 @@ test("Focus keeps the pending First Move separate from Quick Countdown and optio
   assert.match(focusPanel, /Quick Countdown/);
   assert.match(focusPanel, /No linked item/);
   assert.match(focusPanel, /buildFocusLinkOptions\(state, today\)/);
-  assert.match(focusPanel, /focusLinkFields\(buildFocusLinkOptions\(current, localDateKey\(\)\), countdownLink\)/);
-  assert.match(focusPanel, /focusLinkFields\(buildFocusLinkOptions\(current, localDateKey\(\)\), stopwatchLink\)/);
+  assert.match(focusPanel, /const currentOptions = buildFocusLinkOptions\(current, localDateKey\(\)\)/);
+  assert.match(focusPanel, /focusLinkFields\(currentOptions, countdownLink\)/);
+  assert.match(focusPanel, /focusLinkFields\(currentOptions, stopwatchLink\)/);
   assert.doesNotMatch(focusPanel, /state\.tasks\.map/);
   assert.doesNotMatch(focusPanel, /state\.habits\.map/);
   assert.match(focusPanel, /onClick=\{beginCountdown\}>Start countdown/);
@@ -43,7 +44,10 @@ test("Focus keeps the pending First Move separate from Quick Countdown and optio
   assert.match(sessionReview, /Saved automatically/);
   assert.match(sessionReview, /Edit details/);
   assert.match(sessionReview, /Save changes/);
-  assert.match(sessionReview, /state\.tasks\.map/);
-  assert.match(sessionReview, /state\.habits\.map/);
+  assert.match(sessionReview, /buildFocusLinkOptions\(state, localDateKey\(\)\)/);
+  assert.match(sessionReview, /linkOptions\.map/);
+  assert.match(sessionReview, /Current relationship retained/);
+  assert.doesNotMatch(sessionReview, /state\.tasks\.map/);
+  assert.doesNotMatch(sessionReview, /state\.habits\.map/);
   assert.doesNotMatch(sessionReview, />Save session</);
 });

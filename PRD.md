@@ -93,9 +93,9 @@ Each direction uses neutral language and can be changed before or after a sessio
 
 ### Focus link eligibility
 
-- For new Focus sessions, active incomplete Tasks are selectable; completed or deleted Tasks are not.
+- For new Focus sessions, only never-completed active Tasks are selectable; any Task with one or more completion-history dates is completed and is not selectable, including on later local dates. Deleted Tasks are not selectable.
 - Active Habits that have not been checked for the current local date are selectable; Habits already checked today are not.
-- Deleted or inactive Habits are not selectable.
+- Habits must also be scheduled for the current local date. Deleted, inactive, unscheduled-today, or checked-today Habits are not selectable.
 - Historical `ActivitySession` relationships remain valid after a linked Task is completed or deleted, or a linked Habit is checked or deleted.
 
 ### Session lifecycle
@@ -127,9 +127,18 @@ Each direction uses neutral language and can be changed before or after a sessio
 ### Manual tasks and habits
 
 - Create, edit, delete, reorder, categorize, and complete manual tasks.
+- Tasks are one-shot items: `completedOn.length === 0` is active and `completedOn.length > 0` is completed. Once completed, a Task never becomes active merely because the local date changes.
+- Keep completed Tasks and every existing `completedOn` date for history and historical Session/Intent relationships. Do not collapse or rewrite legacy Tasks that contain multiple completion dates.
+- Permit only a same-local-date undo of a Task completion as a safe correction where persistence supports it. Do not expose ordinary cross-day reopen or repeat behavior.
 - Create lightweight habits scheduled daily or on selected weekdays.
 - Allow a task or habit to become the source of a smaller First Move without changing the original item.
-- Award configured points once per eligible completion per local day.
+- Award the configured Task reward once for its one-shot completion, without duplicating it after same-day undo/re-complete. Habit rewards remain once per eligible completion per local day.
+
+### Today Task visibility
+
+- Show never-completed active Tasks as today's unfinished items.
+- A Task completed on the current local date may remain visible as completed for today's progress and same-day correction.
+- A Task completed before the current local date must not appear as today's unfinished item. Habits retain their current schedule and local-date check-in behavior.
 
 ### Optional AI task organization
 

@@ -59,6 +59,23 @@ test("selected-day detail includes tasks, habits, sessions, and Mini Journal", (
   assert.equal(detail.sessions[0].status, "stopped"); assert.equal(detail.journalEntry?.completed, "Showed up");
 });
 
+test("legacy one-shot Task history remains visible on every stored completion date", () => {
+  const state = createEmptyState();
+  state.tasks = [{
+    id: "legacy-task",
+    title: "Legacy Task",
+    direction: "Daily Life",
+    order: 0,
+    createdAt: "2026-07-18T08:00:00.000Z",
+    updatedAt: "2026-07-20T08:00:00.000Z",
+    completedOn: ["2026-07-18", "2026-07-20"],
+  }];
+
+  assert.equal(getDayDetail(state, "2026-07-18").completedTasks[0]?.id, "legacy-task");
+  assert.equal(getDayDetail(state, "2026-07-20").completedTasks[0]?.id, "legacy-task");
+  assert.deepEqual(state.tasks[0].completedOn, ["2026-07-18", "2026-07-20"]);
+});
+
 test("empty data returns zeroed summaries and selectable calendar dates", () => {
   const summary = getTrendSummary(createEmptyState(), "2026-07-20", 7);
   const detail = getDayDetail(createEmptyState(), "2026-07-20");

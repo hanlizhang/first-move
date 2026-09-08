@@ -24,13 +24,11 @@ import {
 } from "../theme/tokens.ts";
 
 export function FocusLinkPicker({
-  currentUnavailableLabel,
   label,
   onSelect,
   options,
   selectedKey,
 }: {
-  currentUnavailableLabel?: string;
   label: string;
   onSelect(value: string): void;
   options: readonly FocusLinkOption[];
@@ -39,7 +37,6 @@ export function FocusLinkPicker({
   const [visible, setVisible] = useState(false);
   const [query, setQuery] = useState("");
   const selected = findFocusLinkOption(options, selectedKey);
-  const selectedAvailable = !selectedKey || Boolean(selected);
   const filtered = useMemo(
     () => filterFocusLinkOptions(options, query),
     [options, query],
@@ -49,7 +46,7 @@ export function FocusLinkPicker({
   const selectedLabel = selected
     ? `${selected.kind === "task" ? "Task" : "Habit"}: ${selected.title}`
     : selectedKey
-      ? currentUnavailableLabel ?? "Existing linked item is unavailable"
+      ? "Existing linked item is unavailable"
       : "No linked item";
 
   function open(): void {
@@ -126,17 +123,6 @@ export function FocusLinkPicker({
               onPress={() => choose("")}
               selected={!selectedKey}
             />
-            {!selectedAvailable ? (
-              <>
-                <Text style={styles.groupLabel}>Current relationship</Text>
-                <PickerOption
-                  detail="Unavailable for new links · retained until you choose another item"
-                  label={currentUnavailableLabel ?? "Existing linked item"}
-                  onPress={() => choose(selectedKey)}
-                  selected
-                />
-              </>
-            ) : null}
             <OptionGroup
               emptyLabel={query ? "No matching Tasks" : "No active Tasks"}
               label="Tasks"

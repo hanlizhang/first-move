@@ -1,5 +1,5 @@
 import { isLocalDateKey } from "./dates.ts";
-import { isHabitScheduled } from "./tasks-habits.ts";
+import { isHabitScheduled, isTaskVisibleToday } from "./tasks-habits.ts";
 import {
   DIRECTIONS,
   type ActivitySession,
@@ -57,7 +57,9 @@ export function getTodayView(state: AppState, dateKey: string): TodayView {
   for (const item of focusItems) directionTotals[item.direction] += item.durationMs;
 
   return {
-    tasks: [...state.tasks].sort((left, right) => left.order - right.order),
+    tasks: state.tasks
+      .filter((task) => isTaskVisibleToday(task, dateKey))
+      .sort((left, right) => left.order - right.order),
     habits: isLocalDateKey(dateKey)
       ? state.habits.filter((habit) => isHabitScheduled(habit, dateKey))
       : [],

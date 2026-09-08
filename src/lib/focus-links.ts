@@ -1,4 +1,4 @@
-import { isHabitActive, isTaskActive } from "./app-state.ts";
+import { isHabitActive, isHabitScheduled, isTaskActive } from "./app-state.ts";
 import type { AppState, Direction } from "./models.ts";
 
 export type FocusLinkKind = "task" | "habit";
@@ -14,7 +14,7 @@ export interface FocusLinkOption {
 export function buildFocusLinkOptions(state: AppState, dateKey: string): FocusLinkOption[] {
   return [
     ...state.tasks
-      .filter((task) => isTaskActive(task, dateKey))
+      .filter((task) => isTaskActive(task))
       .map((task) => ({
         key: `task:${task.id}`,
         kind: "task" as const,
@@ -23,7 +23,7 @@ export function buildFocusLinkOptions(state: AppState, dateKey: string): FocusLi
         direction: task.direction,
       })),
     ...state.habits
-      .filter((habit) => isHabitActive(habit, dateKey))
+      .filter((habit) => isHabitScheduled(habit, dateKey) && isHabitActive(habit, dateKey))
       .map((habit) => ({
         key: `habit:${habit.id}`,
         kind: "habit" as const,

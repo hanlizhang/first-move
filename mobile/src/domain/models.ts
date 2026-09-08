@@ -40,6 +40,7 @@ export interface Task {
   order: number;
   createdAt: string;
   updatedAt: string;
+  /** Empty means active; any completion date means this one-shot Task is completed. */
   completedOn: string[];
 }
 

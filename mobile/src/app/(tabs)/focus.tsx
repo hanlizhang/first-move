@@ -220,6 +220,7 @@ export default function FocusScreen() {
                   "Your pending First Move has started.",
                 )
               }
+              state={localWorkspace}
             />
           ) : null}
 
@@ -364,11 +365,13 @@ function PendingFirstMoveCard({
   intent,
   linkOptions,
   onStart,
+  state,
 }: {
   disabled: boolean;
   intent: ActivityIntent;
   linkOptions: readonly FocusLinkOption[];
   onStart(): void;
+  state: AppState;
 }) {
   return (
     <Card tone="primary">
@@ -382,7 +385,7 @@ function PendingFirstMoveCard({
         />
         <Detail
           label="Relationship"
-          value={intentRelationshipLabel(intent, linkOptions)}
+          value={intentRelationshipLabel(intent, linkOptions, state)}
         />
       </View>
       <Body muted>
@@ -585,6 +588,7 @@ function SessionReview({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const relationship = sessionRelationshipLabel(session, state, linkOptions);
+  const currentLinkUnavailable = Boolean(linkKey) && !findFocusLinkOption(linkOptions, linkKey);
 
   async function saveReview(): Promise<void> {
     if (!label.trim() || saving || !workspaceEditable) return;
@@ -667,9 +671,18 @@ function SessionReview({
               <Text style={styles.inputLabel}>Linked First Move retained</Text>
               <Body muted>{relationship}</Body>
             </View>
+          ) : currentLinkUnavailable ? (
+            <View style={styles.retainedRelationship}>
+              <Text style={styles.inputLabel}>Current relationship retained</Text>
+              <Body muted>{relationship}</Body>
+              <SecondaryButton
+                disabled={saving || !workspaceEditable}
+                title="Change linked item"
+                onPress={() => setLinkKey("")}
+              />
+            </View>
           ) : (
             <FocusLinkPicker
-              currentUnavailableLabel={relationship}
               label="Linked Task or Habit (optional)"
               onSelect={setLinkKey}
               options={linkOptions}
@@ -778,19 +791,18 @@ function focusTitle(
 function intentRelationshipLabel(
   intent: ActivityIntent,
   options: readonly FocusLinkOption[],
+  state?: AppState,
 ): string {
   if (intent.linkedTaskId) {
-    const title = findFocusLinkOption(
-      options,
-      focusLinkKey("task", intent.linkedTaskId),
-    )?.title;
+    const title =
+      state?.tasks.find((candidate) => candidate.id === intent.linkedTaskId)?.title ??
+      findFocusLinkOption(options, focusLinkKey("task", intent.linkedTaskId))?.title;
     return title ? `Task: ${title}` : "Task currently unavailable";
   }
   if (intent.linkedHabitId) {
-    const title = findFocusLinkOption(
-      options,
-      focusLinkKey("habit", intent.linkedHabitId),
-    )?.title;
+    const title =
+      state?.habits.find((candidate) => candidate.id === intent.linkedHabitId)?.title ??
+      findFocusLinkOption(options, focusLinkKey("habit", intent.linkedHabitId))?.title;
     return title ? `Habit: ${title}` : "Habit currently unavailable";
   }
   return "No linked item";
@@ -806,22 +818,20 @@ function sessionRelationshipLabel(
       (candidate) => candidate.id === session.linkedIntentId,
     );
     return intent
-      ? `First Move: ${intent.moveText} · ${intentRelationshipLabel(intent, options)}`
+      ? `First Move: ${intent.moveText} · ${intentRelationshipLabel(intent, options, state)}`
       : "Linked First Move retained";
   }
   if (session.linkedTaskId) {
-    const option = findFocusLinkOption(
-      options,
-      focusLinkKey("task", session.linkedTaskId),
-    );
-    return option ? `Task: ${option.title}` : "Linked Task currently unavailable";
+    const title =
+      state.tasks.find((candidate) => candidate.id === session.linkedTaskId)?.title ??
+      findFocusLinkOption(options, focusLinkKey("task", session.linkedTaskId))?.title;
+    return title ? `Task: ${title}` : "Linked Task currently unavailable";
   }
   if (session.linkedHabitId) {
-    const option = findFocusLinkOption(
-      options,
-      focusLinkKey("habit", session.linkedHabitId),
-    );
-    return option ? `Habit: ${option.title}` : "Linked Habit currently unavailable";
+    const title =
+      state.habits.find((candidate) => candidate.id === session.linkedHabitId)?.title ??
+      findFocusLinkOption(options, focusLinkKey("habit", session.linkedHabitId))?.title;
+    return title ? `Habit: ${title}` : "Linked Habit currently unavailable";
   }
   return "Standalone — no linked item";
 }

@@ -7,6 +7,7 @@ import {
   cancelPendingIntent,
   createPendingIntent,
   getPendingIntent,
+  isTaskActive,
   isHabitScheduled,
   localDateKey,
   normalizeAppState,
@@ -123,6 +124,30 @@ test("inherits a linked item direction unless an editable direction is supplied"
     () => "intent-edited",
   );
   assert.equal(getPendingIntent(editable)?.direction, "Rest");
+});
+
+test("a completed Task cannot be linked to a new First Move", () => {
+  const withTask = addTask(
+    createEmptyState(),
+    { title: "Already done", direction: "Daily Life" },
+    clock,
+  );
+  const taskId = withTask.tasks[0].id;
+  const completed = toggleTask(withTask, taskId, "2026-07-17", clock);
+
+  assert.equal(
+    createPendingIntent(
+      completed,
+      {
+        stuckState: "knows what to do but cannot start",
+        moveText: "Repeat the Task",
+        intendedDurationMinutes: 2,
+        linkedTaskId: taskId,
+      },
+      clock,
+    ),
+    completed,
+  );
 });
 
 test("cancelling a pending intent removes it without a reward or session", () => {
@@ -290,6 +315,21 @@ test("a standalone countdown can inherit and preserve a Task link", () => {
   assert.equal(started.sessions[0].direction, "Work & Study");
   assert.equal(started.sessions[0].linkedTaskId, taskId);
   assert.equal(started.sessions[0].linkedIntentId, undefined);
+});
+
+test("a completed Task cannot be linked to a new standalone Session", () => {
+  const withTask = addTask(createEmptyState(), { title: "Already done", direction: "Daily Life" }, clock);
+  const taskId = withTask.tasks[0].id;
+  const completed = toggleTask(withTask, taskId, "2026-07-17", clock);
+
+  assert.equal(
+    startCountdown(
+      completed,
+      { linkedTaskId: taskId, durationMinutes: 5 },
+      Date.parse("2026-07-18T08:00:00.000Z"),
+    ),
+    completed,
+  );
 });
 
 test("a standalone countdown can inherit and preserve a Habit link", () => {
@@ -550,6 +590,40 @@ test("closed sessions can be reviewed, linked, unlinked, and kept standalone", (
   assert.equal(standalone.sessions[0].direction, "Rest");
 });
 
+test("session review preserves a completed historical Task link but rejects it as a new link", () => {
+  const withTask = addTask(createEmptyState(), { title: "Historical Task", direction: "Daily Life" }, clock);
+  const taskId = withTask.tasks[0].id;
+  const linked = completeSession(
+    startStopwatch(withTask, { linkedTaskId: taskId }, 0, () => "historical-session"),
+    "historical-session",
+    60_000,
+  );
+  const completedTask = toggleTask(linked, taskId, "2026-07-18", clock);
+  const preserved = reviewSession(
+    completedTask,
+    "historical-session",
+    { label: "Edited details", direction: "Daily Life", linkedTaskId: taskId },
+    70_000,
+  );
+  assert.equal(preserved.sessions[0].linkedTaskId, taskId);
+
+  const unlinked = reviewSession(
+    preserved,
+    "historical-session",
+    { label: "Standalone", direction: "Rest" },
+    80_000,
+  );
+  assert.equal(
+    reviewSession(
+      unlinked,
+      "historical-session",
+      { label: "Try relink", direction: "Daily Life", linkedTaskId: taskId },
+      90_000,
+    ),
+    unlinked,
+  );
+});
+
 test("session review preserves Habit and assisted ActivityIntent relationships", () => {
   const withHabit = addHabit(
     createEmptyState(),
@@ -689,7 +763,7 @@ test("malformed sessions are discarded and only one open session can start", () 
   assert.equal(recovered.sessions.length, 0);
 });
 
-test("a task completion awards points only once for a date", () => {
+test("a Task is one-shot, supports same-day correction, and never duplicates its reward", () => {
   const withTask = addTask(
     createEmptyState(),
     { title: "Open one document", direction: "Work & Study" },
@@ -697,12 +771,34 @@ test("a task completion awards points only once for a date", () => {
   );
   const taskId = withTask.tasks[0].id;
   const completed = toggleTask(withTask, taskId, "2026-07-18", clock);
+  const laterDayAttempt = toggleTask(completed, taskId, "2026-07-19", clock);
   const reopened = toggleTask(completed, taskId, "2026-07-18", clock);
   const completedAgain = toggleTask(reopened, taskId, "2026-07-18", clock);
 
+  assert.equal(isTaskActive(completed.tasks[0]), false);
+  assert.equal(laterDayAttempt, completed);
   assert.equal(completedAgain.progress.points, 5);
   assert.equal(completedAgain.rewardEvents.length, 1);
   assert.deepEqual(completedAgain.tasks[0].completedOn, ["2026-07-18"]);
+  assert.equal(getTodayTimeline(reopened, "2026-07-18").some((entry) => entry.kind === "task"), false);
+  assert.equal(getTodayTimeline(completedAgain, "2026-07-18").some((entry) => entry.kind === "task"), true);
+});
+
+test("legacy Tasks with multiple completion dates stay completed without rewriting history", () => {
+  const state = createEmptyState();
+  state.tasks = [{
+    id: "legacy-task",
+    title: "Legacy Task",
+    direction: "Daily Life",
+    order: 0,
+    createdAt: clock(),
+    updatedAt: clock(),
+    completedOn: ["2026-07-16", "2026-07-17"],
+  }];
+
+  assert.equal(isTaskActive(state.tasks[0]), false);
+  assert.equal(toggleTask(state, "legacy-task", "2026-07-18", clock), state);
+  assert.deepEqual(state.tasks[0].completedOn, ["2026-07-16", "2026-07-17"]);
 });
 
 test("a habit completion awards points only once for a date", () => {

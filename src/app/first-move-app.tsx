@@ -19,6 +19,7 @@ import {
   isHabitActive,
   isHabitScheduled,
   isTaskActive,
+  isTaskVisibleToday,
   localDateKey,
   moveTask,
   toggleHabit,
@@ -207,7 +208,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
 
         <div className="mt-8 grid items-start gap-5 xl:grid-cols-[1.05fr_0.95fr]">
           <FirstMovePicker
-            tasks={state.tasks}
+            tasks={state.tasks.filter((task) => isTaskActive(task))}
             habits={state.habits}
             pendingIntent={pendingIntent}
             update={update}
@@ -231,7 +232,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
           <div className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Manual and editable</p>
             <h2 id="tasks-heading" className="mt-2 text-3xl font-bold tracking-tight">Tasks</h2>
-            <p className="mt-2 text-sm leading-6 text-stone-600">Completing a task earns 5 points once per local day, even if it is unchecked and completed again.</p>
+            <p className="mt-2 text-sm leading-6 text-stone-600">Each Task is one-shot and earns 5 points once. A completion from today can be undone to correct a mistake; completed Tasks do not repeat on later days.</p>
           </div>
           <TaskEditor state={state} today={today} update={update} />
         </section>}
@@ -544,7 +545,9 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
 
   function beginCountdown() {
     update((current) => {
-      const linkedFields = focusLinkFields(buildFocusLinkOptions(current, localDateKey()), countdownLink);
+      const currentOptions = buildFocusLinkOptions(current, localDateKey());
+      if (countdownLink && !findFocusLinkOption(currentOptions, countdownLink)) return current;
+      const linkedFields = focusLinkFields(currentOptions, countdownLink);
       return startCountdown(current, {
         direction: countdownDirection,
         label: countdownLabel || undefined,
@@ -556,7 +559,9 @@ function FocusPanel({ state, update }: { state: AppState; update: (recipe: (stat
 
   function beginStopwatch() {
     update((current) => {
-      const linkedFields = focusLinkFields(buildFocusLinkOptions(current, localDateKey()), stopwatchLink);
+      const currentOptions = buildFocusLinkOptions(current, localDateKey());
+      if (stopwatchLink && !findFocusLinkOption(currentOptions, stopwatchLink)) return current;
+      const linkedFields = focusLinkFields(currentOptions, stopwatchLink);
       return startStopwatch(current, {
         direction: stopwatchDirection,
         label: stopwatchLabel || undefined,
@@ -666,16 +671,21 @@ function SessionReview({ session, state, update }: { session: ActivitySession; s
   const [linkedValue, setLinkedValue] = useState(session.linkedTaskId ? `task:${session.linkedTaskId}` : session.linkedHabitId ? `habit:${session.linkedHabitId}` : "");
   const points = state.rewardEvents.find((event) => event.source === "session" && event.sourceId === session.id)?.points ?? 0;
   const relationship = sessionRelationshipLabel(session, state);
+  const linkOptions = buildFocusLinkOptions(state, localDateKey());
+  const originalLinkValue = session.linkedTaskId ? `task:${session.linkedTaskId}` : session.linkedHabitId ? `habit:${session.linkedHabitId}` : "";
+  const currentLinkUnavailable = Boolean(originalLinkValue) && !findFocusLinkOption(linkOptions, originalLinkValue);
 
   function save(event: React.FormEvent) {
     event.preventDefault();
     if (!label.trim()) return;
-    const [kind, id] = linkedValue.split(":");
+    const linkedFields =
+      linkedValue === originalLinkValue && currentLinkUnavailable
+        ? { linkedTaskId: session.linkedTaskId, linkedHabitId: session.linkedHabitId }
+        : focusLinkFields(linkOptions, linkedValue);
     update((current) => reviewSession(current, session.id, {
       label,
       direction,
-      linkedTaskId: kind === "task" ? id : undefined,
-      linkedHabitId: kind === "habit" ? id : undefined,
+      ...linkedFields,
     }));
     setEditing(false);
   }
@@ -699,8 +709,10 @@ function SessionReview({ session, state, update }: { session: ActivitySession; s
           <SelectField label="Category" value={direction} options={DIRECTIONS} onChange={(value) => setDirection(value as Direction)} />
           {session.linkedIntentId ? (
             <div className="rounded-xl border border-violet-200 bg-white p-3 text-sm sm:col-span-2"><p className="font-semibold">Linked First Move retained</p><p className="mt-1 text-stone-500">{relationship ?? "This session keeps its existing ActivityIntent relationship."}</p></div>
+          ) : currentLinkUnavailable && linkedValue === originalLinkValue ? (
+            <div className="rounded-xl border border-stone-200 bg-white p-3 text-sm sm:col-span-2"><p className="font-semibold">Current relationship retained</p><p className="mt-1 text-stone-500">{relationship ?? "This historical relationship remains saved but is unavailable for new links."}</p><button type="button" className="mt-3 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold" onClick={() => setLinkedValue("")}>Change linked item</button></div>
           ) : (
-            <label htmlFor={`session-linked-item-${session.id}`} className="block text-sm font-semibold sm:col-span-2">Linked Task or Habit <span className="font-normal text-stone-500">(optional)</span><select id={`session-linked-item-${session.id}`} name={`session-linked-item-${session.id}`} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={linkedValue} onChange={(event) => setLinkedValue(event.target.value)}><option value="">Standalone — no linked item</option>{state.tasks.map((task) => <option key={task.id} value={`task:${task.id}`}>Task: {task.title}</option>)}{state.habits.map((habit) => <option key={habit.id} value={`habit:${habit.id}`}>Habit: {habit.title}</option>)}</select></label>
+            <label htmlFor={`session-linked-item-${session.id}`} className="block text-sm font-semibold sm:col-span-2">Linked Task or Habit <span className="font-normal text-stone-500">(optional)</span><select id={`session-linked-item-${session.id}`} name={`session-linked-item-${session.id}`} className="mt-2 block w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-normal outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" value={linkedValue} onChange={(event) => setLinkedValue(event.target.value)}><option value="">Standalone — no linked item</option>{linkOptions.map((option) => <option key={option.key} value={option.key}>{option.kind === "task" ? "Task" : "Habit"}: {option.title}</option>)}</select></label>
           )}
           <div className="flex gap-2 sm:col-span-2"><PrimaryButton>Save changes</PrimaryButton><SecondaryButton onClick={cancelEdit}>Cancel</SecondaryButton></div>
         </form>
@@ -805,6 +817,9 @@ function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onRevie
   const [tab, setTab] = useState<"today" | "trends" | "calendar">("today");
   const summary = getTodaySummary(state, today);
   const timeline = getTodayTimeline(state, today);
+  const todayTasks = state.tasks
+    .filter((task) => isTaskVisibleToday(task, today))
+    .sort((left, right) => left.order - right.order);
   return (
     <section id="today" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:p-6" aria-labelledby="today-heading">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Today</p>
@@ -813,6 +828,10 @@ function TodayOverview({ state, today, update, dailyPlan, pendingIntent, onRevie
       <div className="mt-5 flex gap-1 rounded-xl bg-amber-100 p-1" role="tablist" aria-label="Today views">{(["today", "trends", "calendar"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={tab === value} className={`min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-amber-700 ${tab === value ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:bg-white/60"}`} onClick={() => setTab(value)}>{value}</button>)}</div>
       {tab === "today" && <div role="tabpanel">
         <div className="mt-5 rounded-2xl bg-white p-4 sm:p-5"><p className="text-sm text-stone-500">Total tracked</p><p className="mt-1 font-mono text-3xl font-bold">{formatDuration(summary.totalTrackedMs)}</p><dl className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">{DIRECTIONS.map((direction) => <div key={direction} className="min-w-0"><dt className="text-xs text-stone-500">{direction}</dt><dd className="font-semibold">{formatDuration(summary.byDirection[direction])}</dd></div>)}</dl></div>
+        <section className="mt-5 rounded-2xl bg-white p-4 sm:p-5" aria-labelledby="today-tasks-heading">
+          <div className="flex items-center justify-between gap-3"><h3 id="today-tasks-heading" className="text-xl font-bold">Tasks</h3><span className="text-xs font-semibold text-stone-500">{todayTasks.filter((task) => task.completedOn.includes(today)).length} completed</span></div>
+          {todayTasks.length === 0 ? <p className="mt-3 text-sm text-stone-500">No active Tasks for today.</p> : <ul className="mt-3 space-y-2">{todayTasks.map((task) => { const completedToday = task.completedOn.includes(today); return <li key={task.id} className="flex items-start gap-3 rounded-xl border border-stone-200 p-3"><input id={`today-task-${task.id}`} name={`today-task-${task.id}`} className="mt-0.5 size-5 accent-emerald-700" type="checkbox" checked={completedToday} aria-label={`${completedToday ? "Mark incomplete" : "Complete"} ${task.title}`} onChange={() => update((current) => toggleTask(current, task.id, today))} /><div className="min-w-0"><p className={`font-semibold ${completedToday ? "text-stone-400 line-through" : ""}`}>{task.title}</p><p className="mt-1 text-xs text-stone-500">{task.direction}</p></div></li>; })}</ul>}
+        </section>
         <DailyReflection state={state} today={today} update={update} cloudModeActive={cloudModeActive} />
         <h3 className="mt-7 text-xl font-bold">Activity timeline</h3>
         {timeline.length === 0 ? <div className="mt-3"><EmptyState>No activity yet today. A tracked session, completed task, habit check-in, or journal entry will appear here.</EmptyState></div> : <ol className="mt-3 space-y-3">{timeline.map((entry) => <li key={entry.id} className="rounded-2xl border border-amber-200 bg-white p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{entry.title}</p><p className="mt-1 text-xs text-stone-500">{timelineDescription(entry)}</p></div><div className="text-right text-xs text-stone-500"><time dateTime={entry.timestamp}>{formatTimelineTime(entry.timestamp)}</time>{entry.points > 0 && <p className="mt-1 font-semibold text-amber-700">+{formatPoints(entry.points)}</p>}</div></div></li>)}</ol>}
@@ -978,14 +997,15 @@ function TaskEditor({ state, today, update }: { state: AppState; today: string; 
         {tasks.length === 0 ? <EmptyState>No tasks yet. Add one small, concrete action.</EmptyState> : (
           <ul className="space-y-3">
             {tasks.map((task, index) => {
-              const complete = !isTaskActive(task, today);
+              const complete = !isTaskActive(task);
+              const completedToday = task.completedOn.includes(today);
               return (
                 <li key={task.id} className="rounded-2xl border border-stone-200 p-4">
                   <div className="flex items-start gap-3">
-                    <input id={`task-complete-${task.id}`} name={`task-complete-${task.id}`} className="mt-1 size-5 accent-emerald-700" type="checkbox" checked={complete} aria-label={`Complete ${task.title}`} onChange={() => update((state) => toggleTask(state, task.id, today))} />
+                    <input id={`task-complete-${task.id}`} name={`task-complete-${task.id}`} className="mt-1 size-5 accent-emerald-700" type="checkbox" checked={complete} disabled={complete && !completedToday} aria-label={completedToday ? `Mark incomplete ${task.title}` : complete ? `${task.title} is completed` : `Complete ${task.title}`} onChange={() => update((state) => toggleTask(state, task.id, today))} />
                     <div className="min-w-0 flex-1">
                       <p className={`font-semibold ${complete ? "text-stone-400 line-through" : ""}`}>{task.title}</p>
-                      <p className="mt-1 text-xs text-stone-500">{task.direction} · Tracked {formatDuration(getTaskTrackedMs(state, task.id))}</p>
+                      <p className="mt-1 text-xs text-stone-500">{task.direction} · {complete ? completedToday ? "Completed today · " : "Completed · " : ""}Tracked {formatDuration(getTaskTrackedMs(state, task.id))}</p>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 pl-8">

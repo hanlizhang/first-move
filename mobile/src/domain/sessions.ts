@@ -8,6 +8,11 @@ import {
 } from "./models.ts";
 import { createUuidV4 } from "./ids.ts";
 import { captureLocalDay } from "./dates.ts";
+import {
+  isHabitActive,
+  isHabitScheduled,
+  isTaskActive,
+} from "./tasks-habits.ts";
 
 type IdFactory = () => string;
 
@@ -60,7 +65,12 @@ export function startCountdown(
   ) {
     return state;
   }
-  const linked = resolveLink(state, input, references);
+  const linked = resolveLink(
+    state,
+    input,
+    references,
+    captureLocalDay(new Date(nowMs)).localDate,
+  );
   if (!linked.valid) return state;
   const direction = input.direction ?? linked.direction;
   if (!direction || !isDirection(direction)) return state;
@@ -89,7 +99,12 @@ export function startStopwatch(
   references: SessionReferenceCatalog = {},
 ): AppState {
   if (getOpenSession(state) || hasMultipleLinks(input)) return state;
-  const linked = resolveLink(state, input, references);
+  const linked = resolveLink(
+    state,
+    input,
+    references,
+    captureLocalDay(new Date(nowMs)).localDate,
+  );
   if (!linked.valid) return state;
   const direction = input.direction ?? linked.direction;
   if (!direction || !isDirection(direction)) return state;
@@ -237,7 +252,12 @@ export function reviewSession(
     input.linkedTaskId === session.linkedTaskId &&
     input.linkedHabitId === session.linkedHabitId;
   if (!session.linkedIntentId && !preservesUnavailableLink) {
-    const linked = resolveLink(state, input, references);
+    const linked = resolveLink(
+      state,
+      input,
+      references,
+      captureLocalDay(new Date(nowMs)).localDate,
+    );
     if (!linked.valid) return state;
   }
 
@@ -399,21 +419,38 @@ function resolveLink(
   state: AppState,
   link: SessionLink,
   references: SessionReferenceCatalog,
+  dateKey: string,
 ): { valid: boolean; direction?: Direction; label?: string } {
   if (link.linkedTaskId) {
-    const task = [...state.tasks, ...(references.tasks ?? [])].find(
+    const task = state.tasks.find(
       (candidate) => candidate.id === link.linkedTaskId,
     );
-    return task
-      ? { valid: true, direction: task.direction, label: task.title }
+    if (task) {
+      return isTaskActive(task)
+        ? { valid: true, direction: task.direction, label: task.title }
+        : { valid: false };
+    }
+    const reference = (references.tasks ?? []).find(
+      (candidate) => candidate.id === link.linkedTaskId,
+    );
+    return reference
+      ? { valid: true, direction: reference.direction, label: reference.title }
       : { valid: false };
   }
   if (link.linkedHabitId) {
-    const habit = [...state.habits, ...(references.habits ?? [])].find(
+    const habit = state.habits.find(
       (candidate) => candidate.id === link.linkedHabitId,
     );
-    return habit
-      ? { valid: true, direction: habit.direction, label: habit.title }
+    if (habit) {
+      return isHabitScheduled(habit, dateKey) && isHabitActive(habit, dateKey)
+        ? { valid: true, direction: habit.direction, label: habit.title }
+        : { valid: false };
+    }
+    const reference = (references.habits ?? []).find(
+      (candidate) => candidate.id === link.linkedHabitId,
+    );
+    return reference
+      ? { valid: true, direction: reference.direction, label: reference.title }
       : { valid: false };
   }
   if (link.linkedIntentId) {
