@@ -2,7 +2,22 @@ import { daysBetween, isDateKey, localDateKey, previousDateKey } from "./dates.t
 import type { AppState, UserProgress } from "./models.ts";
 import { CAT_MILESTONES, type CatItemId } from "./cat-items.ts";
 
-export type KittenStage = "New kitten" | "Settling in" | "Curious kitten" | "Adventurous kitten" | "Companion";
+export type KittenStage = "New kitten" | "Beginning weaning" | "Playful kitten" | "Curious kitten" | "Cozy companion" | "Adventure milestone";
+
+export interface CatGrowthStory {
+  title: KittenStage;
+  description: string;
+  nextMilestone?: { day: number; label: KittenStage };
+}
+
+const CAT_GROWTH_CHAPTERS = [
+  { day: 1, title: "New kitten", description: "A new kitten settles in with milk, rest, and short room explorations." },
+  { day: 21, title: "Beginning weaning", description: "Wet kitten food joins gentle mealtimes, with a scratching post ready in the room." },
+  { day: 28, title: "Playful kitten", description: "The kitten grows more confident with the toys already gathered in the room." },
+  { day: 35, title: "Curious kitten", description: "Kibble joins the menu while familiar play keeps the kitten curious." },
+  { day: 50, title: "Cozy companion", description: "Treats, simple tricks, and a favorite sleep spot make the room feel lived in." },
+  { day: 100, title: "Adventure milestone", description: "The garden and butterfly open a bigger scene to explore together." },
+] as const satisfies ReadonlyArray<{ day: number; title: KittenStage; description: string }>;
 
 export function syncProgress(state: AppState, today = localDateKey(), ensureFirstUse = false): AppState {
   const activeDateKeys = qualifyingActiveDates(state);
@@ -62,11 +77,18 @@ export function qualifyingActiveDates(state: AppState): string[] {
 }
 
 export function kittenStage(totalActiveDays: number): KittenStage {
-  if (totalActiveDays >= 100) return "Companion";
-  if (totalActiveDays >= 51) return "Adventurous kitten";
-  if (totalActiveDays >= 22) return "Curious kitten";
-  if (totalActiveDays >= 8) return "Settling in";
-  return "New kitten";
+  return catGrowthStory(totalActiveDays).title;
+}
+
+export function catGrowthStory(totalActiveDays: number): CatGrowthStory {
+  const days = Math.max(0, totalActiveDays);
+  const current = [...CAT_GROWTH_CHAPTERS].reverse().find((chapter) => days >= chapter.day) ?? CAT_GROWTH_CHAPTERS[0];
+  const next = CAT_GROWTH_CHAPTERS.find((chapter) => chapter.day > days);
+  return {
+    title: current.title,
+    description: current.description,
+    nextMilestone: next ? { day: next.day, label: next.title } : undefined,
+  };
 }
 
 export function gentleReturnMessage(lastActiveDate: string | undefined, today: string): string | undefined {

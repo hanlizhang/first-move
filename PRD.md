@@ -151,17 +151,27 @@ Each direction uses neutral language and can be changed before or after a sessio
 
 ### Virtual cat
 
-- Provide a forgiving Cat Store with a compact reward shelf for Food, Treats, Toys, and Tricks, plus a small global kitten companion that gives transient, non-punitive feedback without changing rewards.
+- Provide a forgiving Cat Store with a compact reward shelf for Food, Treats, Toys, Furniture, and Tricks, plus a small global kitten companion that gives transient, non-punitive feedback without changing rewards.
 - Use a compact original local pixel kitten with coherent full-body sitting, two-frame walking, sleeping, eating, playing, and happy poses on one floor baseline. Wait five minutes before the first automatic idle action, then 5–10 randomized minutes between brief walk, sleep, or blink actions; reduced motion disables automatic changes and walking translation.
-- Let users spend local points, manage inventory, feed and play with the cat, and trigger a simple trick; furniture customization is deferred.
-- Use a staged local store: milk on active day 1; yarn on day 3; teaser wand on day 7; cat food plus 10 free servings on day 21; treats plus 10 free servings and high-five on day 50; and paw shake, a free outdoor garden, and butterfly play on day 100. Milestone grants are idempotent and depend on lifetime active days, never a perfect streak.
-- Give milk, kibble, treats, yarn, wand play, high-five, paw shake, and butterfly exploration distinct visual interactions. Food remains consumable; toys, tricks, scenes, and milestone interactions are durable.
+- Let users spend points, manage inventory, feed and play with the cat, trigger simple tricks, and select one owned furnishing to appear in the room. Free-form furniture placement remains deferred.
+- Use a gradual Cat v1 purchase-unlock path: kitten milk on active day 1; yarn ball on day 3; teaser wand on day 7; toy mouse on day 14; wet kitten food and scratching post on day 21; kibble on day 35; soft/freeze-dried treats, high-five, and cat bed on day 50; window perch on day 70; cat tree on day 75; then paw shake, outdoor garden, and butterfly at the day-100 adventure milestone.
+- The approved Cat v1 catalog keeps stable existing IDs and adds only `wet-kitten-food`, `freeze-dried-treat`, `toy-mouse`, `scratching-post`, and `cat-tree`. `cat-bed` and `window-cushion` retain their existing IDs and become active Furniture items; `window-cushion` is displayed as Window perch. Fish, shrimp, cat grass, a catnip toy, and additional cosmetic food variants are deferred.
+- Future ungranted day-21 milestones award exactly ten `wet-kitten-food` servings once. Previously granted day-21 milestones and their historical `cat-food` inventory/events remain unchanged; there is no conversion, deletion, duplicate grant, or backfill. Day-50 and day-100 grants remain unchanged.
+- Give milk, wet food, kibble, soft and freeze-dried treats, yarn, toy mouse, wand play, scratching, furniture rest/perching, high-five, paw shake, and butterfly/garden exploration distinct interaction expectations. Food remains consumable; toys, furniture, tricks, scenes, and milestone interactions are durable.
 - Morning Start feeds the cat once per day without spending points.
 - Missed days, cancelled sessions, and incomplete actions never harm the cat or remove points, inventory, milestones, or progress.
 - Welcome returning users with gentle, non-judgmental messages.
 - Count each local date once when it contains a completed task, habit check-in, session of at least one minute, Morning Check, or Daily Reflection. Track first use, last activity, journey day, total active days, and a gentle current streak without reducing lifetime progress after absences.
-- Keep the cat kitten-like while labeling stages as New kitten on active days 1–7, Settling in on 8–21, Curious kitten on 22–50, Adventurous kitten from 51 until the 100th active day, and Companion from day 100 onward. Retain milestones at 21, 50, and 100 active days.
+- Label the symbolic growth chapters New kitten before day 21, Beginning weaning from day 21, Playful kitten from day 28, Curious kitten from day 35, Cozy companion from day 50, and Adventure milestone from day 100. These narrative chapters are separate from individual store unlock days. Retain idempotent milestone records at 21, 50, and 100 active days; missing calendar days never reverse a chapter.
 - Keep the existing core cat experience Free. Pro may add premium cat content without removing, degrading, or confiscating Free or previously earned core items.
+
+#### Designed future Cat engagement — deferred
+
+- **Coin presentation:** user-facing points may later be labeled `Coins` and use one shared cross-platform icon on Web and Mobile. This is presentation-only: stored points, `reward_ledger.points_tenths`, reward values, RPC contracts, and economy semantics remain unchanged.
+- **Companion Bond:** a persistent, non-punitive `Bond` display of 0–3 hearts that never decreases and is never called Mood. At most one Care Day may be earned per local date, requiring both a qualifying Active Day and at least one meaningful Cat interaction that day. Repeated feeding or play cannot farm Care Days. Proposed levels are Bond 1 at 3 Care Days, Bond 2 at 10, and Bond 3 at 21.
+- **Little Finds:** quirky collectible gifts such as a leaf, feather, pom-pom, tiny plush mouse, pebble, ribbon, acorn, shell, mysterious sock, or paperclip. They have no point value and cannot be sold. Eligibility occurs at most once per newly earned Care Day; authenticated selection must later be deterministic, idempotent, and server-authoritative rather than retryable client randomness. Finds never punish absence or require daily login, and their collection/achievement presentation is future work.
+- **Celebrations:** a Coin gain may use a compact celebration; a new Active Day gets a larger `Active Day +1` moment; Bond level-up gets a major 1/2/3-heart celebration; a Cat milestone unlock gets a full achievement-style moment; and a Little Find gets a collectible reveal. Simultaneous rewards use one ordered or combined celebration queue rather than stacked blocking full-screen modals.
+- These future presentation and engagement systems are designed only. Their schema, persistence, server authority, selection logic, and UI are not implemented by the Cat v1 catalog migration.
 
 ### Daily Reflection
 

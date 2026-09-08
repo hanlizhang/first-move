@@ -35,6 +35,10 @@ test("Mobile exposes honest authenticated sync states and manual retry", () => {
   assert.match(provider, /syncRuntimeRef\.current\?\.retry\(\)/);
   assert.match(provider, /owner\.kind === "guest"/);
   assert.match(provider, /syncRuntimeRef\.current\?\.mutate\(recipe\)/);
+  assert.match(provider, /useNetworkState\(\)/);
+  assert.match(provider, /isConnected === false/);
+  assert.match(provider, /isInternetReachable === false/);
+  assert.match(provider, /wasOffline && !networkKnownOffline/);
 });
 
 test("Mobile reuses only the frozen Web Sync v1 RPC names", () => {

@@ -1,6 +1,6 @@
 # First Move Mobile v1 handoff
 
-Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-05 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization.
+Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-07 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization. The approved Cat v1 catalog migration is staged locally and is not remotely applied.
 
 Status vocabulary used here:
 
@@ -73,6 +73,7 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 - Mobile Today v1 is implemented with Tasks, scheduled Habits, completed and intentionally stopped Focus Sessions, the current point balance, total and five-direction focused-time summaries, and a current-day activity timeline.
 - Mobile Today includes editable private Reflection / Mini Journal. Guest entries remain in Guest-local persistence; authenticated Journal changes use the existing owner-scoped durable full-snapshot queue, while first-save rewards and the authenticated point balance remain server-authoritative.
 - Today selects historical activity through captured local-date and IANA-timezone facts rather than reassigning it with the viewer's current timezone.
+- Mobile Cat v1A is implemented with the Web-aligned 16-row catalog, symbolic active-day progression, existing Cat Room interactions, the five visible Food/Treats/Toys/Furniture/Tricks store categories, Guest-local purchasing/consumption, and authenticated server-authoritative purchase/consumption plus selected-furniture persistence through the existing sync RPC. Purchase unlocks are milk day 1, yarn day 3, wand day 7, mouse day 14, wet food and scratching post day 21, kibble day 35, treats/high-five/bed day 50, perch day 70, tree day 75, and paw shake/garden/butterfly day 100; ownership, not the current purchase threshold, controls use of durable items.
 
 ### Manually verified where known
 
@@ -82,10 +83,12 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 
 ### Intentionally deferred
 
-- Mobile Trends/Calendar history parity, Cat interaction/store work, RevenueCat Pro entitlement, server-controlled AI quota, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
-- Mobile empty-account setup/import, post-session choices, Cat/Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
+- Mobile Trends/Calendar history parity, rich Cat v1B interactions, Companion Bond, Little Finds, celebration UI, RevenueCat Pro entitlement, server-controlled AI quota, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
+- A later presentation pass may label user-facing points as `Coins` and use one shared coin icon across Web and Mobile. This does not rename or alter stored points, `reward_ledger.points_tenths`, reward values, RPC contracts, or economy semantics.
+- Celebration UI remains designed only: compact Coin gain, larger `Active Day +1`, major Bond level-up, full Cat milestone unlock, and Little Find reveal. Simultaneous rewards must use one ordered or combined celebration queue rather than stacked blocking moments.
+- Mobile empty-account setup/import, post-session choices, Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
 
-## 6. Applied migration list
+## 6. Migration list and recorded state
 
 The repository contains these migrations in order:
 
@@ -96,8 +99,9 @@ The repository contains these migrations in order:
 | `20260731120000_import_completion_tombstones.sql` | v2 import with reward-only completion tombstones | Expected applied by the verified import path. |
 | `20260731140000_canonical_history_parents.sql` | Canonical v2 payload including tombstoned relationship parents | Expected applied by verified canonical hydration. |
 | `20260731180000_continuous_cloud_sync.sql` | Atomic continuous full-workspace sync and economic commands | Applied locally and remotely; automated tests passed; core two-browser behavior manually verified. |
+| `20260907082222_cat_v1_catalog.sql` | Approved 16-row Cat v1 catalog and future day-21 wet-food milestone grant | Staged locally only; not remotely applied. The current task report records the linked-project dry-run result. |
 
-Manual `npx supabase migration list` verification shows `20260731180000_continuous_cloud_sync.sql` in both Local and Remote. Cloud setup, import, hydration, refresh, retry, and continuous-sync RPCs are deployed. This documentation correction did not query or modify Supabase.
+Manual `npx supabase migration list` verification shows `20260731180000_continuous_cloud_sync.sql` in both Local and Remote. Cloud setup, import, hydration, refresh, retry, and continuous-sync RPCs are deployed. The Cat catalog migration remains intentionally unapplied until a separately approved remote push.
 
 ## 7. Web cloud lifecycle
 
@@ -179,7 +183,7 @@ Remaining manual checks are known verification items and do not block the curren
 - Continuous sync remains feature-gated for controlled rollout. Its migration is remotely applied and core task/habit convergence is manually verified; the documented smoke tests remain pending.
 - Guest data, immutable IndexedDB backups, Web runtime metadata, the Mobile AsyncStorage retry queue, transient planning drafts, local First Move templates, toothbrush image previews, and development-only controls remain device-local by design.
 - Toothbrush photos are transient only; they are never synchronized or stored.
-- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, Mobile Trends/Calendar history parity, Cat interaction/store work, Mobile release UI polish, true-device testing, and store release work remain deferred.
+- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, Mobile Trends/Calendar history parity, rich Cat v1B interactions, Companion Bond, Little Finds, celebration UI, Mobile release UI polish, true-device testing, and store release work remain deferred.
 - Current optional live AI routes are server-side and user-initiated, with mock/manual fallback and no automatic retries, but they are not the designed authenticated paid-AI gateway.
 - The architecture documents describe a more complete B5 conflict/outbox design than the implemented MVP.
 
@@ -192,7 +196,7 @@ Remaining manual checks are known verification items and do not block the curren
 - Keep UUID mappings and all parent/child relationships stable. Include tombstoned parents required by history and filter them only from active UI.
 - Use UTC `timestamptz`, explicit `local_date`, and captured IANA timezone consistently. Do not derive historical dates using the current timezone.
 - Treat Supabase as canonical only after complete validated hydration; preserve the active cache and pending work on failure.
-- Never calculate authoritative points, inventory, purchases, rewards, or milestones in the mobile client.
+- Never calculate authenticated authoritative points, inventory, purchases, rewards, or milestones in the mobile client; Guest Mode keeps its separate local-only economy.
 - Never persist toothbrush images. Never send Mini Journal content to AI, analytics, logs, or notifications.
 - Keep server-only keys and service-role credentials out of mobile builds.
 - Maintain manual/local fallback for every AI feature and treat Rest/Intentional Entertainment as valid directions.
@@ -207,7 +211,7 @@ M0 keeps schema-v8 guest data and account-scoped validated cloud caches separate
 
 ### M1 — Core features
 
-Status: **M1A through M1E and Mobile Today v1 are implemented; automated Mobile checks pass and manual cross-platform M1E/Today acceptance remains pending**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
+Status: **M1A through M1E, Mobile Today v1, and Mobile Cat v1A are implemented; automated Mobile checks pass and manual cross-platform acceptance remains pending**. Mobile ports the local, non-AI I’m Stuck intent builder: schema-v8 normalization/migration through AsyncStorage, all six stuck states, the exact five directions, the existing offline template matrix, another suggestion, wording edits, manual entry, shorter duration, and one validated pending `ActivityIntent`.
 
 Focus has three entries through the same local `ActivitySession` engine: the pending First Move at its 2/5/10/25-minute intended duration, standalone Countdown with 2/5/10/25/50-minute presets or validated 1–720 custom minutes, and standalone Stopwatch. Standalone tools accept an optional title, one of the five directions, and one existing Task or Habit link or no link; they do not create an `ActivityIntent`. Selecting Intentional Entertainment as the standalone direction does not narrow these normal Focus durations; only the separate dedicated Intentional Entertainment flow is limited to 5/10 minutes. Timestamp-derived elapsed time supports pause/resume, app-restart recovery, automatic countdown completion, neutral early stop, cancellation, actual elapsed persistence, and duplicate-open/completion prevention.
 
@@ -227,11 +231,11 @@ The Focus parent selector is one compact field that opens a searchable modal wit
 
 M1E preserves ordered start-before-close mutations. The existing snapshot RPC treats submitted Intent rows as pending, so the Mobile serializer submits only the active pending view and never reinterprets retained local `consumed` history as pending. Ordered durable snapshots ensure an offline assisted start creates its Intent parent before the closed Session retains that foreign key.
 
-M1E reuses `cloud_workspace_status`, `get_cloud_workspace_v2`, and `sync_cloud_workspace_v1` unchanged. A per-Supabase-UUID AsyncStorage record holds one stable device UUID, the last successful cloud time, and ordered full schema-v8 snapshot mutations. Local UI state is saved only after the snapshot is durably queued; every dispatch revalidates the current authenticated UUID; failed or invalid responses keep the queue; startup, foreground, and manual refresh flush before reading; and only a validated canonical response replaces the working/cache state. Canonical daily plans and all untouched schema-v8 fields pass through unchanged, while economic command arrays stay empty and reward/point/inventory authority remains server-side.
+M1E reuses `cloud_workspace_status`, `get_cloud_workspace_v2`, and `sync_cloud_workspace_v1` unchanged. A per-Supabase-UUID AsyncStorage record holds one stable device UUID, the last successful cloud time, and ordered full schema-v8 snapshot mutations. Local UI state is saved only after the snapshot is durably queued; every dispatch revalidates the current authenticated UUID; failed or invalid responses keep the queue; startup, foreground, and manual refresh flush before reading; and only a validated canonical response replaces the working/cache state. Canonical daily plans and all untouched schema-v8 fields pass through unchanged. Mobile Cat v1A now supplies the existing narrow purchase and food-consumption economic commands plus selected-furniture settings; reward, point, milestone, and inventory authority remains server-side for authenticated users.
 
 M1E deliberately enables writes only for an already-initialized account that has successfully hydrated. Empty-account Start fresh / Import this device / Use cloud progress setup choices remain unimplemented on Mobile and write-disabled. Guest is still fully local. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance is the remaining release gate; `/mobile/README.md` contains the exact checklist.
 
-Other remaining M1 work includes post-session choices, Mobile Trends/Calendar history parity, daily plans, Morning metadata, cat/inventory presentation, and server-authoritative economy commands beyond the currently implemented mutation families.
+Other remaining M1 work includes post-session choices, Mobile Trends/Calendar history parity, daily plans, Morning metadata, and any later server-authoritative economy commands beyond the implemented Cat purchase/consumption and selected-furniture paths.
 
 ### M2 — Native capabilities
 

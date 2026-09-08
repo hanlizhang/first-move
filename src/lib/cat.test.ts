@@ -17,10 +17,10 @@ import {
   scheduleIdleBehavior,
   scheduleReturnToSitting,
 } from "./cat-behavior.ts";
-import { CAT_ITEMS, CAT_MILESTONES, isCatItemUnlocked } from "./cat-items.ts";
-import { inventoryQuantity, purchaseCatItem, useFood } from "./cat-store.ts";
+import { CAT_CATALOG, CAT_ITEMS, CAT_MILESTONES, STORE_CATEGORIES, catItem, isCatItemUnlocked } from "./cat-items.ts";
+import { inventoryQuantity, purchaseCatItem, selectFurniture, useFood } from "./cat-store.ts";
 import { createEmptyState, type RewardEvent } from "./models.ts";
-import { gentleReturnMessage, kittenStage, syncProgress } from "./progress.ts";
+import { catGrowthStory, gentleReturnMessage, kittenStage, syncProgress } from "./progress.ts";
 import { loadAppState, saveAppState, type StorageLike } from "./repository.ts";
 import { startStopwatch, stopSession } from "./sessions.ts";
 
@@ -41,26 +41,89 @@ test("purchases spend points, persist inventory, and enforce ownership rules", (
   assert.equal(inventoryQuantity(refreshed, "yarn-toy"), 1);
 });
 
-test("food can be purchased repeatedly and consumed without penalties", () => {
-  const funded = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 20, totalActiveDays: 1 } };
-  const once = purchaseCatItem(funded, "kitten-milk", new Date("2026-07-19T12:00:00Z"), () => "milk-1").state;
-  const twice = purchaseCatItem(once, "kitten-milk", new Date("2026-07-19T12:01:00Z"), () => "milk-2").state;
-  assert.equal(inventoryQuantity(twice, "kitten-milk"), 2);
-  const used = useFood(twice, "kitten-milk");
-  assert.equal(inventoryQuantity(used, "kitten-milk"), 1);
+test("new food can be purchased repeatedly and consumed without penalties", () => {
+  const funded = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 30, totalActiveDays: 21 } };
+  const once = purchaseCatItem(funded, "wet-kitten-food", new Date("2026-07-19T12:00:00Z"), () => "wet-food-1").state;
+  const twice = purchaseCatItem(once, "wet-kitten-food", new Date("2026-07-19T12:01:00Z"), () => "wet-food-2").state;
+  assert.equal(inventoryQuantity(twice, "wet-kitten-food"), 2);
+  const used = useFood(twice, "wet-kitten-food");
+  assert.equal(inventoryQuantity(used, "wet-kitten-food"), 1);
   assert.equal(used.progress.points, 10);
 });
 
-test("store unlocks use the exact active-day boundaries", () => {
-  const expected = new Map([["kitten-milk", 1], ["yarn-toy", 3], ["teaser-wand", 7], ["cat-food", 21], ["cat-treat", 50], ["high-five", 50], ["paw-shake", 100]]);
+test("Web catalog matches the approved visible Cat catalog exactly", () => {
+  const expected: Record<string, { name: string; price: number; kind: string; category: string; unlock: number; durable: boolean }> = {
+    "kitten-milk": { name: "Kitten milk", price: 5, kind: "food", category: "Food", unlock: 1, durable: false },
+    "wet-kitten-food": { name: "Wet kitten food", price: 10, kind: "food", category: "Food", unlock: 21, durable: false },
+    "cat-food": { name: "Cat food", price: 10, kind: "food", category: "Food", unlock: 35, durable: false },
+    "cat-treat": { name: "Soft cat treat", price: 20, kind: "food", category: "Treats", unlock: 50, durable: false },
+    "freeze-dried-treat": { name: "Freeze-dried treat", price: 15, kind: "food", category: "Treats", unlock: 50, durable: false },
+    "yarn-toy": { name: "Yarn ball", price: 25, kind: "toy", category: "Toys", unlock: 3, durable: true },
+    "toy-mouse": { name: "Toy mouse", price: 35, kind: "toy", category: "Toys", unlock: 14, durable: true },
+    "teaser-wand": { name: "Teaser wand", price: 40, kind: "toy", category: "Toys", unlock: 7, durable: true },
+    "scratching-post": { name: "Scratching post", price: 80, kind: "furniture", category: "Furniture", unlock: 21, durable: true },
+    "cat-bed": { name: "Cat bed", price: 100, kind: "furniture", category: "Furniture", unlock: 50, durable: true },
+    "window-cushion": { name: "Window perch", price: 140, kind: "furniture", category: "Furniture", unlock: 70, durable: true },
+    "cat-tree": { name: "Cat tree", price: 300, kind: "furniture", category: "Furniture", unlock: 75, durable: true },
+    "high-five": { name: "High-five", price: 80, kind: "trick", category: "Tricks", unlock: 50, durable: true },
+    "paw-shake": { name: "Paw shake", price: 120, kind: "trick", category: "Tricks", unlock: 100, durable: true },
+  };
+  assert.deepEqual(STORE_CATEGORIES, ["Food", "Treats", "Toys", "Furniture", "Tricks"]);
+  assert.equal(CAT_ITEMS.length, Object.keys(expected).length);
   for (const item of CAT_ITEMS) {
-    const boundary = expected.get(item.id)!;
-    assert.equal(item.unlockActiveDays, boundary);
-    assert.equal(isCatItemUnlocked(item, boundary - 1), false);
-    assert.equal(isCatItemUnlocked(item, boundary), true);
+    const wanted = expected[item.id];
+    assert.ok(wanted, `${item.id} is approved`);
+    assert.equal(item.name, wanted.name);
+    assert.equal(item.price, wanted.price);
+    assert.equal(item.kind, wanted.kind);
+    assert.equal(item.category, wanted.category);
+    assert.equal(item.unlockActiveDays, wanted.unlock);
+    assert.equal(item.purchaseQuantity, 1);
+    assert.equal(item.durable, wanted.durable);
+    assert.equal(item.active, true);
+    assert.equal(item.milestoneOnly, false);
+    assert.equal(isCatItemUnlocked(item, wanted.unlock - 1), false);
+    assert.equal(isCatItemUnlocked(item, wanted.unlock), true);
   }
-  const fundedButLocked = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 200, totalActiveDays: 2 } };
-  assert.equal(purchaseCatItem(fundedButLocked, "yarn-toy").outcome, "locked");
+  assert.equal(CAT_CATALOG.length, 16);
+  assert.deepEqual(catItem("outdoor-garden"), {
+    id: "outdoor-garden", name: "Outdoor garden", price: 0, kind: "scene", unlockActiveDays: 100,
+    purchaseQuantity: 1, durable: true, milestoneOnly: true, active: true,
+    description: "A sunny garden earned at 100 active days.",
+  });
+  assert.equal(catItem("butterfly")?.unlockActiveDays, 100);
+});
+
+test("approved locked, durable, furniture, and insufficient-points rules remain enforced", () => {
+  const beforeDay14 = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 500, totalActiveDays: 13 } };
+  assert.equal(purchaseCatItem(beforeDay14, "toy-mouse").outcome, "locked");
+
+  const day75 = { ...beforeDay14, progress: { ...beforeDay14.progress, totalActiveDays: 75 } };
+  const mouse = purchaseCatItem(day75, "toy-mouse", new Date("2026-07-19T12:00:00Z"), () => "mouse-1");
+  assert.equal(mouse.outcome, "purchased");
+  assert.equal(purchaseCatItem(mouse.state, "toy-mouse").outcome, "already-owned");
+
+  const tree = purchaseCatItem(mouse.state, "cat-tree", new Date("2026-07-19T12:01:00Z"), () => "tree-1");
+  assert.equal(tree.outcome, "purchased");
+  assert.equal(selectFurniture(tree.state, "cat-tree").inventory.selectedFurnitureId, "cat-tree");
+
+  const noPoints = { ...createEmptyState(), progress: { ...createEmptyState().progress, points: 14, totalActiveDays: 50 } };
+  assert.equal(purchaseCatItem(noPoints, "freeze-dried-treat").outcome, "insufficient");
+});
+
+test("an owned durable remains usable below its current purchase threshold", () => {
+  const historical = {
+    ...createEmptyState(),
+    progress: { ...createEmptyState().progress, points: 500, totalActiveDays: 0 },
+    inventory: {
+      items: [
+        { itemId: "toy-mouse" as const, quantity: 1 },
+        { itemId: "cat-tree" as const, quantity: 1 },
+      ],
+    },
+  };
+  assert.equal(purchaseCatItem(historical, "toy-mouse").outcome, "already-owned");
+  assert.equal(selectFurniture(historical, "cat-tree").inventory.selectedFurnitureId, "cat-tree");
 });
 
 test("idle delays stay between five and ten minutes", () => {
@@ -158,10 +221,62 @@ test("milestone grants occur once at 21, 50, and 100 active days", () => {
   }
 });
 
-test("legacy soft food migrates to cat food and durable quantities stay one", () => {
-  const recovered = normalizeAppState({ ...createEmptyState(), inventory: { items: [{ itemId: "soft-kitten-food", quantity: 4 }, { itemId: "yarn-toy", quantity: 8 }] } });
-  assert.equal(inventoryQuantity(recovered, "cat-food"), 4);
+test("future day-21 milestone grants wet food once without converting historical cat food", () => {
+  const rewardEvents: RewardEvent[] = Array.from({ length: 21 }, (_, index) => ({
+    id: `task:day-21:${index}`,
+    source: "task",
+    sourceId: String(index),
+    dateKey: `2026-01-${String(index + 1).padStart(2, "0")}`,
+    points: 5,
+    createdAt: "2026-01-01T00:00:00Z",
+  }));
+  const future = syncProgress({ ...createEmptyState(), rewardEvents }, "2026-01-21");
+  assert.equal(inventoryQuantity(future, "wet-kitten-food"), 10);
+  assert.equal(inventoryQuantity(future, "cat-food"), 0);
+  assert.equal(inventoryQuantity(syncProgress(future, "2026-01-21"), "wet-kitten-food"), 10);
+
+  const historical = {
+    ...createEmptyState(),
+    rewardEvents,
+    inventory: { items: [{ itemId: "cat-food" as const, quantity: 10 }] },
+    progress: { ...createEmptyState().progress, grantedMilestones: [21 as const] },
+  };
+  const preserved = syncProgress(historical, "2026-01-21");
+  assert.equal(inventoryQuantity(preserved, "cat-food"), 10);
+  assert.equal(inventoryQuantity(preserved, "wet-kitten-food"), 0);
+
+  const previouslyUnlockedButUngranted = normalizeAppState({
+    ...createEmptyState(),
+    rewardEvents,
+    inventory: { items: [{ itemId: "cat-food", quantity: 10 }] },
+    progress: { ...createEmptyState().progress, unlockedMilestones: [21], grantedMilestones: undefined },
+  });
+  assert.equal(inventoryQuantity(previouslyUnlockedButUngranted, "cat-food"), 10);
+  assert.equal(inventoryQuantity(previouslyUnlockedButUngranted, "wet-kitten-food"), 10);
+  assert.deepEqual(previouslyUnlockedButUngranted.progress.grantedMilestones, [21]);
+  assert.deepEqual(CAT_MILESTONES.find(({ day }) => day === 50)?.grants, [{ itemId: "cat-treat", quantity: 10 }]);
+  assert.deepEqual(CAT_MILESTONES.find(({ day }) => day === 100)?.grants, [{ itemId: "outdoor-garden", quantity: 1 }, { itemId: "butterfly", quantity: 1 }]);
+});
+
+test("legacy inventory IDs hydrate without conversion or inflated durable quantities", () => {
+  const recovered = normalizeAppState({
+    ...createEmptyState(),
+    inventory: {
+      items: [
+        { itemId: "soft-kitten-food", quantity: 4 },
+        { itemId: "cat-food", quantity: 2 },
+        { itemId: "yarn-toy", quantity: 8 },
+        { itemId: "cat-bed", quantity: 3 },
+        { itemId: "window-cushion", quantity: 2 },
+      ],
+      selectedFurnitureId: "cat-bed",
+    },
+  });
+  assert.equal(inventoryQuantity(recovered, "cat-food"), 6);
   assert.equal(inventoryQuantity(recovered, "yarn-toy"), 1);
+  assert.equal(inventoryQuantity(recovered, "cat-bed"), 1);
+  assert.equal(inventoryQuantity(recovered, "window-cushion"), 1);
+  assert.equal(recovered.inventory.selectedFurnitureId, "cat-bed");
 });
 
 test("wand pointer coordinates clamp inside the room", () => {
@@ -194,16 +309,23 @@ test("a one-minute stopped session counts as active even when its rounded reward
   assert.equal(stopped.progress.totalActiveDays, 1);
 });
 
-test("kitten stages use the active-day boundaries", () => {
+test("kitten growth story uses the approved symbolic active-day chapters", () => {
   assert.equal(kittenStage(1), "New kitten");
-  assert.equal(kittenStage(7), "New kitten");
-  assert.equal(kittenStage(8), "Settling in");
-  assert.equal(kittenStage(21), "Settling in");
-  assert.equal(kittenStage(22), "Curious kitten");
-  assert.equal(kittenStage(50), "Curious kitten");
-  assert.equal(kittenStage(51), "Adventurous kitten");
-  assert.equal(kittenStage(99), "Adventurous kitten");
-  assert.equal(kittenStage(100), "Companion");
+  assert.equal(kittenStage(20), "New kitten");
+  assert.equal(kittenStage(21), "Beginning weaning");
+  assert.equal(kittenStage(27), "Beginning weaning");
+  assert.equal(kittenStage(28), "Playful kitten");
+  assert.equal(kittenStage(34), "Playful kitten");
+  assert.equal(kittenStage(35), "Curious kitten");
+  assert.equal(kittenStage(49), "Curious kitten");
+  assert.equal(kittenStage(50), "Cozy companion");
+  assert.equal(kittenStage(99), "Cozy companion");
+  assert.equal(kittenStage(100), "Adventure milestone");
+  assert.match(catGrowthStory(21).description, /Wet kitten food/);
+  assert.match(catGrowthStory(21).description, /scratching post/);
+  assert.match(catGrowthStory(28).description, /already gathered/);
+  assert.match(catGrowthStory(35).description, /Kibble/);
+  assert.deepEqual(catGrowthStory(27).nextMilestone, { day: 28, label: "Playful kitten" });
 });
 
 test("return messages are gentle only after an absent day", () => {

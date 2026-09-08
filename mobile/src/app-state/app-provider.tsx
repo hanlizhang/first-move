@@ -3,6 +3,7 @@ import {
   type AppStateStatus,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNetworkState } from "expo-network";
 import {
   createContext,
   useCallback,
@@ -31,10 +32,20 @@ import {
 import {
   MobileSyncRuntime,
   defaultMobileSyncDependencies,
+  summarizePendingMutations,
+  type AuthenticatedCatEconomyResult,
   type MobileSyncClient,
   type MobileSyncSnapshot,
 } from "../cloud/sync-runtime.ts";
 import { createMobileSyncQueue } from "../cloud/sync-queue.ts";
+import {
+  purchaseGuestCatItem,
+  purchaseAvailability,
+  consumeGuestCatFood,
+  inventoryQuantity,
+  type CatPurchaseOutcome,
+} from "../domain/cat.ts";
+import { catItem, type CatItemId } from "../domain/cat-items.ts";
 import { createEmptyState, type AppState } from "../domain/models.ts";
 import { reconcileRunningCountdown } from "../domain/sessions.ts";
 import {
@@ -67,7 +78,18 @@ interface AppContextValue {
   updateLocalWorkspace(
     recipe: (current: AppState) => AppState,
   ): Promise<AppState | undefined>;
+  buyCatItem(itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome>;
+  feedCatFood(itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome>;
 }
+
+export type CatEconomyActionOutcome =
+  | CatPurchaseOutcome
+  | "used"
+  | "empty"
+  | "queued"
+  | "queued-offline"
+  | "queued-blocked"
+  | "error";
 
 export type AppSyncState =
   | { status: "local"; pendingCount: 0 }
@@ -80,6 +102,12 @@ const defaultSyncDependencies = defaultMobileSyncDependencies();
 const guestWorkspaceKey = localWorkspaceKey({ kind: "guest" });
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const networkState = useNetworkState();
+  const networkKnownOffline =
+    networkState.isConnected === false ||
+    networkState.isInternetReachable === false;
+  const networkKnownOfflineRef = useRef(networkKnownOffline);
+  const previousNetworkKnownOfflineRef = useRef(networkKnownOffline);
   const [auth, dispatch] = useReducer(reduceAuthState, initialAuthState);
   const [cloud, setCloud] = useState<CloudHydrationState>({ status: "idle" });
   const [sync, setSync] = useState<AppSyncState>({
@@ -143,6 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           userId: auth.user.id,
           status: "loading",
           pendingCount: 0,
+          queueSummary: summarizePendingMutations([]),
         };
   }, [auth, sync]);
   const workspaceEditable =
@@ -255,6 +284,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     activeLocalOwnerKeyRef.current = activeLocalOwnerKey;
   }, [activeLocalOwnerKey]);
+
+  useEffect(() => {
+    const wasOffline = previousNetworkKnownOfflineRef.current;
+    networkKnownOfflineRef.current = networkKnownOffline;
+    previousNetworkKnownOfflineRef.current = networkKnownOffline;
+    if (wasOffline && !networkKnownOffline) {
+      void syncRuntimeRef.current?.retry();
+    }
+  }, [networkKnownOffline]);
 
   useEffect(() => {
     if (
@@ -373,6 +411,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       queue: syncQueue,
       isCurrent,
       ...defaultSyncDependencies,
+      online: () => !networkKnownOfflineRef.current,
       async applyCanonical(workspace, hydratedAt) {
         await repository.saveCloudWorkspace(userId, workspace, hydratedAt);
         if (!isCurrent()) return;
@@ -510,6 +549,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [activeLocalOwnerKey, localOwner],
   );
 
+  const buyCatItem = useCallback(
+    async (itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome> => {
+      const availability = purchaseAvailability(visibleLocalWorkspace, itemId);
+      if (availability !== "available") return availability;
+      if (!localOwner || !activeLocalOwnerKey) return "error";
+      const ownerKey = activeLocalOwnerKey;
+      try {
+        if (localOwner.kind === "guest") {
+          let outcome: CatPurchaseOutcome = "invalid";
+          const next = await repository.updateLocalWorkspace(localOwner, (state) => {
+            const result = purchaseGuestCatItem(state, itemId);
+            outcome = result.outcome;
+            return result.state;
+          });
+          if (activeLocalOwnerKeyRef.current === ownerKey) {
+            setLocalWorkspace(next);
+            setLoadedLocalOwnerKey(ownerKey);
+          }
+          return outcome;
+        }
+        const result = await syncRuntimeRef.current?.purchaseInventoryItem(
+          itemId,
+          localDate,
+        );
+        if (!result) return "error";
+        return authenticatedCatOutcome(result, "purchased");
+      } catch {
+        return "error";
+      }
+    },
+    [activeLocalOwnerKey, localOwner, visibleLocalWorkspace],
+  );
+
+  const feedCatFood = useCallback(
+    async (itemId: CatItemId, localDate: string): Promise<CatEconomyActionOutcome> => {
+      const item = catItem(itemId);
+      if (!item || item.kind !== "food") return "invalid";
+      if (inventoryQuantity(visibleLocalWorkspace, itemId) < 1) return "empty";
+      if (!localOwner || !activeLocalOwnerKey) return "error";
+      const ownerKey = activeLocalOwnerKey;
+      try {
+        if (localOwner.kind === "guest") {
+          let outcome: "used" | "empty" | "invalid" = "invalid";
+          const next = await repository.updateLocalWorkspace(localOwner, (state) => {
+            const result = consumeGuestCatFood(state, itemId);
+            outcome = result.outcome;
+            return result.state;
+          });
+          if (activeLocalOwnerKeyRef.current === ownerKey) {
+            setLocalWorkspace(next);
+            setLoadedLocalOwnerKey(ownerKey);
+          }
+          return outcome;
+        }
+        const result = await syncRuntimeRef.current?.consumeInventoryItem(
+          itemId,
+          localDate,
+        );
+        if (!result) return "error";
+        return authenticatedCatOutcome(result, "used");
+      } catch {
+        return "error";
+      }
+    },
+    [activeLocalOwnerKey, localOwner, visibleLocalWorkspace],
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       auth,
@@ -526,6 +632,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       retryAuthRestore: restore,
       refreshCloud,
       updateLocalWorkspace,
+      buyCatItem,
+      feedCatFood,
     }),
     [
       auth,
@@ -542,6 +650,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restore,
       refreshCloud,
       updateLocalWorkspace,
+      buyCatItem,
+      feedCatFood,
     ],
   );
 
@@ -553,4 +663,15 @@ export function useFirstMoveApp(): AppContextValue {
   const context = useContext(AppContext);
   if (!context) throw new Error("useFirstMoveApp must be used inside AppProvider.");
   return context;
+}
+
+function authenticatedCatOutcome(
+  result: AuthenticatedCatEconomyResult,
+  appliedOutcome: "purchased" | "used",
+): CatEconomyActionOutcome {
+  if (result.outcome === "applied") return appliedOutcome;
+  if (result.outcome !== "queued") return result.outcome;
+  if (result.queueReason === "offline") return "queued-offline";
+  if (result.queueReason === "blocked-by-earlier") return "queued-blocked";
+  return "queued";
 }
