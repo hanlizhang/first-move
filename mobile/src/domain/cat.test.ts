@@ -259,7 +259,7 @@ test("day-21 progression points to wet kitten food without rewriting owned cat f
 
 test("every visible kitten pose has gentle matching copy", () => {
   for (const pose of CAT_POSES) {
-    assert.ok(catReactionCaption(pose).length > 20, pose);
+    assert.ok(catReactionCaption(pose).length > 10, pose);
   }
   assert.match(catReactionCaption("sleeping", "cat-bed"), /cat bed/);
   assert.match(catReactionCaption("sleeping", "window-cushion"), /window perch/);

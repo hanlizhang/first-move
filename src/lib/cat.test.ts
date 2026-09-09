@@ -5,7 +5,6 @@ import { normalizeAppState } from "./app-state.ts";
 import {
   FIRST_IDLE_DELAY_MS,
   EATING_DURATION_MS,
-  HAPPY_ROLL_DURATION_MS,
   MAX_IDLE_DELAY_MS,
   MIN_IDLE_DELAY_MS,
   USER_ACTION_DURATION_MS,
@@ -149,16 +148,20 @@ test("idle behavior cannot transition before five minutes and cleanup clears tim
   assert.deepEqual(delays, [FIRST_IDLE_DELAY_MS]);
   assert.deepEqual(actions, []);
   callbacks.get(1)?.();
-  assert.deepEqual(actions, ["walk"]);
+  assert.deepEqual(actions, ["blink"]);
   cleanup();
-  assert.deepEqual(cleared.sort(), [1, 2]);
+  assert.deepEqual(cleared.sort(), [2, 3]);
 });
 
-test("reduced motion schedules no automatic idle timer", () => {
+test("reduced motion preserves restful idle behavior without walking", () => {
+  const callbacks = new Map<number, () => void>();
+  const actions: string[] = [];
   let scheduled = 0;
-  const cleanup = scheduleIdleBehavior({ reducedMotion: true, random: () => 0, setTimer: () => { scheduled += 1; return 1; }, clearTimer: () => undefined, onAction: () => undefined, onSit: () => undefined });
+  const cleanup = scheduleIdleBehavior({ reducedMotion: true, random: () => 0.4, setTimer: (callback) => { scheduled += 1; callbacks.set(scheduled, callback); return scheduled; }, clearTimer: (timerId) => { callbacks.delete(timerId); }, onAction: (action) => actions.push(action), onSit: () => actions.push("sit") });
+  callbacks.get(1)?.();
   cleanup();
-  assert.equal(scheduled, 0);
+  assert.equal(scheduled, 3);
+  assert.deepEqual(actions, ["blink"]);
 });
 
 test("user action overrides return to sitting and previews do not touch app state", () => {
@@ -177,7 +180,7 @@ test("user action overrides return to sitting and previews do not touch app stat
   assert.deepEqual(persisted, before);
 });
 
-test("food, treat, toy, and trick interactions use distinct states", () => {
+test("new Cat actions replace an active sequence and stale timers cannot settle the replacement", () => {
   const callbacks = new Map<number, () => void>();
   const delays: number[] = [];
   let nextId = 0;
@@ -187,25 +190,28 @@ test("food, treat, toy, and trick interactions use distinct states", () => {
     (timerId) => { callbacks.delete(timerId); },
   );
   assert.equal(sequencer.startInteraction("treat", (pose) => poses.push(pose)), true);
-  assert.equal(sequencer.startInteraction("milk", (pose) => poses.push(pose)), false);
-  assert.deepEqual(poses, ["licking"]);
-  assert.deepEqual(delays, [EATING_DURATION_MS]);
-  callbacks.get(1)?.();
-  assert.deepEqual(poses, ["licking", "happy"]);
-  assert.deepEqual(delays, [EATING_DURATION_MS, HAPPY_ROLL_DURATION_MS]);
+  assert.equal(sequencer.startInteraction("milk", (pose) => poses.push(pose)), true);
+  assert.deepEqual(poses, ["licking", "drinking"]);
+  assert.deepEqual(delays, [EATING_DURATION_MS, EATING_DURATION_MS]);
+  assert.equal(callbacks.has(1), false);
   callbacks.get(2)?.();
-  assert.deepEqual(poses, ["licking", "happy", "sitting"]);
+  assert.deepEqual(poses, ["licking", "drinking", "sitting"]);
   assert.equal(sequencer.isActive(), false);
 });
 
 test("every visible pose has a matching message", () => {
-  assert.match(messageForPose("sitting"), /sitting calmly/);
-  assert.match(messageForPose("walking"), /exploring/);
-  assert.match(messageForPose("sleeping"), /sleeping/);
+  assert.equal(messageForPose("sitting"), "The kitten sits nearby, cozy and curious.");
+  assert.match(messageForPose("walking"), /pads softly/);
+  assert.match(messageForPose("sleeping"), /peaceful nap/);
   assert.match(messageForPose("drinking"), /milk/);
-  assert.match(messageForPose("eating"), /kibble/);
-  assert.match(messageForPose("licking"), /pouch/);
+  assert.match(messageForPose("eating"), /little bowl/);
+  assert.match(messageForPose("licking"), /treat/);
   assert.match(messageForPose("yarn"), /yarn/);
+  assert.match(messageForPose("mouse-pounce"), /toy mouse/);
+  assert.match(messageForPose("scratching"), /Scratch/);
+  assert.match(messageForPose("bed-nap"), /good place/);
+  assert.match(messageForPose("perch"), /window/);
+  assert.match(messageForPose("tree-perch"), /Higher/);
   assert.match(messageForPose("happy"), /happy and content/);
 });
 

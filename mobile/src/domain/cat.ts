@@ -7,6 +7,7 @@ import {
   type CatCatalogItem,
   type CatItemId,
 } from "./cat-items.ts";
+import { CAT_INTERACTION_CAPTIONS } from "./cat-interactions.ts";
 import type { AppState, InventoryItem, RewardEvent } from "./models.ts";
 
 export type CatPurchaseOutcome =
@@ -57,6 +58,14 @@ export const CAT_POSES = [
   "treat",
   "yarn",
   "wand",
+  "anticipating",
+  "pouncing",
+  "mouse",
+  "scratching-left",
+  "scratching-right",
+  "watching",
+  "climbing",
+  "perched",
   "high-five",
   "paw-shake",
   "butterfly",
@@ -85,18 +94,26 @@ export interface CatPoseReturnScheduler {
 }
 
 export const CAT_REACTION_CAPTIONS: Readonly<Record<CatPose, string>> = {
-  sitting: "The kitten sits nearby, cozy and curious.",
-  walking: "The kitten pads softly around the room.",
-  sleeping: "The kitten curls up for a peaceful nap.",
-  milk: "The kitten laps the milk and gives a tiny purr.",
-  food: "The kitten eats from the bowl at its own pace.",
-  treat: "The kitten enjoys the treat, then settles happily.",
-  yarn: "The kitten bats the yarn ball across the floor.",
-  wand: "The kitten watches the teaser wand, then reaches for it.",
-  "high-five": "One tiny paw meets your hand.",
-  "paw-shake": "The kitten places one paw gently in your hand.",
-  butterfly: "The kitten follows a butterfly through the garden.",
-  garden: "The kitten explores the garden, one soft step at a time.",
+  sitting: CAT_INTERACTION_CAPTIONS.sitting,
+  walking: CAT_INTERACTION_CAPTIONS.walking,
+  sleeping: CAT_INTERACTION_CAPTIONS.sleeping,
+  milk: CAT_INTERACTION_CAPTIONS.milk,
+  food: CAT_INTERACTION_CAPTIONS.food,
+  treat: CAT_INTERACTION_CAPTIONS.treat,
+  yarn: CAT_INTERACTION_CAPTIONS["yarn-action"],
+  wand: CAT_INTERACTION_CAPTIONS["wand-follow"],
+  anticipating: CAT_INTERACTION_CAPTIONS["yarn-anticipate"],
+  pouncing: CAT_INTERACTION_CAPTIONS["wand-pounce"],
+  mouse: CAT_INTERACTION_CAPTIONS["mouse-chase"],
+  "scratching-left": CAT_INTERACTION_CAPTIONS.scratch,
+  "scratching-right": CAT_INTERACTION_CAPTIONS.scratch,
+  watching: CAT_INTERACTION_CAPTIONS.perch,
+  climbing: CAT_INTERACTION_CAPTIONS["tree-climb"],
+  perched: CAT_INTERACTION_CAPTIONS["tree-perch"],
+  "high-five": CAT_INTERACTION_CAPTIONS["high-five"],
+  "paw-shake": CAT_INTERACTION_CAPTIONS["paw-shake"],
+  butterfly: CAT_INTERACTION_CAPTIONS["butterfly-chase"],
+  garden: CAT_INTERACTION_CAPTIONS.garden,
 };
 
 const CAT_GROWTH_CHAPTERS = [
@@ -172,6 +189,14 @@ export function catPoseReturnDelayMs(pose: CatPose): number | undefined {
     pose === "sleeping" ||
     pose === "yarn" ||
     pose === "wand" ||
+    pose === "anticipating" ||
+    pose === "pouncing" ||
+    pose === "mouse" ||
+    pose === "scratching-left" ||
+    pose === "scratching-right" ||
+    pose === "watching" ||
+    pose === "climbing" ||
+    pose === "perched" ||
     pose === "high-five" ||
     pose === "paw-shake"
   ) {
