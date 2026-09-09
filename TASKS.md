@@ -355,21 +355,22 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Stage the day-21 transition so only future ungranted milestones receive ten `wet-kitten-food`; retain old `cat-food` grants and events without rewrite, deletion, conversion, duplication, or backfill.
 - [ ] Apply the approved Cat catalog migration remotely only after review of a successful linked-project `supabase db push --dry-run`; the implementation task must not perform the real push.
 
-**Mobile Cat v1A status:** The cross-platform implementation, migration, and automated checks are staged on `mobile/cat-v1a`. Rich Cat v1B animation, Companion Bond, Little Finds, and celebration systems remain unimplemented.
+**Cat v1B interaction status:** Web and Mobile now share the same transient interaction captions, phase timings, item gates, bounded room targeting, reduced-motion rules, and forgiving idle schedule. Teaser wand, yarn, toy mouse, scratching post, selected bed/perch/tree, tricks, and garden/butterfly interactions are implemented without changing the Cat catalog, economy, sync contracts, or database. Today's Hearts, Total Hearts / Bond, Little Finds, and celebration systems remain unimplemented.
 
 ## Release backlog
 
 These items are intentionally deferred and are not implemented:
 
 1. Mobile Trends and Calendar history parity.
-2. Cat v1B interaction and engagement work:
-   - expand toy mouse chase/pounce, yarn bat/pounce, scratching-post use, cat-tree climb/perch, and touch-follow teaser-wand behavior without changing server-authoritative/idempotent ownership;
+2. Deferred Cat engagement work after v1B interactions:
    - Cat v1B may add a litter box after the early kitten stage and show at most a few litter clumps after multiple calendar days away;
    - any `Scoop litter` action must stay optional and playful, award no points, apply no penalty or health/happiness/item loss, create no pressure to open the app, and may trigger only a small kitten reaction;
-   - Companion Bond is designed as a non-decreasing 0–3-heart value, never Mood, with at most one Care Day per local date after both an Active Day and meaningful Cat interaction; proposed thresholds are 3/10/21 Care Days;
-   - Little Finds are designed as no-value, unsellable collectibles eligible at most once per newly earned Care Day, with later deterministic/idempotent/server-authoritative authenticated selection and no daily-login pressure;
-   - future celebrations distinguish compact Coin gain, larger `Active Day +1`, major Bond level-up, full Cat milestone unlock, and Little Find reveal moments; simultaneous rewards use one ordered or combined celebration queue rather than stacked blocking modals;
-   - Companion Bond, Care Days, Little Finds, and celebration schema/code are not part of the Cat v1 catalog migration.
+   - keep the existing Active Day system unchanged as the sole Cat growth and milestone day counter;
+   - future Today's Hearts starts each local date at `♡♡♡`; feeding, playing, tricks, and other meaningful direct Cat interactions earn `+1` heart up to three per local date, while interactions remain fully available after the cap, hearts are never lost, missed days have no penalty, and no streak is required;
+   - future Total Hearts / Bond accumulates every earned daily heart into one lifetime total, conceptually displayed as `Together · 128 ♥`, never decreases, and has no separate Care Day counter or numbered Bond Levels;
+   - Little Finds remain deferred no-value, unsellable collectibles; later eligibility may use Active Day milestones, cumulative Total Hearts, or bounded daily-heart activity, with deterministic/idempotent/server-authoritative authenticated selection and no daily-login pressure;
+   - future celebrations distinguish compact Coin gain, larger `Active Day +1`, daily `Heart +1`, full Cat milestone unlock, and Little Find reveal moments; simultaneous rewards use one ordered or combined celebration queue rather than stacked blocking modals;
+   - Today's Hearts, Total Hearts / Bond, Little Finds, and celebrations remain deferred; Cat v1B implements no Hearts, Little Finds, or celebration code or database schema.
 3. Release UI polish:
    - remove developer-facing `Storage boundary` / architecture explanations;
    - replace them with simple user-facing Local / Pending / Synced / Offline states;

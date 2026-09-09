@@ -84,9 +84,15 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 
 ### Intentionally deferred
 
-- Mobile Trends/Calendar history parity, rich Cat v1B interactions, Companion Bond, Little Finds, celebration UI, RevenueCat Pro entitlement, server-controlled AI quota, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
+- Cat v1B interactions are implemented on Web and Mobile with aligned captions, phase timings, ownership gates, room targets, reduced-motion behavior, and idle scheduling. Their transient pose, scene, and position state remains local and is never added to durable sync or Supabase payloads.
+- Mobile Trends/Calendar history parity, Today's Hearts, Total Hearts / Bond, Little Finds, celebration UI, RevenueCat Pro entitlement, server-controlled AI quota, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented.
 - A later presentation pass may label user-facing points as `Coins` and use one shared coin icon across Web and Mobile. This does not rename or alter stored points, `reward_ledger.points_tenths`, reward values, RPC contracts, or economy semantics.
-- Celebration UI remains designed only: compact Coin gain, larger `Active Day +1`, major Bond level-up, full Cat milestone unlock, and Little Find reveal. Simultaneous rewards must use one ordered or combined celebration queue rather than stacked blocking moments.
+- The existing Active Day system remains unchanged and is the sole Cat growth and milestone day counter.
+- Future Today's Hearts starts each local date at `♡♡♡`. Feeding, playing, tricks, and other meaningful direct Cat interactions earn `+1` heart up to three per local date; interactions stay fully available after that cap. Hearts are never lost, missed days have no penalty, and no streak is required.
+- Future Total Hearts / Bond accumulates every earned daily heart into one lifetime companionship total, conceptually displayed as `Together · 128 ♥`. Total Hearts never decrease; there is no separate Care Day counter or numbered Bond Level system.
+- Little Finds remain deferred. Later eligibility may use Active Day milestones, cumulative Total Hearts, or bounded daily-heart activity; future authenticated selection must remain deterministic, idempotent, and server-authoritative.
+- Celebration UI remains designed only: compact Coin gain, larger `Active Day +1`, daily `Heart +1`, full Cat milestone unlock, and Little Find reveal. Simultaneous rewards must use one ordered or combined celebration queue rather than stacked blocking moments.
+- Cat v1B implements no Hearts, Little Finds, or celebration code or database schema.
 - Mobile empty-account setup/import, post-session choices, Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
 
 ## 6. Migration list and recorded state
@@ -186,7 +192,7 @@ Remaining manual checks are known verification items and do not block the curren
 - Continuous sync remains feature-gated for controlled rollout. Its migration is remotely applied and core task/habit convergence is manually verified; the documented smoke tests remain pending.
 - Guest data, immutable IndexedDB backups, Web runtime metadata, the Mobile AsyncStorage retry queue, transient planning drafts, local First Move templates, toothbrush image previews, and development-only controls remain device-local by design.
 - Toothbrush photos are transient only; they are never synchronized or stored.
-- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, Mobile Trends/Calendar history parity, rich Cat v1B interactions, Companion Bond, Little Finds, celebration UI, Mobile release UI polish, true-device testing, and store release work remain deferred.
+- RevenueCat, subscription UI/SDKs/webhooks, server AI quota/entitlement enforcement, region allowlisting, production AI access control, Mobile Trends/Calendar history parity, Today's Hearts, Total Hearts / Bond, Little Finds, celebration UI, Mobile release UI polish, true-device testing, and store release work remain deferred.
 - Current optional live AI routes are server-side and user-initiated, with mock/manual fallback and no automatic retries, but they are not the designed authenticated paid-AI gateway.
 - The architecture documents describe a more complete B5 conflict/outbox design than the implemented MVP.
 

@@ -57,9 +57,24 @@ import {
   stopSession,
 } from "@/lib/sessions";
 import { getTaskTrackedMs, getTodaySummary, getTodayTimeline } from "@/lib/summaries";
-import { CAT_ITEMS, STORE_CATEGORIES, isCatItemUnlocked, type CatItemId } from "@/lib/cat-items";
-import { inventoryQuantity, purchaseCatItem, useFood as consumeCatFood } from "@/lib/cat-store";
-import { HAPPY_ROLL_DURATION_MS, clampRoomPoint, createCatActionSequencer, messageForPose, previewPose, scheduleIdleBehavior, type CatInteraction, type CatPose, type IdleAction } from "@/lib/cat-behavior";
+import { CAT_ITEMS, STORE_CATEGORIES, isCatItemId, isCatItemUnlocked, type CatItemId } from "@/lib/cat-items";
+import { inventoryQuantity, purchaseCatItem, selectFurniture, useFood as consumeCatFood } from "@/lib/cat-store";
+import { HAPPY_ROLL_DURATION_MS, createCatActionSequencer, messageForPose, previewPose, scheduleIdleBehavior, type CatInteraction, type CatPose, type IdleAction } from "@/lib/cat-behavior";
+import {
+  CAT_HOME_POINT,
+  CAT_INTERACTION_CAPTIONS,
+  CAT_WAND_STEP,
+  catInteractionAvailability,
+  clampNormalizedRoomPoint,
+  facingTowardRoomPoint,
+  normalizedRoomPoint,
+  roomPointDistance,
+  shouldWandPounce,
+  stepTowardRoomPoint,
+  type CatFacing,
+  type CatInteractionPhase,
+  type NormalizedRoomPoint,
+} from "@/lib/cat-interactions";
 import { CAT_MILESTONES } from "@/lib/cat-items";
 import { catGrowthStory, gentleReturnMessage, syncProgress } from "@/lib/progress";
 import { deleteReflection, hasReflectionContent, saveReflection, type ReflectionInput } from "@/lib/reflections";
@@ -1143,7 +1158,7 @@ function FloatingCompanion({ reaction, focusActive, onOpenStore }: { reaction?: 
   return <aside className="global-companion pointer-events-none fixed z-30" aria-live="polite">
     {reaction && <div className="companion-speech mb-1 rounded-xl border border-amber-200 bg-white px-3 py-2 text-center text-xs font-bold text-stone-800 shadow-lg">{reaction.message}</div>}
     <button type="button" className="pointer-events-auto block rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700" onClick={onOpenStore} aria-label="Open Cat Store">
-      <PixelKitten compact pose={pose} walkingLeft={walkingLeft} blinking={blinking} wandPoint={{ x: 80, y: 40 }} />
+      <PixelKitten compact pose={pose} walkingLeft={walkingLeft} blinking={blinking} />
     </button>
   </aside>;
 }
@@ -1151,17 +1166,23 @@ function FloatingCompanion({ reaction, focusActive, onOpenStore }: { reaction?: 
 function CatRoom({ state, today, update }: { state: AppState; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
   const returnMessage = gentleReturnMessage(state.progress.lastActiveDate, today);
   const [pose, setPose] = useState<CatPose>("sitting");
+  const [phase, setPhase] = useState<CatInteractionPhase>("sitting");
   const [blinking, setBlinking] = useState(false);
   const [walkingLeft, setWalkingLeft] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [idleReset, setIdleReset] = useState(0);
-  const [playMode, setPlayMode] = useState(false);
-  const [wandPoint, setWandPoint] = useState({ x: 70, y: 38 });
+  const [wandActive, setWandActive] = useState(false);
+  const [outdoor, setOutdoor] = useState(false);
   const [previewOutdoor, setPreviewOutdoor] = useState(false);
-  const roomRef = useRef<HTMLDivElement>(null);
-  const [notice, setNotice] = useState(returnMessage ? `${returnMessage} The kitten is sitting calmly now.` : messageForPose("sitting"));
+  const [notice, setNotice] = useState(returnMessage ? `${returnMessage} ${CAT_INTERACTION_CAPTIONS.sitting}` : CAT_INTERACTION_CAPTIONS.sitting);
   const actionSequencer = useRef<ReturnType<typeof createCatActionSequencer> | undefined>(undefined);
   const growthStory = catGrowthStory(state.progress.totalActiveDays);
+  const selectedFurnitureId = isCatItemId(state.inventory.selectedFurnitureId) ? state.inventory.selectedFurnitureId : undefined;
+  const ownedItemIds = state.inventory.items.filter((entry) => entry.quantity > 0).map((entry) => entry.itemId).filter(isCatItemId);
+  const availability = catInteractionAvailability(ownedItemIds, selectedFurnitureId);
+  const bedSelected = selectedFurnitureId === "cat-bed" && inventoryQuantity(state, "cat-bed") > 0;
+  const scratchingPostOwned = inventoryQuantity(state, "scratching-post") > 0;
+  const outdoorVisible = outdoor || previewOutdoor;
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -1176,20 +1197,31 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
     random: Math.random,
     setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
     clearTimer: (timerId) => window.clearTimeout(timerId),
+    isInteractionActive: () => outdoor || wandActive || Boolean(actionSequencer.current?.isActive()),
     onAction: (action: IdleAction) => {
       setBlinking(action === "blink");
-      const nextPose = action === "walk" ? "walking" : action === "sleep" ? "sleeping" : "sitting";
+      const nextPose = action === "walk"
+        ? "walking"
+        : action === "sleep" && !outdoor && !reducedMotion && bedSelected
+          ? "bed-nap"
+          : action === "sleep" && !outdoor && !reducedMotion && availability.perch
+            ? "perch"
+            : action === "sleep"
+              ? "sleeping"
+              : "sitting";
       setPose(nextPose);
-      setNotice(messageForPose(nextPose));
+      setPhase(nextPose === "bed-nap" ? "bed-nap" : nextPose === "perch" ? "perch" : nextPose === "sleeping" ? "sleeping" : nextPose === "walking" ? "walking" : "sitting");
+      setNotice(outdoor ? CAT_INTERACTION_CAPTIONS.garden : messageForPose(nextPose));
       if (action === "walk") setWalkingLeft((value) => !value);
     },
-    onSit: () => { setPose("sitting"); setBlinking(false); setNotice(messageForPose("sitting")); },
-  }), [idleReset, reducedMotion]);
+    onSit: () => { setPose("sitting"); setPhase(outdoor ? "garden" : "sitting"); setBlinking(false); setNotice(outdoor ? CAT_INTERACTION_CAPTIONS.garden : CAT_INTERACTION_CAPTIONS.sitting); },
+  }), [availability.perch, bedSelected, idleReset, outdoor, reducedMotion, wandActive]);
 
   useEffect(() => () => actionSequencer.current?.cancel(), []);
 
   useEffect(() => {
     const handleMorningSuccess = () => {
+      setWandActive(false);
       actionSequencer.current ??= createCatActionSequencer(
         (callback, delayMs) => window.setTimeout(callback, delayMs),
         (timerId) => window.clearTimeout(timerId),
@@ -1219,15 +1251,33 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
     setNotice(messageForPose(nextPose));
   }
 
+  function applyInteractionPhase(nextPhase: CatInteractionPhase) {
+    setPhase(nextPhase);
+    setNotice(CAT_INTERACTION_CAPTIONS[nextPhase]);
+  }
+
   function showInteraction(interaction: CatInteraction) {
+    setWandActive(false);
+    if (interaction !== "garden" && interaction !== "butterfly") {
+      setOutdoor(false);
+      setPreviewOutdoor(false);
+    }
     const sequencer = getActionSequencer();
-    const started = sequencer.startInteraction(interaction, applyActionPose);
+    const started = sequencer.startInteraction(interaction, applyActionPose, (nextPhase) => {
+      if (interaction === "butterfly" && nextPhase === "sitting") {
+        setPhase("garden");
+        setNotice(CAT_INTERACTION_CAPTIONS.garden);
+        return;
+      }
+      applyInteractionPhase(nextPhase);
+    });
     if (!started) return false;
     setIdleReset((value) => value + 1);
     return true;
   }
 
   function showPreview(nextPose: CatPose) {
+    setWandActive(false);
     getActionSequencer().cancel();
     setBlinking(false);
     setIdleReset((value) => value + 1);
@@ -1247,37 +1297,74 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   }
 
   function feed(itemId: CatItemId) {
-    if (getActionSequencer().isActive()) return;
-    update((current) => {
-      const next = consumeCatFood(current, itemId);
-      if (next === current) {
-        setNotice("There is none of that food in the cupboard yet.");
-        return current;
-      }
-      const item = CAT_ITEMS.find((candidate) => candidate.id === itemId);
-      showInteraction(itemId === "kitten-milk" ? "milk" : item?.category === "Treats" ? "treat" : "food");
-      return next;
-    });
+    if (inventoryQuantity(state, itemId) < 1) {
+      setNotice("There is none of that food in the cupboard yet.");
+      return;
+    }
+    const item = CAT_ITEMS.find((candidate) => candidate.id === itemId);
+    update((current) => consumeCatFood(current, itemId));
+    showInteraction(itemId === "kitten-milk" ? "milk" : item?.category === "Treats" ? "treat" : "food");
   }
 
   const ownedFood = CAT_ITEMS.filter((item) => item.kind === "food" && inventoryQuantity(state, item.id) > 0);
-  const ownsToy = inventoryQuantity(state, "yarn-toy") > 0;
-  const ownsWand = inventoryQuantity(state, "teaser-wand") > 0;
-  const ownsTrick = inventoryQuantity(state, "high-five") > 0;
-  const ownsPawShake = inventoryQuantity(state, "paw-shake") > 0;
-  const ownsGarden = inventoryQuantity(state, "outdoor-garden") > 0;
-  const ownsButterfly = inventoryQuantity(state, "butterfly") > 0;
-  const outdoor = ownsGarden || previewOutdoor;
 
-  function moveWand(event: React.PointerEvent<HTMLDivElement>) {
-    if (!playMode || !roomRef.current) return;
-    setWandPoint(clampRoomPoint(event.clientX, event.clientY, roomRef.current.getBoundingClientRect()));
-    if (pose !== "wand") applyActionPose("wand");
+  function chooseFurniture(itemId: CatItemId) {
+    getActionSequencer().cancel();
+    setWandActive(false);
+    setOutdoor(false);
+    setPreviewOutdoor(false);
+    setPose("sitting");
+    setPhase("sitting");
+    setBlinking(false);
+    update((current) => selectFurniture(current, itemId));
+    const item = CAT_ITEMS.find((candidate) => candidate.id === itemId);
+    setNotice(`${item?.name ?? "Furniture"} is ready in the room.`);
+    setIdleReset((value) => value + 1);
   }
 
-  function toggleWand() {
-    if (playMode) { setPlayMode(false); getActionSequencer().cancel(); applyActionPose("sitting"); return; }
-    setPlayMode(true); getActionSequencer().cancel(); applyActionPose("wand"); setIdleReset((value) => value + 1);
+  function startWand() {
+    getActionSequencer().cancel();
+    setOutdoor(false);
+    setPreviewOutdoor(false);
+    setBlinking(false);
+    setPhase("wand-follow");
+    setPose("wand");
+    setNotice(CAT_INTERACTION_CAPTIONS["wand-follow"]);
+    setWandActive(true);
+    setIdleReset((value) => value + 1);
+  }
+
+  function stopWand() {
+    setWandActive(false);
+    getActionSequencer().cancel();
+    setPose("sitting");
+    setPhase("sitting");
+    setBlinking(false);
+    setNotice(CAT_INTERACTION_CAPTIONS.sitting);
+    setIdleReset((value) => value + 1);
+  }
+
+  function visitGarden() {
+    getActionSequencer().cancel();
+    setWandActive(false);
+    setOutdoor(true);
+    setPose("sitting");
+    setPhase("garden");
+    setBlinking(false);
+    setNotice(CAT_INTERACTION_CAPTIONS.garden);
+    setIdleReset((value) => value + 1);
+  }
+
+  function returnIndoors() {
+    setOutdoor(false);
+    setPreviewOutdoor(false);
+    setWandActive(false);
+    getActionSequencer().cancel();
+    setPose("sitting");
+    setPhase("sitting");
+    setBlinking(false);
+    setNotice(CAT_INTERACTION_CAPTIONS.sitting);
+    setIdleReset((value) => value + 1);
   }
 
   return (
@@ -1292,29 +1379,257 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
         <div><dt className="text-stone-500">Active days</dt><dd className="font-semibold">{state.progress.totalActiveDays}</dd></div>
         <div><dt className="text-stone-500">Gentle streak</dt><dd className="font-semibold">{state.progress.gentleStreak} day{state.progress.gentleStreak === 1 ? "" : "s"}</dd></div>
       </dl>
-      <div ref={roomRef} onPointerMove={moveWand} className={`relative mt-5 overflow-hidden rounded-3xl border border-amber-200 p-4 text-center sm:p-5 ${outdoor ? "cat-garden" : "bg-gradient-to-b from-sky-100 via-amber-50 to-orange-100"} ${playMode ? "touch-none" : ""}`}>
-          {outdoor && <GardenScene />}
+      <div className={`relative mt-5 overflow-hidden rounded-3xl border border-amber-200 p-4 text-center sm:p-5 ${outdoorVisible ? "cat-garden" : "bg-gradient-to-b from-sky-100 via-amber-50 to-orange-100"}`}>
+          {outdoorVisible && <GardenScene />}
           <p className="text-sm font-bold text-fuchsia-800">{growthStory.title}</p>
           <p className="mx-auto mt-1 max-w-lg text-xs text-stone-600">{growthStory.description}</p>
           <p className="mx-auto mt-1 max-w-lg text-xs italic text-stone-500">Active days are a symbolic journey, not a literal kitten age.</p>
-          <PixelKitten pose={pose} walkingLeft={walkingLeft} blinking={blinking} wandPoint={wandPoint} />
-          {playMode && <div className="pointer-events-none absolute h-4 w-4 rounded-full bg-rose-500 shadow" style={{ left: wandPoint.x - 8, top: wandPoint.y - 8 }} aria-hidden="true" />}
-          <p className="mx-auto max-w-md rounded-xl bg-white/80 px-3 py-2 text-sm text-stone-700" aria-live="polite">{notice}</p>
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {ownsToy && <MiniButton onClick={() => showInteraction("yarn")}>Play with yarn</MiniButton>}
-            {ownsWand && <MiniButton onClick={toggleWand}>{playMode ? "End wand play" : "Play with wand"}</MiniButton>}
-            {ownsTrick && <MiniButton onClick={() => showInteraction("high-five")}>High five</MiniButton>}
-            {ownsPawShake && <MiniButton onClick={() => showInteraction("paw-shake")}>Paw shake</MiniButton>}
-            {ownsButterfly && <MiniButton onClick={() => showInteraction("butterfly")}>Follow butterfly</MiniButton>}
+          <CatPlayStage
+            blinking={blinking}
+            key={wandActive ? "wand-active" : "wand-idle"}
+            onEndWand={stopWand}
+            onWandPhase={(nextPhase) => { setPhase(nextPhase); setPose(nextPhase === "wand-pounce" ? "wand-pounce" : "wand"); setNotice(CAT_INTERACTION_CAPTIONS[nextPhase]); }}
+            outdoor={outdoorVisible}
+            ownsMouse={availability.mouse}
+            ownsScratchingPost={scratchingPostOwned}
+            ownsYarn={availability.yarn}
+            phase={phase}
+            pose={pose}
+            reducedMotion={reducedMotion}
+            selectedFurnitureId={selectedFurnitureId}
+            walkingLeft={walkingLeft}
+            wandActive={wandActive}
+          />
+          <p id="cat-room-caption" className="relative z-10 mx-auto max-w-md rounded-xl bg-white/85 px-3 py-2 text-sm text-stone-700" aria-live="polite">{notice}</p>
+          {wandActive && <p id="wand-instructions" className="relative z-10 mt-2 text-xs font-semibold text-fuchsia-900">Move the pointer in the room or use the arrow keys. Press Escape to finish.</p>}
+          <div className="relative z-10 mt-4 flex flex-wrap justify-center gap-2">
+            {availability.yarn && <MiniButton onClick={() => showInteraction("yarn")}>Play with yarn</MiniButton>}
+            {availability.mouse && <MiniButton onClick={() => showInteraction("mouse")}>Chase toy mouse</MiniButton>}
+            {availability.wand && <MiniButton onClick={wandActive ? stopWand : startWand}>{wandActive ? "End wand play" : "Play with teaser wand"}</MiniButton>}
+            {scratchingPostOwned && <MiniButton onClick={() => showInteraction("scratch")}>Scratch</MiniButton>}
+            {bedSelected && <MiniButton onClick={() => showInteraction("bed-nap")}>Nap in bed</MiniButton>}
+            {availability.perch && <MiniButton onClick={() => showInteraction("perch")}>Watch from perch</MiniButton>}
+            {availability.tree && <MiniButton onClick={() => showInteraction("tree")}>Climb cat tree</MiniButton>}
+            {availability.highFive && <MiniButton onClick={() => showInteraction("high-five")}>High five</MiniButton>}
+            {availability.pawShake && <MiniButton onClick={() => showInteraction("paw-shake")}>Paw shake</MiniButton>}
+            {availability.garden && !outdoor && <MiniButton onClick={visitGarden}>Visit garden</MiniButton>}
+            {availability.garden && outdoor && <MiniButton onClick={returnIndoors}>Return to room</MiniButton>}
+            {availability.butterfly && outdoor && <MiniButton onClick={() => showInteraction("butterfly")}>Follow butterfly</MiniButton>}
           </div>
           {ownedFood.length > 0 && <div className="mt-4"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Use food</p><div className="mt-2 flex flex-wrap justify-center gap-2">{ownedFood.map((item) => <button key={item.id} type="button" className="rounded-lg bg-white px-3 py-2 text-xs font-semibold shadow-sm focus-visible:outline-2 focus-visible:outline-fuchsia-700" onClick={() => feed(item.id)}>{item.name} × {inventoryQuantity(state, item.id)}</button>)}</div></div>}
           {process.env.NODE_ENV === "development" && <DevelopmentPosePreview onPreview={showPreview} onInteraction={showInteraction} outdoor={previewOutdoor} onOutdoor={() => setPreviewOutdoor((value) => !value)} />}
       </div>
-      <div className="mt-6"><h3 className="text-xl font-bold">Reward shelf</h3><p className="mt-1 text-sm text-stone-600">A few small things, unlocked by active days. Food can be used repeatedly; toys, furniture, and tricks stay yours.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{STORE_CATEGORIES.map((category) => <section key={category} className="rounded-2xl border border-fuchsia-200 bg-white p-4" aria-labelledby={`store-${category}`}><h4 id={`store-${category}`} className="text-sm font-bold uppercase tracking-wide text-fuchsia-800">{category}</h4><ul className="mt-2 space-y-2">{CAT_ITEMS.filter((item) => item.category === category).map((item) => { const quantity = inventoryQuantity(state, item.id); const owned = item.durable && quantity > 0; const unlocked = isCatItemUnlocked(item, state.progress.totalActiveDays); const affordable = state.progress.points >= item.price; return <li key={item.id} className="rounded-xl bg-fuchsia-50 p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-stone-500">{owned || unlocked ? item.description : `Unlocks at ${item.unlockActiveDays} active days`}</p></div><span className="text-sm font-bold">{formatPoints(item.price)}</span></div><button type="button" disabled={owned || !unlocked || !affordable} className="mt-2 rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:cursor-not-allowed disabled:bg-stone-300" onClick={() => buy(item.id)}>{owned ? "Owned" : !unlocked ? `Locked · day ${item.unlockActiveDays}` : !affordable ? "Need more points" : "Buy"}</button>{!item.durable && quantity > 0 && <span className="ml-2 text-xs text-stone-500">Owned: {quantity}</span>}</li>; })}</ul></section>)}</div></div>
+      <div className="mt-6"><h3 className="text-xl font-bold">Reward shelf</h3><p className="mt-1 text-sm text-stone-600">A few small things, unlocked by active days. Food can be used repeatedly; toys, furniture, and tricks stay yours.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{STORE_CATEGORIES.map((category) => <section key={category} className="rounded-2xl border border-fuchsia-200 bg-white p-4" aria-labelledby={`store-${category}`}><h4 id={`store-${category}`} className="text-sm font-bold uppercase tracking-wide text-fuchsia-800">{category}</h4><ul className="mt-2 space-y-2">{CAT_ITEMS.filter((item) => item.category === category).map((item) => { const quantity = inventoryQuantity(state, item.id); const owned = item.durable && quantity > 0; const selected = item.kind === "furniture" && selectedFurnitureId === item.id; const unlocked = isCatItemUnlocked(item, state.progress.totalActiveDays); const affordable = state.progress.points >= item.price; return <li key={item.id} className="rounded-xl bg-fuchsia-50 p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-stone-500">{owned || unlocked ? item.description : `Unlocks at ${item.unlockActiveDays} active days`}</p></div><span className="text-sm font-bold">{formatPoints(item.price)}</span></div><button type="button" disabled={owned || !unlocked || !affordable} className="mt-2 rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:cursor-not-allowed disabled:bg-stone-300" onClick={() => buy(item.id)}>{owned ? "Owned" : !unlocked ? `Locked · day ${item.unlockActiveDays}` : !affordable ? "Need more points" : "Buy"}</button>{item.kind === "furniture" && owned && <button type="button" disabled={selected} className="ml-2 mt-2 rounded-lg border border-fuchsia-300 bg-white px-3 py-1.5 text-xs font-bold text-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:border-emerald-300 disabled:bg-emerald-50 disabled:text-emerald-800" onClick={() => chooseFurniture(item.id)}>{selected ? "In room" : "Place in room"}</button>}{!item.durable && quantity > 0 && <span className="ml-2 text-xs text-stone-500">Owned: {quantity}</span>}</li>; })}</ul></section>)}</div></div>
       <MilestoneCards totalActiveDays={state.progress.totalActiveDays} completed={state.progress.grantedMilestones} />
       <p className="mt-5 text-sm text-stone-600">Active days never expire. Missing a day never removes points, items, or companionship.</p>
     </section>
   );
+}
+
+function CatPlayStage({
+  blinking,
+  onEndWand,
+  onWandPhase,
+  outdoor,
+  ownsMouse,
+  ownsScratchingPost,
+  ownsYarn,
+  phase,
+  pose,
+  reducedMotion,
+  selectedFurnitureId,
+  walkingLeft,
+  wandActive,
+}: {
+  blinking: boolean;
+  onEndWand: () => void;
+  onWandPhase: (phase: "wand-follow" | "wand-pounce") => void;
+  outdoor: boolean;
+  ownsMouse: boolean;
+  ownsScratchingPost: boolean;
+  ownsYarn: boolean;
+  phase: CatInteractionPhase;
+  pose: CatPose;
+  reducedMotion: boolean;
+  selectedFurnitureId?: CatItemId;
+  walkingLeft: boolean;
+  wandActive: boolean;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [wandTarget, setWandTarget] = useState<NormalizedRoomPoint>({ x: 0.78, y: 0.24 });
+  const [catPoint, setCatPoint] = useState<NormalizedRoomPoint>({ ...CAT_HOME_POINT });
+  const [facing, setFacing] = useState<CatFacing>("right");
+  const [wandPouncing, setWandPouncing] = useState(false);
+  const targetRef = useRef(wandTarget);
+  const catPointRef = useRef(catPoint);
+  const wandPhaseCallbackRef = useRef(onWandPhase);
+
+  useEffect(() => {
+    wandPhaseCallbackRef.current = onWandPhase;
+  }, [onWandPhase]);
+
+  useEffect(() => {
+    if (!wandActive) return;
+
+    stageRef.current?.focus({ preventScroll: true });
+    setFacing((current) => facingTowardRoomPoint(catPointRef.current, targetRef.current, current));
+    wandPhaseCallbackRef.current("wand-follow");
+    if (reducedMotion) {
+      setWandPouncing(false);
+      return;
+    }
+
+    let animationFrame: number | undefined;
+    let disposed = false;
+    let lastStepAt = 0;
+    let nextPounceCheckAt = 0;
+    let pounceUntil = 0;
+    let pounceCooldownUntil = 0;
+    let semanticPhase: "wand-follow" | "wand-pounce" = "wand-follow";
+
+    const setSemanticPhase = (nextPhase: "wand-follow" | "wand-pounce") => {
+      if (semanticPhase === nextPhase) return;
+      semanticPhase = nextPhase;
+      setWandPouncing(nextPhase === "wand-pounce");
+      wandPhaseCallbackRef.current(nextPhase);
+    };
+
+    const animate = (time: number) => {
+      if (disposed) return;
+      if (time - lastStepAt >= 90) {
+        lastStepAt = time;
+        const previous = catPointRef.current;
+        const next = stepTowardRoomPoint(previous, targetRef.current, CAT_WAND_STEP * 0.36, true);
+        if (roomPointDistance(previous, next) > 0.000_1) {
+          catPointRef.current = next;
+          setCatPoint(next);
+        }
+        setFacing((current) => facingTowardRoomPoint(next, targetRef.current, current));
+
+        if (semanticPhase === "wand-pounce" && time >= pounceUntil) {
+          setSemanticPhase("wand-follow");
+        }
+        if (semanticPhase === "wand-follow" && time >= nextPounceCheckAt && time >= pounceCooldownUntil) {
+          nextPounceCheckAt = time + 650;
+          if (shouldWandPounce(next, targetRef.current, Math.random())) {
+            pounceUntil = time + 450;
+            pounceCooldownUntil = time + 1_800;
+            setSemanticPhase("wand-pounce");
+          }
+        }
+      }
+      animationFrame = window.requestAnimationFrame(animate);
+    };
+
+    animationFrame = window.requestAnimationFrame(animate);
+    return () => {
+      disposed = true;
+      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
+    };
+  }, [reducedMotion, wandActive]);
+
+  function updateWandTarget(nextTarget: NormalizedRoomPoint) {
+    const clamped = clampNormalizedRoomPoint(nextTarget);
+    targetRef.current = clamped;
+    setWandTarget(clamped);
+    setFacing((current) => facingTowardRoomPoint(catPointRef.current, clamped, current));
+    if (wandPouncing) {
+      setWandPouncing(false);
+      wandPhaseCallbackRef.current("wand-follow");
+    }
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!wandActive || !stageRef.current) return;
+    const rect = stageRef.current.getBoundingClientRect();
+    updateWandTarget(normalizedRoomPoint(event.clientX - rect.left, event.clientY - rect.top, rect.width, rect.height));
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!wandActive) return;
+    const keyDelta: Partial<Record<"ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown", NormalizedRoomPoint>> = {
+      ArrowLeft: { x: -0.06, y: 0 },
+      ArrowRight: { x: 0.06, y: 0 },
+      ArrowUp: { x: 0, y: -0.06 },
+      ArrowDown: { x: 0, y: 0.06 },
+    };
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onEndWand();
+      return;
+    }
+    const delta = keyDelta[event.key as keyof typeof keyDelta];
+    if (!delta) return;
+    event.preventDefault();
+    updateWandTarget({ x: targetRef.current.x + delta.x, y: targetRef.current.y + delta.y });
+  }
+
+  const displayedPose = wandActive ? (wandPouncing ? "wand-pounce" : "wand") : pose;
+  const catStyle = wandActive
+    ? { left: `${catPoint.x * 100}%`, top: `${catPoint.y * 100}%` }
+    : undefined;
+  const butterflyActive = outdoor && (phase === "butterfly-spot" || phase === "butterfly-chase");
+
+  return (
+    <div
+      ref={stageRef}
+      className={`cat-play-stage cat-play-stage-phase-${phase} relative mx-auto mt-3 max-w-3xl overflow-hidden rounded-2xl ${wandActive ? "cat-wand-active touch-none" : ""}`}
+      tabIndex={wandActive ? 0 : -1}
+      aria-label={wandActive ? "Teaser wand play area" : "Kitten room"}
+      aria-describedby={wandActive ? "wand-instructions cat-room-caption" : "cat-room-caption"}
+      onKeyDown={handleKeyDown}
+      onPointerDown={handlePointerMove}
+      onPointerMove={handlePointerMove}
+    >
+      <div className="cat-room-floor" aria-hidden="true" />
+      {!outdoor && <>
+        {ownsYarn && <YarnBall active={phase === "yarn-anticipate" || phase === "yarn-action" || phase === "yarn-settle"} />}
+        {ownsMouse && <ToyMouse active={phase === "mouse-stalk" || phase === "mouse-chase" || phase === "mouse-pounce"} />}
+        {ownsScratchingPost && <ScratchingPost active={phase === "scratch"} />}
+        {selectedFurnitureId === "cat-bed" && <CatBed active={phase === "bed-nap"} />}
+        {selectedFurnitureId === "window-cushion" && <WindowPerch active={phase === "perch"} />}
+        {selectedFurnitureId === "cat-tree" && <CatTree active={phase === "tree-climb" || phase === "tree-perch"} />}
+      </>}
+      {butterflyActive && <ButterflyTarget chasing={phase === "butterfly-chase"} />}
+      {wandActive && <>
+        <svg className="cat-wand-line pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="100" y1="0" x2={wandTarget.x * 100} y2={wandTarget.y * 100} />
+        </svg>
+        <div className="cat-wand-target pointer-events-none absolute" style={{ left: `${wandTarget.x * 100}%`, top: `${wandTarget.y * 100}%` }} aria-hidden="true"><span /></div>
+      </>}
+      <div className={`cat-stage-kitten cat-stage-kitten-${displayedPose} ${wandActive ? "cat-stage-kitten-wand" : ""}`} style={catStyle}>
+        <PixelKitten pose={displayedPose} walkingLeft={walkingLeft} blinking={blinking} facing={facing} />
+      </div>
+    </div>
+  );
+}
+
+function YarnBall({ active }: { active: boolean }) {
+  return <div className={`cat-room-item cat-yarn-ball ${active ? "is-active" : ""}`} aria-label="Yarn ball" role="img"><span aria-hidden="true" /></div>;
+}
+
+function ToyMouse({ active }: { active: boolean }) {
+  return <div className={`cat-room-item cat-toy-mouse ${active ? "is-active" : ""}`} aria-label="Toy mouse" role="img"><span aria-hidden="true" /></div>;
+}
+
+function ScratchingPost({ active }: { active: boolean }) {
+  return <div className={`cat-room-item cat-scratching-post ${active ? "is-active" : ""}`} aria-label="Scratching post" role="img"><span aria-hidden="true" /></div>;
+}
+
+function CatBed({ active }: { active: boolean }) {
+  return <div className={`cat-room-item cat-bed ${active ? "is-active" : ""}`} aria-label="Cat bed" role="img"><span aria-hidden="true" /></div>;
+}
+
+function WindowPerch({ active }: { active: boolean }) {
+  return <div className={`cat-room-item cat-window-perch ${active ? "is-active" : ""}`} aria-label="Window perch" role="img"><span aria-hidden="true" /></div>;
+}
+
+function CatTree({ active }: { active: boolean }) {
+  return <div className={`cat-room-item cat-tree ${active ? "is-active" : ""}`} aria-label="Cat tree" role="img"><span aria-hidden="true" /><i aria-hidden="true" /></div>;
+}
+
+function ButterflyTarget({ chasing }: { chasing: boolean }) {
+  return <div className={`cat-butterfly-target ${chasing ? "is-chasing" : ""}`} role="img" aria-label="Butterfly"><span aria-hidden="true" /><i aria-hidden="true" /></div>;
 }
 
 function DevelopmentPosePreview({ onPreview, onInteraction, outdoor, onOutdoor }: { onPreview: (pose: CatPose) => void; onInteraction: (interaction: CatInteraction) => void; outdoor: boolean; onOutdoor: () => void }) {
@@ -1322,13 +1637,14 @@ function DevelopmentPosePreview({ onPreview, onInteraction, outdoor, onOutdoor }
   return <div className="relative z-10 mx-auto mt-4 max-w-2xl rounded-xl border border-dashed border-stone-400 bg-white/80 p-3"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Development interaction preview</p><div className="mt-2 flex flex-wrap justify-center gap-1.5">{previews.map(([label, interaction]) => <MiniButton key={interaction} onClick={() => onInteraction(interaction)}>{label}</MiniButton>)}<MiniButton onClick={() => onPreview("happy")}>Happy roll</MiniButton><MiniButton onClick={onOutdoor}>{outdoor ? "Indoor scene" : "Garden milestone"}</MiniButton><MiniButton onClick={() => onPreview("sitting")}>Reset</MiniButton></div></div>;
 }
 
-function PixelKitten({ pose, walkingLeft, blinking, wandPoint, compact = false }: { pose: CatPose; walkingLeft: boolean; blinking: boolean; wandPoint: { x: number; y: number }; compact?: boolean }) {
+function PixelKitten({ pose, walkingLeft, blinking, facing = "right", compact = false }: { pose: CatPose; walkingLeft: boolean; blinking: boolean; facing?: CatFacing; compact?: boolean }) {
+  const facingLeft = (pose === "walking" && walkingLeft) || facing === "left";
   return (
     <div className={`pixel-kitten pixel-kitten-${pose} ${compact ? "pixel-kitten-compact" : ""} relative mx-auto my-2`} role="img" aria-label={`Pixel-art kitten ${pose}`}>
       <svg className="kitten-sprite h-auto w-full" viewBox="0 0 160 110" shapeRendering="crispEdges" aria-hidden="true">
         <rect x="8" y="94" width="144" height="4" fill="#b08968"/><rect x="18" y="98" width="124" height="3" fill="#ddb892"/>
-        <g className={pose === "walking" && walkingLeft ? "kitten-walker kitten-walker-left" : "kitten-walker"}><g className={pose === "walking" && walkingLeft ? "kitten-facing-left" : undefined}>
-          {pose === "sleeping" ? <SleepingKitten /> : pose === "walking" ? <WalkingKitten /> : pose === "drinking" ? <DrinkingKitten /> : pose === "eating" ? <EatingKitten /> : pose === "licking" ? <LickingKitten /> : pose === "yarn" ? <PlayingKitten /> : pose === "wand" ? <WandKitten targetX={wandPoint.x} /> : pose === "high-five" ? <HighFiveKitten /> : pose === "paw-shake" ? <PawShakeKitten /> : pose === "butterfly" ? <ButterflyKitten /> : pose === "happy" ? <HappyRollKitten /> : pose === "proud" ? <ProudKitten /> : pose === "milestone" ? <MilestoneKitten /> : <SittingKitten blinking={blinking} />}
+        <g className={pose === "walking" && walkingLeft ? "kitten-walker kitten-walker-left" : "kitten-walker"}><g className={facingLeft ? "kitten-facing-left" : undefined}>
+          {pose === "sleeping" || pose === "bed-nap" ? <SleepingKitten /> : pose === "walking" || pose === "mouse-chase" || pose === "tree-climb" ? <WalkingKitten /> : pose === "drinking" ? <DrinkingKitten /> : pose === "eating" ? <EatingKitten /> : pose === "licking" ? <LickingKitten /> : pose === "yarn-anticipate" ? <AlertKitten /> : pose === "yarn" ? <PlayingKitten /> : pose === "yarn-settle" ? <SettledKitten /> : pose === "mouse-stalk" ? <StalkingKitten /> : pose === "mouse-pounce" || pose === "wand-pounce" ? <PouncingKitten /> : pose === "wand" ? <WandKitten /> : pose === "scratching" ? <ScratchingKitten /> : pose === "perch" || pose === "tree-perch" ? <PerchedKitten /> : pose === "high-five" ? <HighFiveKitten /> : pose === "paw-shake" ? <PawShakeKitten /> : pose === "butterfly-spot" ? <AlertKitten /> : pose === "butterfly" ? <ButterflyKitten /> : pose === "happy" ? <HappyRollKitten /> : pose === "proud" ? <ProudKitten /> : pose === "milestone" ? <MilestoneKitten /> : <SittingKitten blinking={blinking} />}
         </g></g>
       </svg>
     </div>
@@ -1379,17 +1695,23 @@ function EatingKitten() {
 function LickingKitten() { return <g><rect x="125" y="63" width="14" height="27" fill="#d97757"/><rect x="128" y="67" width="8" height="5" fill="#f8d5c2"/><rect x="121" y="75" width="5" height="4" fill="#e8a4a4"/><CurvedTail x={43} y={76}/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={78} y={28} happy/><rect x="63" y="81" width="9" height="13" fill={furDark}/><rect x="78" y="81" width="9" height="13" fill={fur}/><rect x="95" y="81" width="9" height="13" fill={furDark}/></g>; }
 
 function PlayingKitten() {
-  return <g><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="74" y="81" width="8" height="13" fill={fur}/><rect x="91" y="78" width="28" height="7" fill={fur}/><rect x="105" y="84" width="8" height="8" fill={furDark}/><circle cx="130" cy="86" r="10" fill="#9c6644"/><path d="M120 87h20M126 78l8 17M122 81l15 11" stroke="#f0d5b5" strokeWidth="2"/></g>;
+  return <g><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="74" y="81" width="8" height="13" fill={fur}/><rect x="91" y="78" width="28" height="7" fill={fur}/><rect x="105" y="84" width="8" height="8" fill={furDark}/></g>;
 }
 
-function WandKitten({ targetX }: { targetX: number }) { const left = targetX < 80; return <g transform={left ? "translate(160 0) scale(-1 1)" : undefined}><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="76" y="81" width="8" height="13" fill={fur}/><rect x="94" y="74" width="25" height="7" fill={fur}/><rect x="111" y="79" width="8" height="8" fill={furDark}/></g>; }
+function AlertKitten() { return <g><CurvedTail x={99} y={77} raised/><rect x="65" y="49" width="34" height="39" fill={fur}/><rect x="71" y="55" width="22" height="33" fill={furLight}/><CatFace x={62} y={17}/><rect x="64" y="82" width="8" height="12" fill={furDark}/><rect x="76" y="82" width="8" height="12" fill={fur}/><rect x="92" y="82" width="8" height="12" fill={furDark}/></g>; }
+function SettledKitten() { return <g><CurvedTail x={101} y={82}/><rect x="57" y="62" width="54" height="28" fill={fur}/><rect x="66" y="68" width="34" height="18" fill={furLight}/><CatFace x={37} y={51} happy/><rect x="64" y="84" width="13" height="8" fill={furDark}/><rect x="82" y="84" width="13" height="8" fill={fur}/></g>; }
+function StalkingKitten() { return <g><CurvedTail x={39} y={72} raised/><rect x="50" y="64" width="62" height="23" fill={fur}/><rect x="61" y="69" width="38" height="14" fill={furLight}/><CatFace x={101} y={48}/><rect x="54" y="82" width="14" height="10" fill={furDark}/><rect x="76" y="83" width="14" height="9" fill={fur}/><rect x="103" y="82" width="15" height="10" fill={furDark}/></g>; }
+function PouncingKitten() { return <g><CurvedTail x={31} y={68} raised/><rect x="45" y="55" width="58" height="29" fill={fur}/><rect x="55" y="61" width="37" height="18" fill={furLight}/><CatFace x={94} y={35}/><rect x="48" y="79" width="10" height="15" fill={furDark}/><rect x="71" y="80" width="10" height="14" fill={fur}/><rect x="110" y="75" width="31" height="7" fill={fur}/><rect x="133" y="80" width="10" height="9" fill={furDark}/></g>; }
+function WandKitten() { return <g><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="76" y="81" width="8" height="13" fill={fur}/><rect x="94" y="74" width="25" height="7" fill={fur}/><rect x="111" y="79" width="8" height="8" fill={furDark}/></g>; }
+function ScratchingKitten() { return <g><CurvedTail x={57} y={77} raised/><rect x="69" y="48" width="34" height="41" fill={fur}/><rect x="76" y="54" width="20" height="31" fill={furLight}/><CatFace x={66} y={17}/><g className="scratch-paw scratch-paw-a"><rect x="99" y="47" width="29" height="7" fill={fur}/><rect x="121" y="44" width="8" height="10" fill={furDark}/></g><g className="scratch-paw scratch-paw-b"><rect x="99" y="62" width="29" height="7" fill={fur}/><rect x="121" y="60" width="8" height="10" fill={furDark}/></g><rect x="69" y="83" width="9" height="11" fill={furDark}/><rect x="91" y="83" width="9" height="11" fill={furDark}/></g>; }
+function PerchedKitten() { return <g><CurvedTail x={97} y={79} raised/><rect x="65" y="50" width="34" height="38" fill={fur}/><rect x="71" y="56" width="22" height="30" fill={furLight}/><CatFace x={62} y={18} happy/><rect x="64" y="82" width="12" height="10" fill={furDark}/><rect x="84" y="82" width="12" height="10" fill={furDark}/></g>; }
 function HighFiveKitten() { return <g><SittingKitten blinking={false}/><rect x="105" y="53" width="9" height="28" fill={fur}/><rect x="113" y="50" width="8" height="9" fill={furDark}/><rect x="128" y="45" width="20" height="28" rx="3" fill="#d8a47f"/><rect x="122" y="51" width="10" height="7" fill="#d8a47f"/></g>; }
 function ProudKitten() { return <g><CurvedTail x={101} y={68} raised/><rect x="65" y="49" width="34" height="39" fill={fur}/><rect x="71" y="55" width="22" height="33" fill={furLight}/><CatFace x={62} y={17} happy/><rect x="64" y="82" width="8" height="12" fill={furDark}/><rect x="78" y="82" width="8" height="12" fill={fur}/><rect x="92" y="82" width="8" height="12" fill={furDark}/><g className="proud-sparkles" fill="#e9a23b"><rect x="42" y="30" width="4" height="10"/><rect x="39" y="33" width="10" height="4"/><rect x="121" y="26" width="4" height="9"/><rect x="118" y="29" width="10" height="4"/></g></g>; }
 function MilestoneKitten() { return <g><ProudKitten/><g className="milestone-sparkles" fill="#d946ef"><rect x="29" y="50" width="4" height="11"/><rect x="25" y="54" width="12" height="4"/><rect x="132" y="52" width="4" height="11"/><rect x="128" y="56" width="12" height="4"/></g></g>; }
 function PawShakeKitten() { return <g><SittingKitten blinking={false}/><rect x="98" y="78" width="28" height="8" fill={fur}/><rect x="119" y="80" width="25" height="12" rx="3" fill="#d8a47f"/><rect x="137" y="70" width="10" height="20" fill="#d8a47f"/></g>; }
-function ButterflyKitten() { return <g><PlayingKitten/><g className="butterfly" transform="translate(2 -15)"><rect x="128" y="42" width="3" height="9" fill="#50394c"/><rect x="120" y="39" width="8" height="7" fill="#f4a261"/><rect x="131" y="39" width="8" height="7" fill="#e76f51"/></g></g>; }
+function ButterflyKitten() { return <PouncingKitten />; }
 
-function GardenScene() { return <div className="pointer-events-none absolute inset-0" aria-hidden="true"><div className="absolute inset-x-0 bottom-0 h-1/3 bg-emerald-200/70"/><span className="absolute bottom-5 left-[10%] text-2xl">🌼</span><span className="absolute bottom-8 left-[28%] text-xl">🌷</span><span className="absolute bottom-4 right-[18%] text-2xl">🌻</span><span className="absolute right-[12%] top-[18%] text-xl">🦋</span></div>; }
+function GardenScene() { return <div className="pointer-events-none absolute inset-0" aria-hidden="true"><div className="absolute inset-x-0 bottom-0 h-1/3 bg-emerald-200/70"/><span className="absolute bottom-5 left-[10%] text-2xl">🌼</span><span className="absolute bottom-8 left-[28%] text-xl">🌷</span><span className="absolute bottom-4 right-[18%] text-2xl">🌻</span></div>; }
 
 function MilestoneCards({ totalActiveDays, completed }: { totalActiveDays: number; completed: Array<21 | 50 | 100> }) {
   const next = CAT_MILESTONES.find((milestone) => totalActiveDays < milestone.day);

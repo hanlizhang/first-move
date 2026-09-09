@@ -57,17 +57,23 @@ test("approved furnishings are selectable and render as static room objects", ()
   }
 });
 
-test("owned food, yarn, wand, tricks, butterfly, and furniture expose visible actions", () => {
+test("owned Cat v1B items expose visible, ownership-gated actions", () => {
   for (const label of [
     "Feed ",
     "Sit together",
     "Explore room",
     "Nap",
     "Play with yarn",
+    "Chase toy mouse",
     "Play with teaser wand",
+    "End wand play",
+    "Scratch",
+    "Watch from perch",
+    "Climb / perch",
     "High-five",
     "Paw shake",
     "Visit garden",
+    "Return to room",
     "Follow butterfly",
     "Room furniture",
     "Clear furnishing",
@@ -76,6 +82,7 @@ test("owned food, yarn, wand, tricks, butterfly, and furniture expose visible ac
   }
   assert.match(source, /selectCatFurniture/);
   assert.match(source, /foodPose/);
+  assert.match(source, /catInteractionAvailability\(ownedItemIds, room\.selectedFurniture\?\.id\)/);
 });
 
 test("transient Cat poses do not share the authenticated economic-write disable state", () => {
@@ -89,10 +96,8 @@ test("transient Cat poses do not share the authenticated economic-write disable 
     "Explore room",
     "Nap",
     "Play with yarn",
-    "Play with teaser wand",
     "High-five",
     "Paw shake",
-    "Visit garden",
     "Follow butterfly",
   ]) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -103,20 +108,34 @@ test("transient Cat poses do not share the authenticated economic-write disable 
     );
   }
 
+  assert.match(
+    source,
+    /disabled=\{transientInteractionDisabled\}\s+label=\{visual\.action === "wand" \? "End wand play" : "Play with teaser wand"\}/,
+  );
+  assert.match(
+    source,
+    /disabled=\{transientInteractionDisabled\}\s+label=\{garden \? "Return to room" : "Visit garden"\}/,
+  );
+
   assert.match(source, /disabled=\{economicWriteDisabled\}\s+key=\{item\.id\}\s+label=\{`Feed/);
   assert.match(source, /disabled=\{economicWriteDisabled \|\| room\.selectedFurniture/);
   assert.match(source, /<CatStore\s+disabled=\{economicWriteDisabled\}/);
 });
 
-test("temporary poses replace their timer, return to sitting, and clean up on unmount", () => {
-  assert.match(source, /createCatPoseReturnScheduler/);
-  assert.match(source, /poseReturnScheduler\.schedule\(nextPose, \(\) => setPose\("sitting"\)\)/);
-  assert.match(source, /\(\) => \(\) => poseReturnScheduler\.cancel\(\)/);
+test("transient interactions replace timers, settle, and clean up on navigation or unmount", () => {
+  assert.match(source, /createCatSequenceScheduler/);
+  assert.match(source, /sequenceScheduler\.cancel\(\)/);
+  assert.match(source, /activeActionRef\.current = action/);
+  assert.match(source, /settle\(settleScene\)/);
+  assert.match(source, /useFocusEffect/);
+  assert.match(source, /idleScheduler\.cancel\(\)/);
+  assert.match(source, /mountedRef\.current = false/);
+  assert.match(source, /cancelActive\(false\)/);
 });
 
 test("feeding reacts before the economic write and pending flags always clear", () => {
   assert.match(source, /canStartCatFoodInteraction\(localWorkspace, item\.id\)/);
-  const immediatePose = source.indexOf("play(foodPose(item.id));");
+  const immediatePose = source.indexOf("catInteractions.playFood(foodPose(item.id));");
   const remoteWrite = source.indexOf("await feedCatFood(item.id, today);");
   assert.ok(immediatePose >= 0);
   assert.ok(remoteWrite > immediatePose);
@@ -149,13 +168,97 @@ test("development sync diagnostics expose only safe failure and queue summaries"
 
 test("absence return copy and current interaction caption use separate surfaces", () => {
   assert.match(source, /room\.returnMessage/);
-  assert.match(source, /catReactionCaption\(pose, room\.selectedFurniture\?\.id\)/);
+  assert.match(source, /visual\.caption/);
+  assert.match(source, /catReactionCaption\(pose, selectedFurnitureRef\.current\)/);
   assert.match(domainSource, /Nothing was lost/);
   assert.match(source, /symbolic journey, not a literal kitten age/);
   assert.doesNotMatch(
     source,
     /Canonical balance|Read-only|Later Mobile work|economic architecture|M1E makes no/i,
   );
+});
+
+test("touch wand play clamps targets, follows in bounded steps, pounces, and stops explicitly", () => {
+  assert.match(source, /type GestureResponderEvent/);
+  assert.match(source, /onStartShouldSetResponder/);
+  assert.match(source, /onResponderMove: moveWandFromTouch/);
+  assert.match(source, /normalizedRoomPoint\(/);
+  assert.match(source, /stepTowardRoomPoint\(/);
+  assert.match(source, /shouldWandPounce\(/);
+  assert.match(source, /WAND_POUNCE_COOLDOWN_MS/);
+  assert.match(source, /activeActionRef\.current === "wand"/);
+  assert.match(source, /target: "wand"/);
+  assert.match(source, /toggleWand/);
+  assert.match(source, /settle\("room"\)/);
+  assert.match(source, /Moving teaser wand target/);
+});
+
+test("React Native Animated keeps chase frames out of Cat screen React state", () => {
+  assert.match(source, /new Animated\.Value\(0\)/);
+  assert.match(source, /Animated\.parallel/);
+  assert.match(source, /Animated\.timing/);
+  assert.match(source, /useNativeDriver: true/);
+  assert.match(source, /transform: \[\s*\{ translateX: interactions\.catTranslateX \}/);
+  assert.doesNotMatch(source, /setInterval\(/);
+});
+
+test("reduced motion preserves target and facing changes without kitten translation or repeated scratching", () => {
+  assert.match(source, /AccessibilityInfo\.isReduceMotionEnabled\(\)/);
+  assert.match(source, /"reduceMotionChanged"/);
+  assert.match(source, /stepTowardRoomPoint\([\s\S]*?!reducedMotionRef\.current/);
+  assert.match(source, /if \(reducedMotionRef\.current\) \{[\s\S]*?catTranslateX\.setValue\(0\)/);
+  assert.match(source, /reducedMotionRef\.current && action === "scratch"/);
+  assert.match(source, /userInitiated && step\.discreteReducedMotionPlacement/);
+  assert.match(source, /!reducedMotionRef\.current &&[\s\S]*?selectedFurnitureRef\.current === "cat-bed"/);
+  assert.match(source, /setTargetPoint\(nextTarget\)/);
+  assert.match(source, /facingTowardRoomPoint/);
+});
+
+test("yarn and mouse use visible, meaningfully distinct sequences", () => {
+  assert.match(source, /sequence === "yarn"/);
+  assert.match(source, /"anticipating" : index === 1 \? "yarn" : "sitting"/);
+  assert.match(source, /sequence === "mouse"/);
+  assert.match(source, /"anticipating" : index === 1 \? "walking" : "mouse"/);
+  assert.match(source, /Yarn ball in room/);
+  assert.match(source, /Toy mouse in room/);
+  assert.match(source, /styles\.yarnBall/);
+  assert.match(source, /styles\.mouseBody/);
+});
+
+test("furniture interactions place the kitten at bed, perch, post, and tree targets", () => {
+  assert.match(source, /furnitureId === "cat-bed"/);
+  assert.match(source, /playSequence\("bed-nap"\)/);
+  assert.match(source, /furnitureId === "window-cushion"/);
+  assert.match(source, /playSequence\("perch"\)/);
+  assert.match(source, /temporaryFurniture: "scratching-post"/);
+  assert.match(source, /pose: index % 2 === 0 \? "scratching-left" : "scratching-right"/);
+  assert.match(source, /ROOM_POINTS\.treeClimb/);
+  assert.match(source, /ROOM_POINTS\.treePerch/);
+  assert.match(source, /pose: index === 0 \? "climbing" : "perched"/);
+  assert.match(source, /available\.scratch &&[\s\S]*?<FurnitureVisual itemId="scratching-post" secondary/);
+});
+
+test("tricks settle automatically and butterfly stays in an explicit garden scene", () => {
+  assert.match(source, /sequence === "high-five"/);
+  assert.match(source, /sequence === "paw-shake"/);
+  assert.match(source, /sequence === "butterfly" \? "garden" : "room"/);
+  assert.match(source, /activeActionRef\.current = scene === "garden" \? "garden" : undefined/);
+  assert.match(source, /available\.butterfly && garden/);
+  assert.match(source, /Butterfly in garden/);
+  assert.match(source, /ownsMouse=\{available\.mouse && !garden\}/);
+  assert.match(source, /ownsYarn=\{available\.yarn && !garden\}/);
+  assert.match(source, /gardenFloor/);
+});
+
+test("idle behavior starts after five minutes and all transient state stays local-only", () => {
+  assert.match(source, /createCatIdleScheduler/);
+  assert.match(source, /idleScheduler\.start\(\)/);
+  assert.match(source, /selectedFurnitureRef\.current === "cat-bed"/);
+  assert.match(source, /selectedFurnitureRef\.current === "window-cushion"/);
+  const controllerStart = source.indexOf("function useCatRoomInteractions");
+  const controllerEnd = source.indexOf("function CatRoom", controllerStart);
+  const controller = source.slice(controllerStart, controllerEnd);
+  assert.doesNotMatch(controller, /updateLocalWorkspace|buyCatItem|feedCatFood|reward|inventory|sync/);
 });
 
 test("Mobile PixelKitten carries over the Web SVG canvas, baseline, palette, and poses", () => {

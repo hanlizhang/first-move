@@ -116,6 +116,338 @@ textarea {
   background: linear-gradient(#ccecff 0 62%, #d9f2c0 62% 100%);
 }
 
+.cat-play-stage {
+  height: clamp(18rem, 43vw, 24rem);
+  min-height: 18rem;
+  background: rgb(255 255 255 / 24%);
+  outline: none;
+}
+
+.cat-play-stage:focus-visible {
+  box-shadow: inset 0 0 0 3px #a21caf;
+}
+
+.cat-room-floor {
+  position: absolute;
+  z-index: 1;
+  right: 4%;
+  bottom: 10%;
+  left: 4%;
+  height: 4px;
+  background: #b08968;
+  box-shadow: 0 4px #ddb892;
+}
+
+.cat-stage-kitten {
+  position: absolute;
+  z-index: 5;
+  top: 86%;
+  left: 50%;
+  transform: translate(-50%, -76%);
+  transform-origin: center bottom;
+  pointer-events: none;
+}
+
+.cat-stage-kitten .pixel-kitten {
+  margin: 0;
+}
+
+.cat-stage-kitten-wand {
+  transition: left 120ms linear, top 120ms linear;
+}
+
+.cat-stage-kitten-yarn-anticipate { left: 37%; top: 85%; }
+.cat-stage-kitten-yarn { left: 29%; top: 87%; }
+.cat-stage-kitten-yarn-settle { left: 27%; top: 86%; }
+.cat-stage-kitten-mouse-stalk { left: 55%; top: 86%; }
+.cat-stage-kitten-mouse-chase { left: 66%; top: 85%; }
+.cat-stage-kitten-mouse-pounce { left: 70%; top: 86%; }
+.cat-stage-kitten-scratching { left: 67%; top: 84%; }
+.cat-stage-kitten-bed-nap { left: 50%; top: 87%; }
+.cat-stage-kitten-perch { left: 76%; top: 40%; transform: translate(-50%, -70%) scale(.82); }
+.cat-stage-kitten-tree-climb { left: 76%; top: 60%; transform: translate(-50%, -72%) scale(.86); }
+.cat-stage-kitten-tree-perch { left: 76%; top: 31%; transform: translate(-50%, -69%) scale(.78); }
+.cat-stage-kitten-butterfly-spot { left: 45%; top: 84%; }
+.cat-stage-kitten-butterfly { left: 57%; top: 58%; }
+
+.cat-stage-kitten-tree-climb,
+.cat-stage-kitten-tree-perch,
+.cat-stage-kitten-perch,
+.cat-stage-kitten-bed-nap,
+.cat-stage-kitten-mouse-chase,
+.cat-stage-kitten-mouse-pounce,
+.cat-stage-kitten-yarn,
+.cat-stage-kitten-scratching,
+.cat-stage-kitten-butterfly {
+  transition: left 360ms ease, top 360ms ease, transform 360ms ease;
+}
+
+.cat-room-item,
+.cat-butterfly-target {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.cat-yarn-ball {
+  bottom: 10%;
+  left: 17%;
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.cat-yarn-ball span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 4px solid #7c3aed;
+  border-radius: 50%;
+  background: repeating-linear-gradient(45deg, #c4b5fd 0 4px, #8b5cf6 4px 7px);
+  box-shadow: 3px 3px 0 rgb(76 29 149 / 25%);
+}
+
+.cat-yarn-ball::after {
+  position: absolute;
+  top: 80%;
+  left: 70%;
+  width: 2.5rem;
+  height: 1.1rem;
+  border-bottom: 3px solid #7c3aed;
+  border-radius: 50%;
+  content: "";
+}
+
+.cat-play-stage-phase-yarn-action .cat-yarn-ball {
+  animation: room-yarn-bat 800ms steps(4, end) 2;
+}
+
+.cat-toy-mouse {
+  right: 13%;
+  bottom: 11%;
+  width: 2.8rem;
+  height: 1.35rem;
+}
+
+.cat-toy-mouse span {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 2rem;
+  height: 1.05rem;
+  border-radius: 55% 45% 45% 55%;
+  background: #78716c;
+  box-shadow: inset -5px -3px #57534e, 2px 3px rgb(41 37 36 / 18%);
+}
+
+.cat-toy-mouse span::before {
+  position: absolute;
+  top: -5px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #57534e;
+  border-radius: 50%;
+  background: #f0a8ad;
+  content: "";
+}
+
+.cat-toy-mouse::after {
+  position: absolute;
+  right: 1.85rem;
+  bottom: .25rem;
+  width: 1.25rem;
+  height: .8rem;
+  border-bottom: 2px solid #78716c;
+  border-left: 2px solid #78716c;
+  border-radius: 0 0 0 80%;
+  content: "";
+}
+
+.cat-play-stage-phase-mouse-chase .cat-toy-mouse {
+  animation: room-mouse-dash 1.6s steps(6, end) 1;
+}
+
+.cat-play-stage-phase-mouse-pounce .cat-toy-mouse {
+  transform: translateX(-10px) rotate(-8deg);
+}
+
+.cat-scratching-post {
+  right: 10%;
+  bottom: 9%;
+  width: 3.8rem;
+  height: 7.4rem;
+}
+
+.cat-scratching-post span {
+  position: absolute;
+  right: 1.35rem;
+  bottom: .65rem;
+  width: 1.15rem;
+  height: 5.8rem;
+  border: 4px solid #9a6b3f;
+  background: repeating-linear-gradient(0deg, #d6a76d 0 4px, #b9824a 4px 7px);
+}
+
+.cat-scratching-post::before,
+.cat-scratching-post::after {
+  position: absolute;
+  content: "";
+  background: #7c4a2d;
+}
+
+.cat-scratching-post::before { right: .25rem; bottom: 0; width: 3.35rem; height: .8rem; }
+.cat-scratching-post::after { right: .85rem; top: 0; width: 2.25rem; height: .75rem; }
+
+.cat-scratching-post.is-active {
+  filter: saturate(1.12);
+}
+
+.cat-bed {
+  bottom: 7%;
+  left: 50%;
+  width: 9.5rem;
+  height: 3.3rem;
+  transform: translateX(-50%);
+  border: 5px solid #be6a82;
+  border-radius: 42% 42% 28% 28%;
+  background: #f9a8b7;
+  box-shadow: inset 0 12px #fecdd3, 0 4px rgb(136 19 55 / 18%);
+}
+
+.cat-bed span {
+  position: absolute;
+  inset: .75rem 1rem .45rem;
+  border-radius: 50%;
+  background: #ffe4e6;
+}
+
+.cat-bed.is-active { box-shadow: inset 0 12px #fecdd3, 0 0 0 4px rgb(253 164 175 / 28%); }
+
+.cat-window-perch {
+  top: 5%;
+  right: 3%;
+  width: 9.5rem;
+  height: 7rem;
+  border: 6px solid #9a6b3f;
+  background: linear-gradient(135deg, #dff4ff 0 48%, #fff 48% 52%, #bde8f7 52%);
+  box-shadow: inset 0 0 0 4px rgb(255 255 255 / 40%);
+}
+
+.cat-window-perch::before {
+  position: absolute;
+  right: -10px;
+  bottom: -15px;
+  left: -10px;
+  height: 1rem;
+  border: 3px solid #7c4a2d;
+  background: #f4a261;
+  content: "";
+}
+
+.cat-window-perch span {
+  position: absolute;
+  right: .65rem;
+  bottom: -1.3rem;
+  left: .65rem;
+  height: .8rem;
+  border-radius: 50%;
+  background: #fbcfe8;
+}
+
+.cat-tree {
+  right: 3%;
+  bottom: 8%;
+  width: 9rem;
+  height: 13rem;
+}
+
+.cat-tree span {
+  position: absolute;
+  right: 3.3rem;
+  bottom: .7rem;
+  width: 1.35rem;
+  height: 10.4rem;
+  border: 4px solid #8b5e3c;
+  background: repeating-linear-gradient(0deg, #d6a76d 0 5px, #b9824a 5px 8px);
+}
+
+.cat-tree::before,
+.cat-tree::after,
+.cat-tree i {
+  position: absolute;
+  height: 1.1rem;
+  border: 4px solid #7c4a2d;
+  border-radius: .35rem;
+  background: #f4a261;
+  content: "";
+}
+
+.cat-tree::before { right: 0; top: .7rem; width: 7.5rem; }
+.cat-tree::after { right: 2.1rem; top: 6.1rem; width: 6.7rem; }
+.cat-tree i { right: 1.9rem; bottom: 0; width: 6.4rem; }
+
+.cat-wand-line {
+  z-index: 8;
+}
+
+.cat-wand-line line {
+  stroke: #713f12;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.cat-wand-target {
+  z-index: 9;
+  width: 1.5rem;
+  height: 1.5rem;
+  transform: translate(-50%, -50%) rotate(-12deg);
+}
+
+.cat-wand-target::before,
+.cat-wand-target::after,
+.cat-wand-target span {
+  position: absolute;
+  width: .65rem;
+  height: 1.2rem;
+  border-radius: 70% 20% 70% 20%;
+  content: "";
+}
+
+.cat-wand-target::before { left: .1rem; background: #e11d48; transform: rotate(-30deg); }
+.cat-wand-target::after { right: .1rem; background: #f59e0b; transform: rotate(30deg); }
+.cat-wand-target span { left: .42rem; top: .2rem; background: #fdf2f8; }
+
+.cat-butterfly-target {
+  z-index: 8;
+  top: 20%;
+  right: 18%;
+  width: 2.5rem;
+  height: 2rem;
+}
+
+.cat-butterfly-target::before,
+.cat-butterfly-target::after {
+  position: absolute;
+  top: .1rem;
+  width: 1.1rem;
+  height: 1.45rem;
+  border: 3px solid #9a3412;
+  background: #fb923c;
+  content: "";
+}
+
+.cat-butterfly-target::before { left: .05rem; border-radius: 70% 25% 65% 35%; transform: rotate(-14deg); }
+.cat-butterfly-target::after { right: .05rem; border-radius: 25% 70% 35% 65%; transform: rotate(14deg); }
+.cat-butterfly-target span { position: absolute; z-index: 1; top: .2rem; left: 1.08rem; width: .32rem; height: 1.55rem; background: #50394c; }
+
+.cat-butterfly-target.is-chasing {
+  animation: garden-butterfly-path 2.8s steps(8, end) 1;
+}
+
+.pixel-kitten-scratching .scratch-paw-a { animation: scratch-paw-a 450ms steps(1, end) 4; }
+.pixel-kitten-scratching .scratch-paw-b { animation: scratch-paw-b 450ms steps(1, end) 4; }
+.pixel-kitten-wand-pounce .kitten-walker { animation: wand-reach 450ms ease-out 1; }
+
 .pixel-kitten-walking .walk-frame-a {
   animation: kitten-step-a 650ms steps(1, end) 10;
 }
@@ -184,6 +516,12 @@ textarea {
 @keyframes yarn-bat { 0% { transform: translateX(0); } 50% { transform: translateX(-7px); } 100% { transform: translateX(3px); } }
 @keyframes butterfly-flutter { 0% { transform: translate(0, 0); } 50% { transform: translate(5px, -5px); } 100% { transform: translate(10px, 1px); } }
 @keyframes kitten-sparkle { 50% { opacity: .35; } }
+@keyframes room-yarn-bat { 0% { transform: translateX(0) rotate(0); } 40% { transform: translateX(22px) rotate(75deg); } 75% { transform: translateX(-9px) rotate(-30deg); } 100% { transform: translateX(7px) rotate(20deg); } }
+@keyframes room-mouse-dash { 0% { transform: translateX(0); } 35% { transform: translate(-26px, -2px); } 70% { transform: translate(14px, 1px); } 100% { transform: translateX(-10px); } }
+@keyframes garden-butterfly-path { 0% { transform: translate(0, 0) rotate(0); } 20% { transform: translate(-55px, 28px) rotate(-8deg); } 45% { transform: translate(-115px, -3px) rotate(8deg); } 70% { transform: translate(-72px, 65px) rotate(-10deg); } 100% { transform: translate(-135px, 35px) rotate(6deg); } }
+@keyframes scratch-paw-a { 0%, 49% { opacity: 1; transform: translateY(-3px); } 50%, 100% { opacity: .25; transform: translateY(7px); } }
+@keyframes scratch-paw-b { 0%, 49% { opacity: .25; transform: translateY(-5px); } 50%, 100% { opacity: 1; transform: translateY(3px); } }
+@keyframes wand-reach { 0% { transform: translateY(0) scale(1); } 55% { transform: translateY(-7px) scale(1.04); } 100% { transform: translateY(0) scale(1); } }
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -216,6 +554,15 @@ textarea {
   .milestone-sparkles {
     animation: none;
   }
+
+  .cat-stage-kitten,
+  .cat-room-item,
+  .cat-butterfly-target,
+  .scratch-paw,
+  .pixel-kitten-wand-pounce .kitten-walker {
+    animation: none;
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -229,6 +576,23 @@ textarea {
 
   .global-companion {
     width: clamp(78px, 24vw, 96px);
+  }
+
+  .cat-play-stage {
+    height: 18rem;
+  }
+
+  .cat-window-perch,
+  .cat-tree {
+    right: -1.2rem;
+    transform: scale(.8);
+    transform-origin: right bottom;
+  }
+
+  .cat-stage-kitten-perch,
+  .cat-stage-kitten-tree-climb,
+  .cat-stage-kitten-tree-perch {
+    left: 72%;
   }
 
   .companion-speech {
