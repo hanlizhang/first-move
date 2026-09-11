@@ -5,9 +5,12 @@ import {
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type PressableProps,
 } from "react-native";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors, radii, spacing, touchTarget, typography } from "../theme/tokens.ts";
@@ -17,17 +20,27 @@ export function Screen({
   title,
   description,
   children,
+  onScroll,
+  onScrollViewLayout,
+  scrollViewRef,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   children: ReactNode;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onScrollViewLayout?: (event: LayoutChangeEvent) => void;
+  scrollViewRef?: RefObject<ScrollView | null>;
 }) {
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <ScrollView
         contentContainerStyle={styles.screenContent}
         keyboardShouldPersistTaps="handled"
+        onLayout={onScrollViewLayout}
+        onScroll={onScroll}
+        ref={scrollViewRef}
+        scrollEventThrottle={16}
       >
         {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
         <Text accessibilityRole="header" style={styles.title}>

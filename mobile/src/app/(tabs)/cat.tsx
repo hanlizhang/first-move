@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { useFocusEffect } from "expo-router";
 import {
@@ -12,6 +13,7 @@ import {
   Animated,
   Easing,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -43,28 +45,45 @@ import {
   CAT_HOME_POINT,
   CAT_INTERACTION_CAPTIONS,
   CAT_INTERACTION_SEQUENCES,
+  CAT_QA_PREVIEW_DAYS,
+  CAT_QA_PREVIEW_ITEM_IDS,
+  CAT_ROOM_LAYOUT,
+  catButterflyFollowSteps,
+  catFoodVisualFor,
+  catMouseChaseSteps,
+  catQaPreviewEnabled,
+  catRoomScrollTarget,
+  catScratchingPostPlacement,
   catInteractionAvailability,
+  catYarnPlaySteps,
   clampNormalizedRoomPoint,
+  clampRoomPointToArea,
   createCatIdleScheduler,
   createCatSequenceScheduler,
   facingTowardRoomPoint,
   normalizedRoomPoint,
+  projectCatQaPreview,
+  roomPointInArea,
   shouldWandPounce,
   stepTowardRoomPoint,
   type CatFacing,
+  type CatFoodVisual,
   type CatIdleAction,
   type CatInteractionPhase,
   type CatInteractionSequence,
+  type CatQaPreviewDay,
   type NormalizedRoomPoint,
 } from "../../domain/cat-interactions.ts";
 import {
   CAT_STORE_CATEGORIES,
   CAT_STORE_ITEMS,
   catItem,
+  isCatItemId,
   isCatItemUnlocked,
   type CatCatalogItem,
   type CatItemId,
 } from "../../domain/cat-items.ts";
+import { createCatQaPreviewWorkspace } from "../../domain/cat-qa-preview.ts";
 import { colors, radii, spacing, touchTarget, typography } from "../../theme/tokens.ts";
 
 type CatSection = "room" | "store";
@@ -115,33 +134,10 @@ const INITIAL_CAT_VISUAL: CatVisualState = {
 const WAND_POUNCE_COOLDOWN_MS = 1_200;
 const WAND_POUNCE_DURATION_MS = 520;
 const CAT_SPRITE_WIDTH = 160;
-const CAT_ROOM_VERTICAL_RESERVE = 150;
-
-const ROOM_POINTS = {
-  bed: { x: 0.28, y: 0.76 },
-  butterflyFirst: { x: 0.38, y: 0.68 },
-  butterflySecond: { x: 0.58, y: 0.62 },
-  mouseFirst: { x: 0.34, y: 0.72 },
-  mouseSecond: { x: 0.57, y: 0.7 },
-  mouseThird: { x: 0.68, y: 0.72 },
-  perch: { x: 0.3, y: 0.31 },
-  roomWalk: { x: 0.74, y: 0.72 },
-  scratch: { x: 0.3, y: 0.7 },
-  treeClimb: { x: 0.34, y: 0.52 },
-  treePerch: { x: 0.3, y: 0.24 },
-  wandStart: { x: 0.69, y: 0.42 },
-  yarnFirst: { x: 0.35, y: 0.72 },
-  yarnSecond: { x: 0.61, y: 0.72 },
-} as const satisfies Readonly<Record<string, NormalizedRoomPoint>>;
-
-const TARGET_POINTS = {
-  butterflyFirst: { x: 0.76, y: 0.28 },
-  butterflySecond: { x: 0.7, y: 0.52 },
-  mouseFirst: { x: 0.78, y: 0.74 },
-  mouseSecond: { x: 0.7, y: 0.7 },
-  mouseThird: { x: 0.73, y: 0.72 },
-  yarn: { x: 0.72, y: 0.75 },
-} as const satisfies Readonly<Record<string, NormalizedRoomPoint>>;
+const MOBILE_MOUSE_STEPS = catMouseChaseSteps();
+const MOBILE_YARN_STEPS = catYarnPlaySteps();
+const MOBILE_SCRATCH_PLACEMENT = catScratchingPostPlacement();
+const MOBILE_BUTTERFLY_STEPS = catButterflyFollowSteps();
 
 export default function CatScreen() {
   const {
@@ -156,7 +152,8 @@ export default function CatScreen() {
     workspaceEditable,
   } = useFirstMoveApp();
   const today = useCurrentLocalDate();
-  const room = useMemo(
+  const qaPreviewAvailable = catQaPreviewEnabled(__DEV__);
+  const canonicalRoom = useMemo(
     () => getCatRoomView(localWorkspace, today),
     [localWorkspace, today],
   );
@@ -167,10 +164,74 @@ export default function CatScreen() {
     lastSuccessfulSyncAt?: string;
   }>();
   const [notice, setNotice] = useState("");
+  const [qaPreviewActiveDay, setQaPreviewActiveDay] = useState<CatQaPreviewDay>();
+  const [qaPreviewOwnedItemIds, setQaPreviewOwnedItemIds] = useState<CatItemId[]>([]);
+  const [qaPreviewFurnitureId, setQaPreviewFurnitureId] = useState<CatItemId | null>();
+  const canonicalOwnedItemIds = useMemo(
+    () => localWorkspace.inventory.items
+      .filter((entry) => entry.quantity > 0)
+      .map((entry) => entry.itemId)
+      .filter(isCatItemId),
+    [localWorkspace.inventory.items],
+  );
+  const qaProjection = useMemo(
+    () => projectCatQaPreview(
+      {
+        activeDays: localWorkspace.progress.totalActiveDays,
+        ownedItemIds: canonicalOwnedItemIds,
+        selectedFurnitureId: canonicalRoom.selectedFurniture?.id,
+      },
+      {
+        activeDay: qaPreviewActiveDay,
+        ownedItemIds: qaPreviewOwnedItemIds,
+        selectedFurnitureId: qaPreviewFurnitureId,
+      },
+      qaPreviewAvailable,
+    ),
+    [canonicalOwnedItemIds, canonicalRoom.selectedFurniture?.id, localWorkspace.progress.totalActiveDays, qaPreviewActiveDay, qaPreviewAvailable, qaPreviewFurnitureId, qaPreviewOwnedItemIds],
+  );
+  const qaPreviewActive = qaProjection.active;
+  const previewWorkspace = useMemo(
+    () => createCatQaPreviewWorkspace(localWorkspace, qaProjection),
+    [localWorkspace, qaProjection],
+  );
+  const room = useMemo(
+    () => getCatRoomView(previewWorkspace, today),
+    [previewWorkspace, today],
+  );
   const catInteractions = useCatRoomInteractions({
     enabled: localWorkspaceStatus === "ready",
     selectedFurnitureId: room.selectedFurniture?.id,
   });
+  const scrollViewRef = useRef<ScrollView>(null);
+  const catRoomRef = useRef<View>(null);
+  const scrollYRef = useRef(0);
+  const viewportHeightRef = useRef(0);
+  const bringCatRoomIntoView = useCallback(() => {
+    catRoomRef.current?.measureInWindow((_x, roomTop, _width, roomHeight) => {
+      const targetY = catRoomScrollTarget({
+        currentScrollY: scrollYRef.current,
+        padding: spacing.md,
+        roomHeight,
+        roomTop,
+        viewportHeight: viewportHeightRef.current,
+      });
+      if (targetY === undefined) return;
+      scrollViewRef.current?.scrollTo({
+        animated: !catInteractions.reducedMotion,
+        y: targetY,
+      });
+    });
+  }, [catInteractions.reducedMotion]);
+
+  useFocusEffect(useCallback(() => {
+    if (!qaPreviewAvailable) return undefined;
+    return () => {
+      setQaPreviewActiveDay(undefined);
+      setQaPreviewOwnedItemIds([]);
+      setQaPreviewFurnitureId(undefined);
+    };
+  }, [qaPreviewAvailable]));
   const pendingAuthenticatedWrite =
     auth.status === "authenticated" && sync.pendingCount > 0;
   const { transientInteractionDisabled, economicWriteDisabled } =
@@ -199,6 +260,10 @@ export default function CatScreen() {
   }
 
   async function buy(item: CatCatalogItem) {
+    if (qaPreviewActive) {
+      setNotice("QA preview is transient. Use the ownership controls to preview this item.");
+      return;
+    }
     setSavingId(item.id);
     try {
       const outcome = await buyCatItem(item.id, today);
@@ -216,11 +281,23 @@ export default function CatScreen() {
   }
 
   async function feed(item: CatCatalogItem) {
+    const foodVisual = catFoodVisualFor(item.id);
+    if (!foodVisual) return;
+    if (qaPreviewActive) {
+      const previewFood = room.ownedFood.find((entry) => entry.item.id === item.id);
+      if (!previewFood || previewFood.quantity < 1) {
+        setNotice(consumptionMessage("empty"));
+        return;
+      }
+      catInteractions.playFood(foodPose(foodVisual));
+      setNotice("");
+      return;
+    }
     if (!canStartCatFoodInteraction(localWorkspace, item.id)) {
       setNotice(consumptionMessage("empty"));
       return;
     }
-    catInteractions.playFood(foodPose(item.id));
+    catInteractions.playFood(foodPose(foodVisual));
     setSavingId(item.id);
     try {
       const outcome = await feedCatFood(item.id, today);
@@ -232,6 +309,15 @@ export default function CatScreen() {
 
   async function chooseFurniture(itemId?: CatItemId) {
     catInteractions.returnToRoom();
+    if (qaPreviewActive) {
+      setQaPreviewFurnitureId(itemId ?? null);
+      setNotice(
+        itemId
+          ? `${catItem(itemId)?.name ?? "Furniture"} is temporarily shown for QA.`
+          : "The furnishing is temporarily hidden for QA.",
+      );
+      return;
+    }
     setSavingId(itemId ?? "room-clear");
     try {
       const next = await updateLocalWorkspace((state) =>
@@ -249,11 +335,35 @@ export default function CatScreen() {
     }
   }
 
+  function toggleQaPreviewOwnership(itemId: CatItemId) {
+    if (qaPreviewOwnedItemIds.includes(itemId) && qaPreviewFurnitureId === itemId) {
+      setQaPreviewFurnitureId(undefined);
+    }
+    setQaPreviewOwnedItemIds((current) => current.includes(itemId)
+      ? current.filter((candidate) => candidate !== itemId)
+      : [...current, itemId]);
+  }
+
+  function resetQaPreview() {
+    setQaPreviewActiveDay(undefined);
+    setQaPreviewOwnedItemIds([]);
+    setQaPreviewFurnitureId(undefined);
+    catInteractions.returnToRoom();
+    setNotice("");
+  }
+
   return (
     <Screen
       eyebrow="Cat"
       title="Cat Room"
       description="A cozy companion and a few rewards for the steps you choose to take."
+      onScroll={(event) => {
+        scrollYRef.current = event.nativeEvent.contentOffset.y;
+      }}
+      onScrollViewLayout={(event) => {
+        viewportHeightRef.current = event.nativeEvent.layout.height;
+      }}
+      scrollViewRef={scrollViewRef}
     >
       <View accessibilityRole="tablist" style={styles.sectionTabs}>
         <SectionTab active={section === "room"} label="Room" onPress={() => setSection("room")} />
@@ -266,6 +376,17 @@ export default function CatScreen() {
           }}
         />
       </View>
+
+      {__DEV__ ? (
+        <CatQaPreviewPanel
+          active={qaPreviewActive}
+          activeDay={qaPreviewActiveDay}
+          onActiveDayChange={setQaPreviewActiveDay}
+          onReset={resetQaPreview}
+          onToggleOwnership={toggleQaPreviewOwnership}
+          ownedItemIds={qaPreviewOwnedItemIds}
+        />
+      ) : null}
 
       {localWorkspaceMessage ? (
         <Card tone="warning"><Body>{localWorkspaceMessage}</Body></Card>
@@ -293,6 +414,9 @@ export default function CatScreen() {
           onChooseFurniture={(itemId) => void chooseFurniture(itemId)}
           onFeed={(item) => void feed(item)}
           interactions={catInteractions}
+          onVisualCommandStart={bringCatRoomIntoView}
+          previewActive={qaPreviewActive}
+          roomRef={catRoomRef}
           room={room}
         />
       ) : (
@@ -301,12 +425,94 @@ export default function CatScreen() {
           onBuy={(item) => void buy(item)}
           pendingItemId={savingId}
           queuedItemId={queuedPurchaseItemId}
+          previewActive={qaPreviewActive}
           room={room}
-          state={localWorkspace}
+          state={previewWorkspace}
           syncPending={pendingAuthenticatedWrite}
         />
       )}
     </Screen>
+  );
+}
+
+function CatQaPreviewPanel({
+  active,
+  activeDay,
+  onActiveDayChange,
+  onReset,
+  onToggleOwnership,
+  ownedItemIds,
+}: {
+  active: boolean;
+  activeDay?: CatQaPreviewDay;
+  onActiveDayChange(day?: CatQaPreviewDay): void;
+  onReset(): void;
+  onToggleOwnership(itemId: CatItemId): void;
+  ownedItemIds: readonly CatItemId[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const previewSummary = [
+    activeDay === undefined ? "Real Active Day" : `Day ${activeDay}`,
+    ...ownedItemIds.map((itemId) => catItem(itemId)?.name ?? itemId),
+  ].join(" · ");
+
+  return (
+    <View accessibilityLabel="Cat QA development preview" style={styles.qaPanel}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((current) => !current)}
+        style={({ pressed }) => [styles.qaDisclosure, pressed && styles.qaChipPressed]}
+      >
+        <Text style={styles.qaTitle}>Cat QA · DEV ONLY</Text>
+        <Text style={styles.qaDisclosureIcon}>{expanded ? "−" : "+"}</Text>
+      </Pressable>
+      <Text style={styles.qaSummary}>Preview: {previewSummary}</Text>
+      {expanded ? (
+        <>
+          <Text style={styles.qaDescription}>
+            Preview only. Does not change your real account, points, inventory, or cloud data.
+          </Text>
+          <Text style={styles.qaDescription}>
+            Preview Active Day controls store eligibility. Preview ownership controls interaction availability.
+          </Text>
+          <View style={styles.qaHeader}>
+            <Text style={styles.qaLabel}>Preview Active Day</Text>
+            <ActionButton disabled={!active} label="Reset Preview" onPress={onReset} />
+          </View>
+          <View style={styles.qaChipWrap}>
+            <CatQaChip label="Real" onPress={() => onActiveDayChange(undefined)} selected={activeDay === undefined} />
+            {CAT_QA_PREVIEW_DAYS.map((day) => (
+              <CatQaChip key={day} label={`${day}`} onPress={() => onActiveDayChange(day)} selected={activeDay === day} />
+            ))}
+          </View>
+          <Text style={styles.qaLabel}>Preview ownership</Text>
+          <View style={styles.qaChipWrap}>
+            {CAT_QA_PREVIEW_ITEM_IDS.map((itemId) => (
+              <CatQaChip
+                key={itemId}
+                label={catItem(itemId)?.name ?? itemId}
+                onPress={() => onToggleOwnership(itemId)}
+                selected={ownedItemIds.includes(itemId)}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function CatQaChip({ label, onPress, selected }: { label: string; onPress(): void; selected: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.qaChip, selected && styles.qaChipSelected, pressed && styles.qaChipPressed]}
+    >
+      <Text style={[styles.qaChipText, selected && styles.qaChipTextSelected]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -322,11 +528,12 @@ function useCatRoomInteractions({
   const mountedRef = useRef(true);
   const focusedRef = useRef(false);
   const enabledRef = useRef(enabled);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const reducedMotionRef = useRef(false);
   const selectedFurnitureRef = useRef(selectedFurnitureId);
   const roomLayoutRef = useRef({ height: 0, width: 0 });
   const catPointRef = useRef<NormalizedRoomPoint>({ ...CAT_HOME_POINT });
-  const targetPointRef = useRef<NormalizedRoomPoint>({ ...ROOM_POINTS.wandStart });
+  const targetPointRef = useRef<NormalizedRoomPoint>({ ...CAT_ROOM_LAYOUT.wandStart });
   const activeActionRef = useRef<CatActiveAction | undefined>(undefined);
   const lastWandPounceAtRef = useRef(Number.NEGATIVE_INFINITY);
   const pounceTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -498,18 +705,10 @@ function useCatRoomInteractions({
     ) => {
       if (!enabledRef.current || !focusedRef.current) return;
       cancelActive(userInitiated);
+      if (!steps[0]?.point) setCatPoint(CAT_HOME_POINT, 0, true);
       activeActionRef.current = action;
-      const scheduledSteps =
-        reducedMotionRef.current && action === "scratch" && steps[0]
-          ? [
-              {
-                ...steps[0],
-                durationMs: steps.reduce((total, step) => total + step.durationMs, 0),
-              },
-            ]
-          : steps;
       sequenceScheduler.start(
-        scheduledSteps,
+        steps,
         (step) => {
           if (
             !mountedRef.current ||
@@ -521,10 +720,11 @@ function useCatRoomInteractions({
           }
           const scene = step.scene ?? settleScene;
           const currentPoint = catPointRef.current;
+          const facingOrigin = step.point ?? currentPoint;
           const facing =
             step.facing ??
             (step.targetPoint
-              ? facingTowardRoomPoint(currentPoint, step.targetPoint, visualRef.current.facing)
+              ? facingTowardRoomPoint(facingOrigin, step.targetPoint, visualRef.current.facing)
               : visualRef.current.facing);
           if (step.targetPoint) setTargetPoint(step.targetPoint, 260);
           if (step.point) {
@@ -581,7 +781,8 @@ function useCatRoomInteractions({
         {
           caption: CAT_INTERACTION_CAPTIONS.walking,
           durationMs: 3_200,
-          point: ROOM_POINTS.roomWalk,
+          discreteReducedMotionPlacement: true,
+          point: roomPointInArea(CAT_ROOM_LAYOUT.mousePlayArea, 0.92, 1),
           pose: "walking",
           scene: "room",
         },
@@ -659,10 +860,10 @@ function useCatRoomInteractions({
     cancelActive(true);
     activeActionRef.current = "wand";
     lastWandPounceAtRef.current = Number.NEGATIVE_INFINITY;
-    setTargetPoint(ROOM_POINTS.wandStart, 0);
+    setTargetPoint(CAT_ROOM_LAYOUT.wandStart, 0);
     const facing = facingTowardRoomPoint(
       catPointRef.current,
-      ROOM_POINTS.wandStart,
+      CAT_ROOM_LAYOUT.wandStart,
       visualRef.current.facing,
     );
     commitVisual({
@@ -688,11 +889,14 @@ function useCatRoomInteractions({
   const updateWandTarget = useCallback(
     (x: number, y: number) => {
       if (activeActionRef.current !== "wand") return;
-      const nextTarget = normalizedRoomPoint(
-        x,
-        y,
-        roomLayoutRef.current.width,
-        roomLayoutRef.current.height,
+      const nextTarget = clampRoomPointToArea(
+        normalizedRoomPoint(
+          x,
+          y,
+          roomLayoutRef.current.width,
+          roomLayoutRef.current.height,
+        ),
+        CAT_ROOM_LAYOUT.wandPlayArea,
       );
       const currentCatPoint = catPointRef.current;
       const nextCatPoint = stepTowardRoomPoint(
@@ -780,8 +984,8 @@ function useCatRoomInteractions({
         roomLayoutRef.current.width,
         roomLayoutRef.current.height,
       );
-      catTranslateX.setValue(reducedMotionRef.current ? 0 : catTranslation.x);
-      catTranslateY.setValue(reducedMotionRef.current ? 0 : catTranslation.y);
+      catTranslateX.setValue(catTranslation.x);
+      catTranslateY.setValue(catTranslation.y);
       targetTranslateX.setValue(targetTranslation.x);
       targetTranslateY.setValue(targetTranslation.y);
     },
@@ -864,12 +1068,18 @@ function useCatRoomInteractions({
     const applyReducedMotion = (value: boolean) => {
       reducedMotionRef.current = value;
       if (!subscribed || !mountedRef.current) return;
+      setReducedMotion(value);
       if (value) {
         catAnimationRef.current?.stop();
         catAnimationRef.current = undefined;
         catPointRef.current = { ...CAT_HOME_POINT };
-        catTranslateX.setValue(0);
-        catTranslateY.setValue(0);
+        const homeTranslation = catTranslationFor(
+          CAT_HOME_POINT,
+          roomLayoutRef.current.width,
+          roomLayoutRef.current.height,
+        );
+        catTranslateX.setValue(homeTranslation.x);
+        catTranslateY.setValue(homeTranslation.y);
       }
     };
     void AccessibilityInfo.isReduceMotionEnabled().then(applyReducedMotion);
@@ -897,9 +1107,14 @@ function useCatRoomInteractions({
       idleSchedulerRef.current = idleScheduler;
       if (enabled) {
         catPointRef.current = { ...CAT_HOME_POINT };
-        targetPointRef.current = { ...ROOM_POINTS.wandStart };
-        catTranslateX.setValue(0);
-        catTranslateY.setValue(0);
+        targetPointRef.current = { ...CAT_ROOM_LAYOUT.wandStart };
+        const homeTranslation = catTranslationFor(
+          CAT_HOME_POINT,
+          roomLayoutRef.current.width,
+          roomLayoutRef.current.height,
+        );
+        catTranslateX.setValue(homeTranslation.x);
+        catTranslateY.setValue(homeTranslation.y);
         commitVisual(INITIAL_CAT_VISUAL);
         idleScheduler.start();
       }
@@ -940,6 +1155,7 @@ function useCatRoomInteractions({
     },
     playFood,
     playSequence,
+    reducedMotion,
     returnToRoom,
     sitTogether,
     targetTranslateX,
@@ -954,87 +1170,76 @@ function catVisualSteps(sequence: CatInteractionSequence): CatVisualStep[] {
   return CAT_INTERACTION_SEQUENCES[sequence].map((step, index) => {
     const common = {
       caption: CAT_INTERACTION_CAPTIONS[step.phase],
+      discreteReducedMotionPlacement: true,
       durationMs: step.durationMs,
       phase: step.phase,
     };
     if (sequence === "yarn") {
+      const placement = MOBILE_YARN_STEPS[index] ?? MOBILE_YARN_STEPS[0]!;
       return {
         ...common,
-        point: index === 0 ? ROOM_POINTS.yarnFirst : ROOM_POINTS.yarnSecond,
+        point: placement.cat,
         pose: index === 0 ? "anticipating" : index === 1 ? "yarn" : "sitting",
         target: "yarn",
-        targetPoint: TARGET_POINTS.yarn,
+        targetPoint: placement.target,
       };
     }
     if (sequence === "mouse") {
+      const placement = MOBILE_MOUSE_STEPS[index] ?? MOBILE_MOUSE_STEPS[0]!;
       return {
         ...common,
-        point:
-          index === 0
-            ? ROOM_POINTS.mouseFirst
-            : index === 1
-              ? ROOM_POINTS.mouseSecond
-              : ROOM_POINTS.mouseThird,
+        point: placement.cat,
         pose: index === 0 ? "anticipating" : index === 1 ? "walking" : "mouse",
         target: "mouse",
-        targetPoint:
-          index === 0
-            ? TARGET_POINTS.mouseFirst
-            : index === 1
-              ? TARGET_POINTS.mouseSecond
-              : TARGET_POINTS.mouseThird,
+        targetPoint: placement.target,
       };
     }
     if (sequence === "scratch") {
       return {
         ...common,
-        discreteReducedMotionPlacement: true,
-        facing: "left" as const,
-        point: ROOM_POINTS.scratch,
+        point: MOBILE_SCRATCH_PLACEMENT.cat,
         pose: index % 2 === 0 ? "scratching-left" : "scratching-right",
+        targetPoint: MOBILE_SCRATCH_PLACEMENT.target,
         temporaryFurniture: "scratching-post" as const,
       };
     }
     if (sequence === "bed-nap") {
       return {
         ...common,
-        discreteReducedMotionPlacement: true,
-        point: ROOM_POINTS.bed,
+        point: CAT_ROOM_LAYOUT.bedAnchor,
         pose: "sleeping" as const,
       };
     }
     if (sequence === "perch") {
       return {
         ...common,
-        discreteReducedMotionPlacement: true,
         facing: "left" as const,
-        point: ROOM_POINTS.perch,
+        point: CAT_ROOM_LAYOUT.windowPerchAnchor,
         pose: "watching" as const,
       };
     }
     if (sequence === "tree") {
       return {
         ...common,
-        discreteReducedMotionPlacement: true,
         facing: "left" as const,
-        point: index === 0 ? ROOM_POINTS.treeClimb : ROOM_POINTS.treePerch,
+        point: index === 0 ? CAT_ROOM_LAYOUT.catTreeMidAnchor : CAT_ROOM_LAYOUT.catTreeTopAnchor,
         pose: index === 0 ? "climbing" : "perched",
       };
     }
     if (sequence === "high-five") {
-      return { ...common, pose: "high-five" as const };
+      return { ...common, point: CAT_ROOM_LAYOUT.catHome, pose: "high-five" as const };
     }
     if (sequence === "paw-shake") {
-      return { ...common, pose: "paw-shake" as const };
+      return { ...common, point: CAT_ROOM_LAYOUT.catHome, pose: "paw-shake" as const };
     }
+    const placement = MOBILE_BUTTERFLY_STEPS[index] ?? MOBILE_BUTTERFLY_STEPS[0]!;
     return {
       ...common,
-      point: index === 0 ? ROOM_POINTS.butterflyFirst : ROOM_POINTS.butterflySecond,
+      point: placement.cat,
       pose: index === 0 ? "anticipating" : "butterfly",
       scene: "garden" as const,
       target: "butterfly" as const,
-      targetPoint:
-        index === 0 ? TARGET_POINTS.butterflyFirst : TARGET_POINTS.butterflySecond,
+      targetPoint: placement.target,
     };
   });
 }
@@ -1044,11 +1249,9 @@ function catTranslationFor(
   roomWidth: number,
   roomHeight: number,
 ): NormalizedRoomPoint {
-  const horizontalTravel = Math.max(0, roomWidth - CAT_SPRITE_WIDTH - spacing.lg * 2);
-  const verticalTravel = Math.max(0, roomHeight - CAT_ROOM_VERTICAL_RESERVE);
   return {
-    x: (point.x - CAT_HOME_POINT.x) * horizontalTravel,
-    y: (point.y - CAT_HOME_POINT.y) * verticalTravel,
+    x: point.x * roomWidth - CAT_SPRITE_WIDTH / 2,
+    y: point.y * roomHeight - 94,
   };
 }
 
@@ -1058,8 +1261,8 @@ function targetTranslationFor(
   roomHeight: number,
 ): NormalizedRoomPoint {
   return {
-    x: (point.x - 0.5) * Math.max(0, roomWidth - 42),
-    y: (point.y - 0.5) * Math.max(0, roomHeight - 110),
+    x: point.x * roomWidth,
+    y: point.y * roomHeight,
   };
 }
 
@@ -1068,14 +1271,20 @@ function CatRoom({
   interactions,
   onChooseFurniture,
   onFeed,
+  onVisualCommandStart,
+  previewActive,
   room,
+  roomRef,
   transientInteractionDisabled,
 }: {
   economicWriteDisabled: boolean;
   interactions: ReturnType<typeof useCatRoomInteractions>;
   onChooseFurniture(itemId?: CatItemId): void;
   onFeed(item: CatCatalogItem): void;
+  onVisualCommandStart(): void;
+  previewActive: boolean;
   room: CatRoomView;
+  roomRef: RefObject<View | null>;
   transientInteractionDisabled: boolean;
 }) {
   const ownedItemIds = [
@@ -1090,6 +1299,11 @@ function CatRoom({
   const { visual } = interactions;
   const garden = visual.scene === "garden";
   const furnitureInteractionAvailable = available.scratch || available.perch || available.tree;
+  const previewSafeEconomicDisabled = previewActive ? false : economicWriteDisabled;
+  const beginVisualCommand = (command: () => void) => {
+    onVisualCommandStart();
+    command();
+  };
 
   return (
     <>
@@ -1099,7 +1313,7 @@ function CatRoom({
       </View>
       <Card>
         <Text style={styles.progressTitle}>
-          {room.activeDays} active day{room.activeDays === 1 ? "" : "s"}
+          {room.activeDays} active day{room.activeDays === 1 ? "" : "s"}{previewActive ? " · Preview" : ""}
         </Text>
         <Body muted>
           {room.nextUnlock
@@ -1133,6 +1347,7 @@ function CatRoom({
         accessibilityHint={visual.action === "wand" ? "Drag anywhere inside the room to move the teaser." : undefined}
         accessibilityLabel={`${room.stage}. ${visual.caption}`}
         onLayout={interactions.onRoomLayout}
+        ref={roomRef}
         style={[styles.room, garden && styles.gardenRoom]}
       >
         {garden ? (
@@ -1147,12 +1362,6 @@ function CatRoom({
           <View style={[styles.roomFloorHighlight, garden && styles.gardenFloorHighlight]} />
         </View>
         {!garden ? <FurnitureVisual itemId={room.selectedFurniture?.id} /> : null}
-        {!garden &&
-        available.scratch &&
-        room.selectedFurniture?.id !== "scratching-post" &&
-        visual.temporaryFurniture !== "scratching-post" ? (
-          <FurnitureVisual itemId="scratching-post" secondary />
-        ) : null}
         {!garden && visual.temporaryFurniture && visual.temporaryFurniture !== room.selectedFurniture?.id ? (
           <FurnitureVisual itemId={visual.temporaryFurniture} />
         ) : null}
@@ -1191,22 +1400,22 @@ function CatRoom({
       <Card>
         <Text style={styles.cardTitle}>Spend time together</Text>
         <ActionGroup label="Kitten moments">
-          <ActionButton disabled={transientInteractionDisabled} label="Sit together" onPress={interactions.sitTogether} />
-          <ActionButton disabled={transientInteractionDisabled} label="Explore room" onPress={interactions.exploreRoom} />
+          <ActionButton disabled={transientInteractionDisabled} label="Sit together" onPress={() => beginVisualCommand(interactions.sitTogether)} />
+          <ActionButton disabled={transientInteractionDisabled} label="Explore room" onPress={() => beginVisualCommand(interactions.exploreRoom)} />
           <ActionButton
             disabled={transientInteractionDisabled}
             label="Nap"
-            onPress={() => interactions.nap(room.selectedFurniture?.id)}
+            onPress={() => beginVisualCommand(() => interactions.nap(room.selectedFurniture?.id))}
           />
         </ActionGroup>
         {room.ownedFood.length > 0 ? (
           <ActionGroup label="Food">
             {room.ownedFood.map(({ item, quantity }) => (
               <ActionButton
-                disabled={economicWriteDisabled}
+                disabled={previewSafeEconomicDisabled}
                 key={item.id}
                 label={`Feed ${item.name} · ${quantity}`}
-                onPress={() => onFeed(item)}
+                onPress={() => beginVisualCommand(() => onFeed(item))}
               />
             ))}
           </ActionGroup>
@@ -1219,21 +1428,24 @@ function CatRoom({
               <ActionButton
                 disabled={transientInteractionDisabled}
                 label="Play with yarn"
-                onPress={() => interactions.playSequence("yarn")}
+                onPress={() => beginVisualCommand(() => interactions.playSequence("yarn"))}
               />
             ) : null}
             {available.mouse ? (
               <ActionButton
                 disabled={transientInteractionDisabled}
                 label="Chase toy mouse"
-                onPress={() => interactions.playSequence("mouse")}
+                onPress={() => beginVisualCommand(() => interactions.playSequence("mouse"))}
               />
             ) : null}
             {available.wand ? (
               <ActionButton
                 disabled={transientInteractionDisabled}
                 label={visual.action === "wand" ? "End wand play" : "Play with teaser wand"}
-                onPress={interactions.toggleWand}
+                onPress={() => {
+                  if (visual.action !== "wand") onVisualCommandStart();
+                  interactions.toggleWand();
+                }}
               />
             ) : null}
           </ActionGroup>
@@ -1244,21 +1456,21 @@ function CatRoom({
               <ActionButton
                 disabled={transientInteractionDisabled}
                 label="Scratch"
-                onPress={() => interactions.playSequence("scratch")}
+                onPress={() => beginVisualCommand(() => interactions.playSequence("scratch"))}
               />
             ) : null}
             {available.perch ? (
               <ActionButton
                 disabled={transientInteractionDisabled}
                 label="Watch from perch"
-                onPress={() => interactions.playSequence("perch")}
+                onPress={() => beginVisualCommand(() => interactions.playSequence("perch"))}
               />
             ) : null}
             {available.tree ? (
               <ActionButton
                 disabled={transientInteractionDisabled}
                 label="Climb / perch"
-                onPress={() => interactions.playSequence("tree")}
+                onPress={() => beginVisualCommand(() => interactions.playSequence("tree"))}
               />
             ) : null}
           </ActionGroup>
@@ -1266,20 +1478,20 @@ function CatRoom({
         {available.highFive || available.pawShake || available.butterfly || available.garden ? (
           <ActionGroup label="Tricks & adventures">
             {available.highFive ? (
-              <ActionButton disabled={transientInteractionDisabled} label="High-five" onPress={() => interactions.playSequence("high-five")} />
+              <ActionButton disabled={transientInteractionDisabled} label="High-five" onPress={() => beginVisualCommand(() => interactions.playSequence("high-five"))} />
             ) : null}
             {available.pawShake ? (
-              <ActionButton disabled={transientInteractionDisabled} label="Paw shake" onPress={() => interactions.playSequence("paw-shake")} />
+              <ActionButton disabled={transientInteractionDisabled} label="Paw shake" onPress={() => beginVisualCommand(() => interactions.playSequence("paw-shake"))} />
             ) : null}
             {available.garden ? (
               <ActionButton
                 disabled={transientInteractionDisabled}
                 label={garden ? "Return to room" : "Visit garden"}
-                onPress={garden ? interactions.returnToRoom : interactions.visitGarden}
+                onPress={() => beginVisualCommand(garden ? interactions.returnToRoom : interactions.visitGarden)}
               />
             ) : null}
             {available.butterfly && garden ? (
-              <ActionButton disabled={transientInteractionDisabled} label="Follow butterfly" onPress={() => interactions.playSequence("butterfly")} />
+              <ActionButton disabled={transientInteractionDisabled} label="Follow butterfly" onPress={() => beginVisualCommand(() => interactions.playSequence("butterfly"))} />
             ) : null}
           </ActionGroup>
         ) : null}
@@ -1294,14 +1506,14 @@ function CatRoom({
           <View style={styles.actionWrap}>
             {room.ownedFurniture.map(({ item }) => (
               <ActionButton
-                disabled={economicWriteDisabled || room.selectedFurniture?.id === item.id}
+                disabled={previewSafeEconomicDisabled || room.selectedFurniture?.id === item.id}
                 key={item.id}
                 label={room.selectedFurniture?.id === item.id ? `${item.name} · In room` : item.name}
                 onPress={() => onChooseFurniture(item.id)}
               />
             ))}
             {room.selectedFurniture ? (
-              <ActionButton disabled={economicWriteDisabled} label="Clear furnishing" onPress={() => onChooseFurniture(undefined)} />
+              <ActionButton disabled={previewSafeEconomicDisabled} label="Clear furnishing" onPress={() => onChooseFurniture(undefined)} />
             ) : null}
           </View>
         </Card>
@@ -1314,6 +1526,7 @@ function CatStore({
   disabled,
   onBuy,
   pendingItemId,
+  previewActive,
   queuedItemId,
   room,
   state,
@@ -1322,6 +1535,7 @@ function CatStore({
   disabled: boolean;
   onBuy(item: CatCatalogItem): void;
   pendingItemId?: string;
+  previewActive: boolean;
   queuedItemId?: string;
   room: CatRoomView;
   state: Parameters<typeof purchaseAvailability>[0];
@@ -1343,6 +1557,11 @@ function CatStore({
             const quantity = inventoryQuantity(state, item.id);
             const availability = purchaseAvailability(state, item.id);
             const unlocked = isCatItemUnlocked(item, room.activeDays);
+            const previewButtonLabel = quantity > 0
+              ? "Preview owned"
+              : unlocked
+                ? "Preview eligible"
+                : `Preview locked · day ${item.unlockActiveDays}`;
             return (
               <View key={item.id} style={styles.storeItem}>
                 <View style={styles.storeItemCopy}>
@@ -1357,9 +1576,11 @@ function CatStore({
                 <View style={styles.priceColumn}>
                   <Text style={styles.price}>{formatPoints(item.price)}</Text>
                   <ActionButton
-                    disabled={disabled || availability !== "available"}
+                    disabled={previewActive || disabled || availability !== "available"}
                     label={
-                      pendingItemId === item.id
+                      previewActive
+                        ? previewButtonLabel
+                        : pendingItemId === item.id
                         ? `Buying ${item.name}…`
                         : queuedItemId === item.id
                           ? "Waiting to sync…"
@@ -1471,11 +1692,11 @@ function RoomToyVisuals({
 
   return (
     <>
-      {ownsYarn ? (
+      {ownsYarn && activeTarget === "yarn" ? (
         <Animated.View
           accessibilityLabel="Yarn ball in room"
           pointerEvents="none"
-          style={activeTarget === "yarn" ? [styles.movingTarget, movingTarget] : styles.yarnHome}
+          style={[styles.movingTarget, movingTarget]}
         >
           <View style={styles.yarnBall}>
             <View style={[styles.yarnStripe, styles.yarnStripeOne]} />
@@ -1484,11 +1705,11 @@ function RoomToyVisuals({
           <View style={styles.yarnTail} />
         </Animated.View>
       ) : null}
-      {ownsMouse ? (
+      {ownsMouse && activeTarget === "mouse" ? (
         <Animated.View
           accessibilityLabel="Toy mouse in room"
           pointerEvents="none"
-          style={activeTarget === "mouse" ? [styles.movingTarget, movingTarget] : styles.mouseHome}
+          style={[styles.movingTarget, movingTarget]}
         >
           <View style={styles.mouseTail} />
           <View style={styles.mouseBody}>
@@ -1524,14 +1745,14 @@ function RoomToyVisuals({
   );
 }
 
-function FurnitureVisual({ itemId, secondary = false }: { itemId?: CatItemId; secondary?: boolean }) {
-  if (itemId === "cat-bed") return <View accessibilityLabel="Cat bed in room" style={styles.catBed} />;
-  if (itemId === "window-cushion") return <View accessibilityLabel="Window perch in room" style={styles.windowCushion} />;
+function FurnitureVisual({ itemId }: { itemId?: CatItemId }) {
+  if (itemId === "cat-bed") return <View accessibilityLabel="Cat bed in room" style={[styles.catBed, roomAnchorStyle(CAT_ROOM_LAYOUT.bedAnchor)]} />;
+  if (itemId === "window-cushion") return <View accessibilityLabel="Window perch in room" style={[styles.windowCushion, roomAnchorStyle(CAT_ROOM_LAYOUT.windowPerchAnchor)]} />;
   if (itemId === "scratching-post") {
     return (
       <View
         accessibilityLabel="Scratching post in room"
-        style={[styles.scratchingPost, secondary && styles.scratchingPostSecondary]}
+        style={[styles.scratchingPost, roomAnchorStyle(CAT_ROOM_LAYOUT.scratchingPostAnchor)]}
       >
         <View style={styles.scratchingPostTop} />
         <View style={styles.scratchingPostColumn} />
@@ -1541,7 +1762,7 @@ function FurnitureVisual({ itemId, secondary = false }: { itemId?: CatItemId; se
   }
   if (itemId === "cat-tree") {
     return (
-      <View accessibilityLabel="Cat tree in room" style={styles.catTree}>
+      <View accessibilityLabel="Cat tree in room" style={[styles.catTree, roomAnchorStyle(CAT_ROOM_LAYOUT.catTreeFloorAnchor)]}>
         <View style={styles.catTreeTop} />
         <View style={styles.catTreeUpperPost} />
         <View style={styles.catTreeMiddle} />
@@ -1551,6 +1772,13 @@ function FurnitureVisual({ itemId, secondary = false }: { itemId?: CatItemId; se
     );
   }
   return null;
+}
+
+function roomAnchorStyle(point: NormalizedRoomPoint) {
+  return {
+    left: `${point.x * 100}%` as const,
+    top: `${point.y * 100}%` as const,
+  };
 }
 
 function purchaseButtonLabel(availability: ReturnType<typeof purchaseAvailability>): string {
@@ -1593,10 +1821,12 @@ function catPendingSyncMessage(sync: AppSyncState): string {
   return "Your Cat Room change is safe and waiting to sync.";
 }
 
-function foodPose(itemId: CatItemId): CatPose {
-  if (itemId === "kitten-milk") return "milk";
-  if (itemId === "cat-treat" || itemId === "freeze-dried-treat") return "treat";
-  return "food";
+function foodPose(visual: CatFoodVisual): CatPose {
+  if (visual === "wet-food") return "wet-food";
+  if (visual === "kibble") return "food";
+  if (visual === "soft-treat") return "treat";
+  if (visual === "freeze-dried-treat") return "freeze-dried-treat";
+  return "milk";
 }
 
 function formatPoints(points: number): string {
@@ -1609,6 +1839,20 @@ const styles = StyleSheet.create({
   sectionTabActive: { backgroundColor: colors.primary },
   sectionTabText: { color: colors.text, fontSize: typography.body, fontWeight: "800" },
   sectionTabTextActive: { color: "#FFFFFF" },
+  qaPanel: { backgroundColor: "#F5F3FF", borderColor: "#7C3AED", borderRadius: radii.md, borderStyle: "dashed", borderWidth: 1, gap: spacing.sm, padding: spacing.md },
+  qaHeader: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, justifyContent: "space-between" },
+  qaDisclosure: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", minHeight: touchTarget },
+  qaDisclosureIcon: { color: "#5B21B6", fontSize: 22, fontWeight: "900" },
+  qaTitle: { color: "#5B21B6", fontSize: typography.label, fontWeight: "900", letterSpacing: 1.1 },
+  qaSummary: { color: "#5B21B6", fontSize: typography.small, fontWeight: "800", lineHeight: 19 },
+  qaDescription: { color: colors.textMuted, fontSize: typography.small, lineHeight: 19, marginTop: spacing.xs },
+  qaLabel: { color: colors.text, fontSize: typography.label, fontWeight: "800", letterSpacing: 0.6, marginTop: spacing.xs, textTransform: "uppercase" },
+  qaChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  qaChip: { backgroundColor: colors.surface, borderColor: "#C4B5FD", borderRadius: radii.pill, borderWidth: 1, justifyContent: "center", minHeight: 34, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  qaChipSelected: { backgroundColor: "#6D28D9", borderColor: "#6D28D9" },
+  qaChipPressed: { opacity: 0.72 },
+  qaChipText: { color: "#5B21B6", fontSize: typography.small, fontWeight: "700" },
+  qaChipTextSelected: { color: "#FFFFFF" },
   notice: { backgroundColor: colors.primarySoft, borderRadius: radii.sm, color: colors.text, fontSize: typography.small, lineHeight: 20, padding: spacing.md },
   statGrid: { flexDirection: "row", gap: spacing.sm },
   stat: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flex: 1, gap: spacing.xs, minHeight: 92, padding: spacing.md },
@@ -1625,21 +1869,19 @@ const styles = StyleSheet.create({
   window: { backgroundColor: "#BFE5F5", borderColor: "#FFFFFF", borderWidth: 5, flexDirection: "row", height: 75, left: spacing.lg, position: "absolute", top: spacing.lg, width: 108 },
   windowPane: { borderColor: "#FFFFFF", borderRightWidth: 2, flex: 1 },
   gardenDetail: { color: "#3B6B3B", fontSize: 20, left: 20, letterSpacing: 7, position: "absolute", right: 20, textAlign: "center", top: 50 },
-  roomFloor: { backgroundColor: "#E8C895", bottom: 0, height: 118, left: 0, position: "absolute", right: 0 },
+  roomFloor: { backgroundColor: "#E8C895", bottom: 0, left: 0, position: "absolute", right: 0, top: `${CAT_ROOM_LAYOUT.floorY * 100}%` },
   roomFloorHighlight: { backgroundColor: "#F4DDB7", height: 8, left: 0, position: "absolute", right: 0, top: 0 },
   gardenFloor: { backgroundColor: "#A9CF83" },
   gardenFloorHighlight: { backgroundColor: "#C7E4A9" },
-  kittenLayer: { bottom: 66, height: 110, left: "50%", marginLeft: -80, position: "absolute", width: CAT_SPRITE_WIDTH, zIndex: 3 },
+  kittenLayer: { height: 110, left: 0, position: "absolute", top: 0, width: CAT_SPRITE_WIDTH, zIndex: 3 },
   roomMessage: { backgroundColor: "rgba(255,255,255,0.92)", borderRadius: radii.sm, marginTop: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: "100%", zIndex: 10 },
   roomMessageText: { color: colors.text, fontSize: typography.small, textAlign: "center" },
-  movingTarget: { height: 38, left: "50%", marginLeft: -19, marginTop: -19, position: "absolute", top: "43%", width: 38, zIndex: 6 },
-  yarnHome: { bottom: 70, height: 38, position: "absolute", right: 24, width: 44, zIndex: 2 },
+  movingTarget: { height: 38, left: 0, marginLeft: -19, marginTop: -19, position: "absolute", top: 0, width: 38, zIndex: 6 },
   yarnBall: { backgroundColor: "#9C6644", borderColor: "#6F422A", borderRadius: 16, borderWidth: 2, height: 32, left: 2, position: "absolute", top: 2, width: 32 },
   yarnStripe: { backgroundColor: "#F0D5B5", height: 2, left: 5, position: "absolute", top: 13, width: 20 },
   yarnStripeOne: { transform: [{ rotate: "28deg" }] },
   yarnStripeTwo: { transform: [{ rotate: "-35deg" }] },
   yarnTail: { borderBottomColor: "#9C6644", borderBottomWidth: 2, borderRadius: 10, bottom: 0, height: 11, position: "absolute", right: 0, transform: [{ rotate: "14deg" }], width: 18 },
-  mouseHome: { bottom: 72, height: 26, position: "absolute", right: 82, width: 48, zIndex: 2 },
   mouseBody: { backgroundColor: "#817A85", borderColor: "#514B55", borderRadius: 12, borderWidth: 2, height: 22, left: 13, position: "absolute", top: 2, width: 30 },
   mouseEar: { backgroundColor: "#C58B9A", borderColor: "#514B55", borderRadius: 6, borderWidth: 1, height: 11, left: 3, position: "absolute", top: -5, width: 11 },
   mouseEye: { backgroundColor: "#2E2930", borderRadius: 2, height: 4, position: "absolute", right: 6, top: 5, width: 4 },
@@ -1654,14 +1896,13 @@ const styles = StyleSheet.create({
   butterflyWingLeft: { backgroundColor: "#F4A261", transform: [{ rotate: "-18deg" }] },
   butterflyWingRight: { backgroundColor: "#E76F51", transform: [{ rotate: "18deg" }] },
   butterflyBody: { backgroundColor: "#50394C", borderRadius: 2, height: 22, marginHorizontal: -1, width: 4, zIndex: 2 },
-  catBed: { backgroundColor: "#D9A4C4", borderColor: "#8C5177", borderRadius: 34, borderWidth: 5, bottom: 59, height: 55, left: 18, position: "absolute", width: 112 },
-  windowCushion: { backgroundColor: "#D79B62", borderColor: "#8F5C32", borderRadius: 8, borderWidth: 3, height: 24, left: 20, position: "absolute", top: 92, width: 116 },
-  scratchingPost: { bottom: 58, height: 135, left: 26, position: "absolute", width: 82, zIndex: 1 },
-  scratchingPostSecondary: { left: undefined, right: 20 },
+  catBed: { backgroundColor: "#D9A4C4", borderColor: "#8C5177", borderRadius: 34, borderWidth: 5, height: 55, marginLeft: -56, marginTop: -25, position: "absolute", width: 112 },
+  windowCushion: { backgroundColor: "#D79B62", borderColor: "#8F5C32", borderRadius: 8, borderWidth: 3, height: 24, marginLeft: -58, marginTop: -4, position: "absolute", width: 116 },
+  scratchingPost: { height: 135, marginLeft: -41, marginTop: -135, position: "absolute", width: 82, zIndex: 1 },
   scratchingPostTop: { backgroundColor: "#8F5C32", borderRadius: 7, height: 14, left: 25, position: "absolute", top: 0, width: 32 },
   scratchingPostColumn: { backgroundColor: "#C59A6D", borderColor: "#8F5C32", borderWidth: 3, height: 108, left: 31, position: "absolute", top: 10, width: 20 },
   scratchingPostBase: { backgroundColor: "#8F5C32", borderRadius: 8, bottom: 0, height: 18, left: 2, position: "absolute", width: 78 },
-  catTree: { bottom: 57, height: 170, left: 16, position: "absolute", width: 130, zIndex: 1 },
+  catTree: { height: 170, marginLeft: -65, marginTop: -170, position: "absolute", width: 130, zIndex: 1 },
   catTreeTop: { backgroundColor: "#B8865B", borderColor: "#70452B", borderRadius: 9, borderWidth: 3, height: 22, left: 12, position: "absolute", top: 0, width: 74 },
   catTreeUpperPost: { backgroundColor: "#C59A6D", borderColor: "#70452B", borderWidth: 3, height: 62, left: 42, position: "absolute", top: 19, width: 18 },
   catTreeMiddle: { backgroundColor: "#B8865B", borderColor: "#70452B", borderRadius: 8, borderWidth: 3, height: 20, left: 28, position: "absolute", top: 75, width: 92 },

@@ -51,7 +51,7 @@ test("Web teaser wand exposes a clamped pointer and keyboard target with bounded
   assert.match(appSource, /onPointerDown=\{handlePointerMove\}/);
   assert.match(appSource, /onPointerMove=\{handlePointerMove\}/);
   assert.match(appSource, /normalizedRoomPoint\(event\.clientX - rect\.left/);
-  assert.match(appSource, /clampNormalizedRoomPoint\(nextTarget\)/);
+  assert.match(appSource, /clampRoomPointToArea\(nextTarget, CAT_ROOM_LAYOUT\.wandPlayArea\)/);
   assert.match(appSource, /stepTowardRoomPoint\(previous, targetRef\.current/);
   assert.match(appSource, /shouldWandPounce\(next, targetRef\.current, Math\.random\(\)\)/);
   assert.match(appSource, /wand-pounce/);
@@ -92,6 +92,13 @@ test("Web furniture phases place the kitten beside the owned or selected furnish
   assert.match(cssSource, /\.cat-stage-kitten-perch/);
   assert.match(cssSource, /\.cat-stage-kitten-tree-climb/);
   assert.match(cssSource, /\.cat-stage-kitten-tree-perch/);
+  assert.match(appSource, /CAT_ROOM_LAYOUT\.scratchingPostAnchor/);
+  assert.match(appSource, /CAT_ROOM_LAYOUT\.bedAnchor/);
+  assert.match(appSource, /CAT_ROOM_LAYOUT\.windowPerchAnchor/);
+  assert.match(appSource, /CAT_ROOM_LAYOUT\.catTreeMidAnchor/);
+  assert.match(appSource, /CAT_ROOM_LAYOUT\.catTreeTopAnchor/);
+  assert.match(appSource, /showFloor=\{false\}/);
+  assert.match(cssSource, /aspect-ratio: 16 \/ 9/);
 });
 
 test("Web tricks and garden interactions settle and leave the normal room recoverable", () => {
@@ -118,4 +125,49 @@ test("Web transient animation work cleans up and stays outside durable state wri
     playStage,
     /updateAppState|purchaseCatItem|consumeCatFood|Supabase|reward|inventory/,
   );
+});
+
+test("Web Cat QA controls are development-only and project into the real Cat room", () => {
+  assert.match(appSource, /catQaPreviewEnabled\(process\.env\.NODE_ENV === "development"\)/);
+  assert.match(appSource, /\{qaPreviewAvailable && \(\s*<CatQaPreviewPanel/);
+  assert.match(appSource, /Cat QA · DEV ONLY/);
+  assert.match(appSource, /<details/);
+  assert.match(appSource, /Preview only\. Does not change your real account, points, inventory, or cloud data\./);
+  assert.match(appSource, /Preview: \{previewSummary\}/);
+  assert.match(appSource, /Reset Preview/);
+  assert.match(appSource, /projectCatQaPreview\(/);
+  assert.match(appSource, /const availability = catInteractionAvailability\(ownedItemIds, selectedFurnitureId\)/);
+
+  const panel = appSource.slice(
+    appSource.indexOf("function CatQaPreviewPanel"),
+    appSource.indexOf("function PixelKitten"),
+  );
+  assert.doesNotMatch(panel, /update\(|updateAppState|purchaseCatItem|consumeCatFood|selectFurniture|Supabase|syncProgress/);
+});
+
+test("Web food and hand interactions use distinct production SVG silhouettes", () => {
+  for (const visual of ["DrinkingKitten", "WetFoodKitten", "EatingKitten", "LickingKitten", "FreezeDriedTreatKitten"]) {
+    assert.match(appSource, new RegExp(`function ${visual}`));
+  }
+  assert.match(appSource, /catFoodVisualFor\(itemId\)/);
+  assert.match(appSource, /pose === "wet-food"/);
+  assert.match(appSource, /pose === "freeze-dried-treat"/);
+  const highFive = appSource.slice(appSource.indexOf("function HighFiveKitten"), appSource.indexOf("function ProudKitten"));
+  const pawShake = appSource.slice(appSource.indexOf("function PawShakeKitten"), appSource.indexOf("function ButterflyKitten"));
+  assert.notEqual(highFive, pawShake);
+  assert.match(highFive, /y="24"/);
+  assert.match(pawShake, /y="91"/);
+});
+
+test("Web Cat QA preview exits before every Cat economy or persistence path", () => {
+  const buy = appSource.slice(appSource.indexOf("function buy(itemId"), appSource.indexOf("function feed(itemId"));
+  const feed = appSource.slice(appSource.indexOf("function feed(itemId"), appSource.indexOf("const ownedFood"));
+  const furniture = appSource.slice(appSource.indexOf("function chooseFurniture"), appSource.indexOf("function startWand"));
+
+  assert.ok(buy.indexOf("if (qaPreviewActive)") < buy.indexOf("update((current)"));
+  assert.ok(feed.indexOf("if (qaPreviewActive)") < feed.indexOf("consumeCatFood"));
+  assert.ok(furniture.indexOf("if (qaPreviewActive)") < furniture.indexOf("selectFurniture"));
+  assert.match(buy, /purchaseCatItem/);
+  assert.match(feed, /consumeCatFood/);
+  assert.match(furniture, /selectFurniture/);
 });

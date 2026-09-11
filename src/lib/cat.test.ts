@@ -204,8 +204,10 @@ test("every visible pose has a matching message", () => {
   assert.match(messageForPose("walking"), /pads softly/);
   assert.match(messageForPose("sleeping"), /peaceful nap/);
   assert.match(messageForPose("drinking"), /milk/);
-  assert.match(messageForPose("eating"), /little bowl/);
+  assert.match(messageForPose("wet-food"), /soft meal/);
+  assert.match(messageForPose("eating"), /crunch/);
   assert.match(messageForPose("licking"), /treat/);
+  assert.match(messageForPose("freeze-dried-treat"), /sniff/);
   assert.match(messageForPose("yarn"), /yarn/);
   assert.match(messageForPose("mouse-pounce"), /toy mouse/);
   assert.match(messageForPose("scratching"), /Scratch/);

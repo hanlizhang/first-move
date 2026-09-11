@@ -117,8 +117,8 @@ textarea {
 }
 
 .cat-play-stage {
-  height: clamp(18rem, 43vw, 24rem);
-  min-height: 18rem;
+  width: min(100%, 42rem);
+  aspect-ratio: 16 / 9;
   background: rgb(255 255 255 / 24%);
   outline: none;
 }
@@ -131,7 +131,6 @@ textarea {
   position: absolute;
   z-index: 1;
   right: 4%;
-  bottom: 10%;
   left: 4%;
   height: 4px;
   background: #b08968;
@@ -141,34 +140,27 @@ textarea {
 .cat-stage-kitten {
   position: absolute;
   z-index: 5;
-  top: 86%;
-  left: 50%;
-  transform: translate(-50%, -76%);
+  width: clamp(8.75rem, 28vw, 11.5rem);
+  transform: translate(-50%, -85.5%);
   transform-origin: center bottom;
   pointer-events: none;
 }
 
 .cat-stage-kitten .pixel-kitten {
   margin: 0;
+  width: 100%;
 }
 
 .cat-stage-kitten-wand {
   transition: left 120ms linear, top 120ms linear;
 }
 
-.cat-stage-kitten-yarn-anticipate { left: 37%; top: 85%; }
-.cat-stage-kitten-yarn { left: 29%; top: 87%; }
-.cat-stage-kitten-yarn-settle { left: 27%; top: 86%; }
-.cat-stage-kitten-mouse-stalk { left: 55%; top: 86%; }
-.cat-stage-kitten-mouse-chase { left: 66%; top: 85%; }
-.cat-stage-kitten-mouse-pounce { left: 70%; top: 86%; }
-.cat-stage-kitten-scratching { left: 67%; top: 84%; }
-.cat-stage-kitten-bed-nap { left: 50%; top: 87%; }
-.cat-stage-kitten-perch { left: 76%; top: 40%; transform: translate(-50%, -70%) scale(.82); }
-.cat-stage-kitten-tree-climb { left: 76%; top: 60%; transform: translate(-50%, -72%) scale(.86); }
-.cat-stage-kitten-tree-perch { left: 76%; top: 31%; transform: translate(-50%, -69%) scale(.78); }
-.cat-stage-kitten-butterfly-spot { left: 45%; top: 84%; }
-.cat-stage-kitten-butterfly { left: 57%; top: 58%; }
+.cat-stage-kitten-scratching { transform: translate(-50%, -85.5%) scale(.88); }
+.cat-stage-kitten-bed-nap { transform: translate(-50%, -85.5%) scale(.8); }
+.cat-stage-kitten-perch { transform: translate(-50%, -85.5%) scale(.68); }
+.cat-stage-kitten-tree-climb { transform: translate(-50%, -85.5%) scale(.7); }
+.cat-stage-kitten-tree-perch { transform: translate(-50%, -85.5%) scale(.66); }
+.cat-stage-kitten-butterfly { transform: translate(-50%, -85.5%) scale(.86); }
 
 .cat-stage-kitten-tree-climb,
 .cat-stage-kitten-tree-perch,
@@ -190,10 +182,10 @@ textarea {
 }
 
 .cat-yarn-ball {
-  bottom: 10%;
-  left: 17%;
   width: 2.2rem;
   height: 2.2rem;
+  transform: translate(-50%, -82%);
+  transition: left 260ms ease, top 260ms ease;
 }
 
 .cat-yarn-ball span {
@@ -222,10 +214,10 @@ textarea {
 }
 
 .cat-toy-mouse {
-  right: 13%;
-  bottom: 11%;
   width: 2.8rem;
   height: 1.35rem;
+  transform: translate(-50%, -82%);
+  transition: left 300ms ease, top 300ms ease;
 }
 
 .cat-toy-mouse span {
@@ -268,14 +260,13 @@ textarea {
 }
 
 .cat-play-stage-phase-mouse-pounce .cat-toy-mouse {
-  transform: translateX(-10px) rotate(-8deg);
+  transform: translate(-50%, -82%) rotate(-8deg);
 }
 
 .cat-scratching-post {
-  right: 10%;
-  bottom: 9%;
   width: 3.8rem;
   height: 7.4rem;
+  transform: translate(-50%, -100%);
 }
 
 .cat-scratching-post span {
@@ -303,11 +294,10 @@ textarea {
 }
 
 .cat-bed {
-  bottom: 7%;
-  left: 50%;
   width: 9.5rem;
   height: 3.3rem;
-  transform: translateX(-50%);
+  z-index: 3;
+  transform: translate(-50%, -45%);
   border: 5px solid #be6a82;
   border-radius: 42% 42% 28% 28%;
   background: #f9a8b7;
@@ -324,10 +314,9 @@ textarea {
 .cat-bed.is-active { box-shadow: inset 0 12px #fecdd3, 0 0 0 4px rgb(253 164 175 / 28%); }
 
 .cat-window-perch {
-  top: 5%;
-  right: 3%;
   width: 9.5rem;
   height: 7rem;
+  transform: translate(-50%, -100%);
   border: 6px solid #9a6b3f;
   background: linear-gradient(135deg, #dff4ff 0 48%, #fff 48% 52%, #bde8f7 52%);
   box-shadow: inset 0 0 0 4px rgb(255 255 255 / 40%);
@@ -355,10 +344,9 @@ textarea {
 }
 
 .cat-tree {
-  right: 3%;
-  bottom: 8%;
   width: 9rem;
   height: 13rem;
+  transform: translate(-50%, -100%);
 }
 
 .cat-tree span {
@@ -419,10 +407,10 @@ textarea {
 
 .cat-butterfly-target {
   z-index: 8;
-  top: 20%;
-  right: 18%;
   width: 2.5rem;
   height: 2rem;
+  transform: translate(-50%, -50%);
+  transition: left 320ms ease, top 320ms ease;
 }
 
 .cat-butterfly-target::before,
@@ -516,9 +504,9 @@ textarea {
 @keyframes yarn-bat { 0% { transform: translateX(0); } 50% { transform: translateX(-7px); } 100% { transform: translateX(3px); } }
 @keyframes butterfly-flutter { 0% { transform: translate(0, 0); } 50% { transform: translate(5px, -5px); } 100% { transform: translate(10px, 1px); } }
 @keyframes kitten-sparkle { 50% { opacity: .35; } }
-@keyframes room-yarn-bat { 0% { transform: translateX(0) rotate(0); } 40% { transform: translateX(22px) rotate(75deg); } 75% { transform: translateX(-9px) rotate(-30deg); } 100% { transform: translateX(7px) rotate(20deg); } }
-@keyframes room-mouse-dash { 0% { transform: translateX(0); } 35% { transform: translate(-26px, -2px); } 70% { transform: translate(14px, 1px); } 100% { transform: translateX(-10px); } }
-@keyframes garden-butterfly-path { 0% { transform: translate(0, 0) rotate(0); } 20% { transform: translate(-55px, 28px) rotate(-8deg); } 45% { transform: translate(-115px, -3px) rotate(8deg); } 70% { transform: translate(-72px, 65px) rotate(-10deg); } 100% { transform: translate(-135px, 35px) rotate(6deg); } }
+@keyframes room-yarn-bat { 0% { transform: translate(-50%, -82%) rotate(0); } 40% { transform: translate(calc(-50% + 8px), -82%) rotate(55deg); } 75% { transform: translate(calc(-50% - 5px), -82%) rotate(-25deg); } 100% { transform: translate(-50%, -82%) rotate(0); } }
+@keyframes room-mouse-dash { 0%, 100% { transform: translate(-50%, -82%); } 50% { transform: translate(-50%, calc(-82% - 3px)); } }
+@keyframes garden-butterfly-path { 0%, 100% { transform: translate(-50%, -50%) rotate(-4deg); } 50% { transform: translate(calc(-50% + 5px), calc(-50% - 6px)) rotate(5deg); } }
 @keyframes scratch-paw-a { 0%, 49% { opacity: 1; transform: translateY(-3px); } 50%, 100% { opacity: .25; transform: translateY(7px); } }
 @keyframes scratch-paw-b { 0%, 49% { opacity: .25; transform: translateY(-5px); } 50%, 100% { opacity: 1; transform: translateY(3px); } }
 @keyframes wand-reach { 0% { transform: translateY(0) scale(1); } 55% { transform: translateY(-7px) scale(1.04); } 100% { transform: translateY(0) scale(1); } }
@@ -579,20 +567,17 @@ textarea {
   }
 
   .cat-play-stage {
-    height: 18rem;
+    aspect-ratio: 6 / 5;
   }
 
-  .cat-window-perch,
+  .cat-window-perch {
+    transform: translate(-50%, -100%) scale(.68);
+    transform-origin: center bottom;
+  }
+
   .cat-tree {
-    right: -1.2rem;
-    transform: scale(.8);
-    transform-origin: right bottom;
-  }
-
-  .cat-stage-kitten-perch,
-  .cat-stage-kitten-tree-climb,
-  .cat-stage-kitten-tree-perch {
-    left: 72%;
+    transform: translate(-50%, -100%) scale(.5);
+    transform-origin: center bottom;
   }
 
   .companion-speech {

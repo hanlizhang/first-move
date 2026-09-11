@@ -34,10 +34,14 @@ export function PixelKitten({
       <WalkingKitten />
     ) : pose === "milk" ? (
       <DrinkingKitten />
+    ) : pose === "wet-food" ? (
+      <WetFoodKitten />
     ) : pose === "food" ? (
       <EatingKitten />
     ) : pose === "treat" ? (
       <LickingKitten />
+    ) : pose === "freeze-dried-treat" ? (
+      <FreezeDriedTreatKitten />
     ) : pose === "anticipating" ? (
       <AnticipatingKitten />
     ) : pose === "pouncing" ? (
@@ -223,14 +227,31 @@ function SleepingKitten() {
 function DrinkingKitten() {
   return (
     <G>
-      <Rect x={121} y={88} width={27} height={6} fill="#8aa4a8" />
-      <Rect x={125} y={86} width={19} height={3} fill="#f8fafc" />
-      <Rect x={112} y={59} width={8} height={26} fill="#f4f1de" />
-      <Rect x={114} y={62} width={4} height={7} fill="#9ad1d4" />
+      <Rect x={120} y={88} width={30} height={6} rx={3} fill="#8aa4a8" />
+      <Rect x={124} y={86} width={22} height={4} rx={2} fill="#FFFDF2" />
+      <Rect x={116} y={78} width={5} height={4} fill="#e8a4a4" />
       <CurvedTail x={42} y={75} />
       <Rect x={52} y={62} width={49} height={24} fill={fur} />
       <Rect x={59} y={68} width={34} height={15} fill={furLight} />
-      <CatFace x={99} y={49} />
+      <CatFace x={99} y={51} />
+      <Rect x={57} y={82} width={10} height={12} fill={furDark} />
+      <Rect x={72} y={84} width={10} height={10} fill={fur} />
+      <Rect x={91} y={84} width={10} height={10} fill={furDark} />
+    </G>
+  );
+}
+
+function WetFoodKitten() {
+  return (
+    <G>
+      <Rect x={119} y={86} width={31} height={8} rx={3} fill="#52796f" />
+      <Rect x={124} y={82} width={21} height={6} rx={3} fill="#b96f5b" />
+      <Rect x={130} y={80} width={9} height={4} fill="#cf8a72" />
+      <Rect x={116} y={77} width={5} height={4} fill="#e8a4a4" />
+      <CurvedTail x={42} y={75} />
+      <Rect x={52} y={62} width={49} height={24} fill={fur} />
+      <Rect x={59} y={68} width={34} height={15} fill={furLight} />
+      <CatFace happy x={99} y={50} />
       <Rect x={57} y={82} width={10} height={12} fill={furDark} />
       <Rect x={72} y={84} width={10} height={10} fill={fur} />
       <Rect x={91} y={84} width={10} height={10} fill={furDark} />
@@ -269,6 +290,26 @@ function LickingKitten() {
       <CurvedTail x={43} y={76} />
       <Rect x={58} y={55} width={43} height={31} fill={fur} />
       <CatFace x={78} y={28} happy />
+      <Rect x={63} y={81} width={9} height={13} fill={furDark} />
+      <Rect x={78} y={81} width={9} height={13} fill={fur} />
+      <Rect x={95} y={81} width={9} height={13} fill={furDark} />
+    </G>
+  );
+}
+
+function FreezeDriedTreatKitten() {
+  return (
+    <G>
+      <G fill="#c98a54" stroke="#8a5a35" strokeWidth={1}>
+        <Rect x={124} y={76} width={8} height={8} />
+        <Rect x={136} y={84} width={7} height={7} />
+        <Rect x={145} y={79} width={5} height={5} />
+      </G>
+      <Rect x={96} y={73} width={31} height={7} fill={fur} />
+      <Rect x={119} y={78} width={9} height={8} fill={furDark} />
+      <CurvedTail x={43} y={76} />
+      <Rect x={58} y={55} width={43} height={31} fill={fur} />
+      <CatFace x={78} y={29} />
       <Rect x={63} y={81} width={9} height={13} fill={furDark} />
       <Rect x={78} y={81} width={9} height={13} fill={fur} />
       <Rect x={95} y={81} width={9} height={13} fill={furDark} />
@@ -413,10 +454,15 @@ function HighFiveKitten() {
   return (
     <G>
       <SittingKitten />
-      <Rect x={105} y={53} width={9} height={28} fill={fur} />
-      <Rect x={113} y={50} width={8} height={9} fill={furDark} />
-      <Rect x={128} y={45} width={20} height={28} rx={3} fill="#d8a47f" />
-      <Rect x={122} y={51} width={10} height={7} fill="#d8a47f" />
+      <Rect x={99} y={43} width={8} height={38} fill={fur} />
+      <Rect x={98} y={37} width={10} height={10} rx={3} fill={furDark} />
+      <G fill="#d8a47f">
+        <Rect x={108} y={35} width={20} height={27} rx={5} />
+        <Rect x={111} y={26} width={4} height={14} rx={2} />
+        <Rect x={117} y={24} width={4} height={16} rx={2} />
+        <Rect x={123} y={27} width={4} height={13} rx={2} />
+        <Rect x={127} y={49} width={25} height={8} rx={4} />
+      </G>
     </G>
   );
 }
@@ -425,9 +471,14 @@ function PawShakeKitten() {
   return (
     <G>
       <SittingKitten />
-      <Rect x={98} y={78} width={28} height={8} fill={fur} />
-      <Rect x={119} y={80} width={25} height={12} rx={3} fill="#d8a47f" />
-      <Rect x={137} y={70} width={10} height={20} fill="#d8a47f" />
+      <Rect x={96} y={76} width={31} height={8} fill={fur} />
+      <Rect x={120} y={74} width={11} height={10} rx={3} fill={furDark} />
+      <G fill="#d8a47f">
+        <Rect x={119} y={84} width={27} height={10} rx={5} />
+        <Rect x={124} y={91} width={24} height={6} rx={3} />
+        <Rect x={142} y={76} width={9} height={17} rx={4} />
+        <Rect x={148} y={69} width={7} height={15} rx={3} />
+      </G>
     </G>
   );
 }
