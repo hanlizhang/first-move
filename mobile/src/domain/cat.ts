@@ -54,8 +54,10 @@ export const CAT_POSES = [
   "walking",
   "sleeping",
   "milk",
+  "wet-food",
   "food",
   "treat",
+  "freeze-dried-treat",
   "yarn",
   "wand",
   "anticipating",
@@ -98,8 +100,10 @@ export const CAT_REACTION_CAPTIONS: Readonly<Record<CatPose, string>> = {
   walking: CAT_INTERACTION_CAPTIONS.walking,
   sleeping: CAT_INTERACTION_CAPTIONS.sleeping,
   milk: CAT_INTERACTION_CAPTIONS.milk,
-  food: CAT_INTERACTION_CAPTIONS.food,
-  treat: CAT_INTERACTION_CAPTIONS.treat,
+  "wet-food": CAT_INTERACTION_CAPTIONS["wet-food"],
+  food: CAT_INTERACTION_CAPTIONS.kibble,
+  treat: CAT_INTERACTION_CAPTIONS["soft-treat"],
+  "freeze-dried-treat": CAT_INTERACTION_CAPTIONS["freeze-dried-treat"],
   yarn: CAT_INTERACTION_CAPTIONS["yarn-action"],
   wand: CAT_INTERACTION_CAPTIONS["wand-follow"],
   anticipating: CAT_INTERACTION_CAPTIONS["yarn-anticipate"],
@@ -181,7 +185,13 @@ export function catActionDisableState({
 }
 
 export function catPoseReturnDelayMs(pose: CatPose): number | undefined {
-  if (pose === "milk" || pose === "food" || pose === "treat") {
+  if (
+    pose === "milk" ||
+    pose === "wet-food" ||
+    pose === "food" ||
+    pose === "treat" ||
+    pose === "freeze-dried-treat"
+  ) {
     return CAT_FEEDING_POSE_DURATION_MS;
   }
   if (

@@ -117,9 +117,39 @@ test("transient Cat poses do not share the authenticated economic-write disable 
     /disabled=\{transientInteractionDisabled\}\s+label=\{garden \? "Return to room" : "Visit garden"\}/,
   );
 
-  assert.match(source, /disabled=\{economicWriteDisabled\}\s+key=\{item\.id\}\s+label=\{`Feed/);
-  assert.match(source, /disabled=\{economicWriteDisabled \|\| room\.selectedFurniture/);
+  assert.match(source, /disabled=\{previewSafeEconomicDisabled\}\s+key=\{item\.id\}\s+label=\{`Feed/);
+  assert.match(source, /disabled=\{previewSafeEconomicDisabled \|\| room\.selectedFurniture/);
   assert.match(source, /<CatStore\s+disabled=\{economicWriteDisabled\}/);
+});
+
+test("Mobile Cat QA controls are __DEV__-only and feed the production room view", () => {
+  assert.match(source, /catQaPreviewEnabled\(__DEV__\)/);
+  assert.match(source, /\{__DEV__ \? \(\s*<CatQaPreviewPanel/);
+  assert.match(source, /Cat QA · DEV ONLY/);
+  assert.match(source, /accessibilityState=\{\{ expanded \}\}/);
+  assert.match(source, /Preview only\. Does not change your real account, points, inventory, or cloud data\./);
+  assert.match(source, /Preview: \{previewSummary\}/);
+  assert.match(source, /Reset Preview/);
+  assert.match(source, /createCatQaPreviewWorkspace\(localWorkspace, qaProjection\)/);
+  assert.match(source, /getCatRoomView\(previewWorkspace, today\)/);
+
+  const panel = source.slice(
+    source.indexOf("function CatQaPreviewPanel"),
+    source.indexOf("function useCatRoomInteractions"),
+  );
+  assert.doesNotMatch(panel, /updateLocalWorkspace|buyCatItem|feedCatFood|purchaseAvailability/);
+});
+
+test("Mobile Cat QA preview exits before sync and economy mutations", () => {
+  const buy = source.slice(source.indexOf("async function buy("), source.indexOf("async function feed("));
+  const feed = source.slice(source.indexOf("async function feed("), source.indexOf("async function chooseFurniture("));
+  const furniture = source.slice(source.indexOf("async function chooseFurniture("), source.indexOf("function toggleQaPreviewOwnership"));
+
+  assert.ok(buy.indexOf("if (qaPreviewActive)") < buy.indexOf("await buyCatItem"));
+  assert.ok(feed.indexOf("if (qaPreviewActive)") < feed.indexOf("await feedCatFood"));
+  assert.ok(furniture.indexOf("if (qaPreviewActive)") < furniture.indexOf("updateLocalWorkspace"));
+  assert.match(source, /disabled=\{previewActive \|\| disabled \|\| availability !== "available"\}/);
+  assert.match(source, /setQaPreviewActiveDay\(undefined\);[\s\S]*?setQaPreviewOwnedItemIds\(\[\]\);[\s\S]*?setQaPreviewFurnitureId\(undefined\);/);
 });
 
 test("transient interactions replace timers, settle, and clean up on navigation or unmount", () => {
@@ -133,9 +163,20 @@ test("transient interactions replace timers, settle, and clean up on navigation 
   assert.match(source, /cancelActive\(false\)/);
 });
 
+test("target-based phases face from their planned Cat point instead of stale animation state", () => {
+  assert.match(source, /const facingOrigin = step\.point \?\? currentPoint;/);
+  assert.match(source, /facingTowardRoomPoint\(facingOrigin, step\.targetPoint, visualRef\.current\.facing\)/);
+  assert.match(source, /MOBILE_SCRATCH_PLACEMENT = catScratchingPostPlacement\(\)/);
+  assert.match(source, /MOBILE_BUTTERFLY_STEPS = catButterflyFollowSteps\(\)/);
+  assert.doesNotMatch(
+    source,
+    /facingTowardRoomPoint\(currentPoint, step\.targetPoint, visualRef\.current\.facing\)/,
+  );
+});
+
 test("feeding reacts before the economic write and pending flags always clear", () => {
   assert.match(source, /canStartCatFoodInteraction\(localWorkspace, item\.id\)/);
-  const immediatePose = source.indexOf("catInteractions.playFood(foodPose(item.id));");
+  const immediatePose = source.indexOf("catInteractions.playFood(foodPose(foodVisual));");
   const remoteWrite = source.indexOf("await feedCatFood(item.id, today);");
   assert.ok(immediatePose >= 0);
   assert.ok(remoteWrite > immediatePose);
@@ -202,12 +243,13 @@ test("React Native Animated keeps chase frames out of Cat screen React state", (
   assert.doesNotMatch(source, /setInterval\(/);
 });
 
-test("reduced motion preserves target and facing changes without kitten translation or repeated scratching", () => {
+test("reduced motion preserves discrete target, pose, facing, and immediate scroll changes", () => {
   assert.match(source, /AccessibilityInfo\.isReduceMotionEnabled\(\)/);
   assert.match(source, /"reduceMotionChanged"/);
   assert.match(source, /stepTowardRoomPoint\([\s\S]*?!reducedMotionRef\.current/);
-  assert.match(source, /if \(reducedMotionRef\.current\) \{[\s\S]*?catTranslateX\.setValue\(0\)/);
-  assert.match(source, /reducedMotionRef\.current && action === "scratch"/);
+  assert.match(source, /setReducedMotion\(value\)/);
+  assert.match(source, /animated: !catInteractions\.reducedMotion/);
+  assert.doesNotMatch(source, /reducedMotionRef\.current && action === "scratch"/);
   assert.match(source, /userInitiated && step\.discreteReducedMotionPlacement/);
   assert.match(source, /!reducedMotionRef\.current &&[\s\S]*?selectedFurnitureRef\.current === "cat-bed"/);
   assert.match(source, /setTargetPoint\(nextTarget\)/);
@@ -232,10 +274,34 @@ test("furniture interactions place the kitten at bed, perch, post, and tree targ
   assert.match(source, /playSequence\("perch"\)/);
   assert.match(source, /temporaryFurniture: "scratching-post"/);
   assert.match(source, /pose: index % 2 === 0 \? "scratching-left" : "scratching-right"/);
-  assert.match(source, /ROOM_POINTS\.treeClimb/);
-  assert.match(source, /ROOM_POINTS\.treePerch/);
+  assert.match(source, /CAT_ROOM_LAYOUT\.catTreeMidAnchor/);
+  assert.match(source, /CAT_ROOM_LAYOUT\.catTreeTopAnchor/);
   assert.match(source, /pose: index === 0 \? "climbing" : "perched"/);
-  assert.match(source, /available\.scratch &&[\s\S]*?<FurnitureVisual itemId="scratching-post" secondary/);
+  assert.match(source, /visual\.temporaryFurniture && visual\.temporaryFurniture !== room\.selectedFurniture\?\.id/);
+});
+
+test("Mobile commands measure the Cat Room and request at most one scroll at command start", () => {
+  assert.match(source, /catRoomRef\.current\?\.measureInWindow/);
+  assert.match(source, /catRoomScrollTarget\(/);
+  assert.match(source, /scrollViewRef\.current\?\.scrollTo\(/);
+  assert.match(source, /const beginVisualCommand = \(command: \(\) => void\) => \{\s*onVisualCommandStart\(\);\s*command\(\);/);
+  const controller = source.slice(source.indexOf("function useCatRoomInteractions"), source.indexOf("function catVisualSteps"));
+  assert.doesNotMatch(controller, /onVisualCommandStart|scrollTo\(/);
+});
+
+test("Mobile food props and hand poses are visibly distinct", () => {
+  assert.match(source, /catFoodVisualFor\(item\.id\)/);
+  for (const pose of ["wet-food", "freeze-dried-treat"]) {
+    assert.match(pixelKittenSource, new RegExp(`pose === "${pose}"`));
+  }
+  for (const visual of ["DrinkingKitten", "WetFoodKitten", "EatingKitten", "LickingKitten", "FreezeDriedTreatKitten"]) {
+    assert.match(pixelKittenSource, new RegExp(`function ${visual}`));
+  }
+  const highFive = pixelKittenSource.slice(pixelKittenSource.indexOf("function HighFiveKitten"), pixelKittenSource.indexOf("function PawShakeKitten"));
+  const pawShake = pixelKittenSource.slice(pixelKittenSource.indexOf("function PawShakeKitten"), pixelKittenSource.indexOf("function ButterflyKitten"));
+  assert.notEqual(highFive, pawShake);
+  assert.match(highFive, /y=\{24\}/);
+  assert.match(pawShake, /y=\{91\}/);
 });
 
 test("tricks settle automatically and butterfly stays in an explicit garden scene", () => {
@@ -273,8 +339,10 @@ test("Mobile PixelKitten carries over the Web SVG canvas, baseline, palette, and
     "WalkingKitten",
     "SleepingKitten",
     "DrinkingKitten",
+    "WetFoodKitten",
     "EatingKitten",
     "LickingKitten",
+    "FreezeDriedTreatKitten",
     "PlayingKitten",
     "WandKitten",
     "HighFiveKitten",

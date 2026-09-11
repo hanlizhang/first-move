@@ -7,24 +7,72 @@ import {
   CAT_INTERACTION_CAPTIONS,
   CAT_INTERACTION_SEQUENCES,
   CAT_ITEM_INTERACTION_MAP,
+  CAT_QA_PREVIEW_DAYS,
+  CAT_QA_PREVIEW_ITEM_IDS,
+  CAT_ROOM_LAYOUT,
+  CAT_FOOD_VISUAL_BY_ITEM_ID,
   CAT_TARGET_PADDING,
   CAT_WAND_POUNCE_DISTANCE,
   CAT_WAND_STEP,
   FIRST_CAT_IDLE_DELAY_MS,
   MAX_CAT_IDLE_DELAY_MS,
   MIN_CAT_IDLE_DELAY_MS,
+  catQaPreviewEnabled,
+  catButterflyFollowSteps,
+  catFoodVisualFor,
   catInteractionAvailability,
+  catMouseChaseSteps,
+  catRoomScrollTarget,
+  catScratchingPostPlacement,
+  catYarnPlaySteps,
+  clampRoomPointToArea,
   clampNormalizedRoomPoint,
   createCatIdleScheduler,
   createCatSequenceScheduler,
   facingTowardRoomPoint,
   idleActionFor,
   normalizedRoomPoint,
+  projectCatQaPreview,
   randomCatIdleDelay,
   roomPointDistance,
+  isRoomPointInArea,
   shouldWandPounce,
   stepTowardRoomPoint,
 } from "./cat-interactions.ts";
+
+test("Cat QA projection is development-only, transient, and keeps day separate from ownership", () => {
+  assert.equal(catQaPreviewEnabled(false), false);
+  assert.equal(catQaPreviewEnabled(true), true);
+  assert.deepEqual(CAT_QA_PREVIEW_DAYS, [1, 3, 7, 14, 21, 35, 50, 70, 75, 100]);
+  assert.equal(CAT_QA_PREVIEW_ITEM_IDS.length, 16);
+
+  const canonical = {
+    activeDays: 7,
+    ownedItemIds: ["teaser-wand"] as const,
+    selectedFurnitureId: undefined,
+  };
+  const before = structuredClone(canonical);
+  assert.deepEqual(projectCatQaPreview(canonical, {
+    activeDay: 75,
+    ownedItemIds: ["cat-tree"],
+    selectedFurnitureId: "cat-tree",
+  }, true), {
+    active: true,
+    activeDays: 75,
+    ownedItemIds: ["teaser-wand", "cat-tree"],
+    selectedFurnitureId: "cat-tree",
+  });
+  assert.deepEqual(canonical, before);
+  assert.deepEqual(projectCatQaPreview(canonical, {
+    activeDay: 100,
+    ownedItemIds: ["outdoor-garden", "butterfly"],
+  }, false), {
+    active: false,
+    activeDays: 7,
+    ownedItemIds: ["teaser-wand"],
+    selectedFurnitureId: undefined,
+  });
+});
 
 test("Cat v1B captions and item mappings use the shared interaction semantics", () => {
   assert.deepEqual(CAT_INTERACTION_CAPTIONS, {
@@ -32,6 +80,10 @@ test("Cat v1B captions and item mappings use the shared interaction semantics", 
     walking: "The kitten pads softly around the room.",
     sleeping: "The kitten curls up for a peaceful nap.",
     milk: "The kitten laps milk from a shallow dish.",
+    "wet-food": "The kitten licks a soft meal from the shallow bowl.",
+    kibble: "Tiny bites make a cheerful crunch.",
+    "soft-treat": "The kitten reaches up to lick the soft treat.",
+    "freeze-dried-treat": "A careful sniff, then one crunchy little bite.",
     food: "The kitten eats from the little bowl.",
     treat: "The kitten tastes a treat from the pouch.",
     "wand-follow": "Eyes locked on the moving teaser.",
@@ -101,6 +153,67 @@ test("wand following uses bounded steps, facing, proximity, and reduced-motion i
   assert.equal(shouldWandPounce(current, { x: 0.8, y: 0.8 }, 1), false);
 });
 
+test("room anchors align supports and keep mouse, yarn, and wand targets bounded", () => {
+  assert.equal(CAT_ROOM_LAYOUT.catHome.y, CAT_ROOM_LAYOUT.floorY);
+  assert.equal(CAT_ROOM_LAYOUT.bedAnchor.y, CAT_ROOM_LAYOUT.floorY);
+  assert.equal(CAT_ROOM_LAYOUT.scratchingPostAnchor.y, CAT_ROOM_LAYOUT.floorY);
+  assert.equal(CAT_ROOM_LAYOUT.catTreeFloorAnchor.y, CAT_ROOM_LAYOUT.floorY);
+  assert.ok(CAT_ROOM_LAYOUT.windowPerchAnchor.y < CAT_ROOM_LAYOUT.floorY);
+  assert.ok(CAT_ROOM_LAYOUT.catTreeTopAnchor.y < CAT_ROOM_LAYOUT.catTreeMidAnchor.y);
+  assert.ok(CAT_ROOM_LAYOUT.butterflySpotAnchor.y < CAT_ROOM_LAYOUT.floorY);
+  assert.ok(CAT_ROOM_LAYOUT.butterflyFollowAnchor.y < CAT_ROOM_LAYOUT.floorY);
+  assert.ok(isRoomPointInArea(CAT_ROOM_LAYOUT.catTreeMidAnchor, CAT_ROOM_LAYOUT.catTreeMidPlatform));
+  assert.ok(isRoomPointInArea(CAT_ROOM_LAYOUT.catTreeTopAnchor, CAT_ROOM_LAYOUT.catTreeTopPlatform));
+
+  const scratch = catScratchingPostPlacement();
+  assert.equal(facingTowardRoomPoint(scratch.cat, scratch.target), "right");
+  assert.ok(scratch.target.x > scratch.cat.x);
+  assert.ok(roomPointDistance(scratch.cat, scratch.target) <= 0.101);
+
+  const mouse = catMouseChaseSteps();
+  assert.equal(facingTowardRoomPoint(mouse[0]!.cat, mouse[0]!.target), "left");
+  assert.equal(facingTowardRoomPoint(mouse[1]!.cat, mouse[1]!.target), "right");
+  assert.equal(facingTowardRoomPoint(mouse[2]!.cat, mouse[2]!.target), "right");
+  assert.ok(mouse[1]!.target.x > mouse[1]!.cat.x);
+  assert.ok(mouse[2]!.target.x > mouse[2]!.cat.x);
+  assert.ok(roomPointDistance(mouse[2]!.cat, mouse[2]!.target) <= 0.056);
+  assert.ok(mouse.every(({ target }) => isRoomPointInArea(target, CAT_ROOM_LAYOUT.mousePlayArea)));
+
+  const butterfly = catButterflyFollowSteps();
+  assert.deepEqual(butterfly.map(({ target }) => target), [
+    CAT_ROOM_LAYOUT.butterflySpotAnchor,
+    CAT_ROOM_LAYOUT.butterflyFollowAnchor,
+  ]);
+  assert.ok(butterfly.every(({ cat, target }) => target.x > cat.x));
+  assert.ok(butterfly.every(({ cat, target }) => facingTowardRoomPoint(cat, target) === "right"));
+
+  const yarn = catYarnPlaySteps();
+  assert.ok(yarn.every(({ target }) => isRoomPointInArea(target, CAT_ROOM_LAYOUT.toyPlayArea)));
+  assert.ok(yarn.every(({ cat, target }) => roomPointDistance(cat, target) <= 0.101));
+  assert.deepEqual(clampRoomPointToArea({ x: 1, y: 0 }, CAT_ROOM_LAYOUT.wandPlayArea), {
+    x: CAT_ROOM_LAYOUT.wandPlayArea.right,
+    y: CAT_ROOM_LAYOUT.wandPlayArea.top,
+  });
+});
+
+test("five Cat food IDs use five distinct production visual treatments", () => {
+  assert.equal(Object.keys(CAT_FOOD_VISUAL_BY_ITEM_ID).length, 5);
+  const visuals = [
+    catFoodVisualFor("kitten-milk"),
+    catFoodVisualFor("wet-kitten-food"),
+    catFoodVisualFor("cat-food"),
+    catFoodVisualFor("cat-treat"),
+    catFoodVisualFor("freeze-dried-treat"),
+  ];
+  assert.equal(new Set(visuals).size, 5);
+});
+
+test("room scroll target skips visible rooms and returns one bounded target otherwise", () => {
+  assert.equal(catRoomScrollTarget({ currentScrollY: 400, roomHeight: 310, roomTop: 24, viewportHeight: 640 }), undefined);
+  assert.equal(catRoomScrollTarget({ currentScrollY: 400, roomHeight: 310, roomTop: -260, viewportHeight: 640 }), 124);
+  assert.equal(catRoomScrollTarget({ currentScrollY: 400, roomHeight: 310, roomTop: 650, viewportHeight: 640 }), 1_034);
+});
+
 test("yarn, mouse, furniture, tricks, and butterfly have distinct finite sequences", () => {
   assert.deepEqual(
     CAT_INTERACTION_SEQUENCES.yarn.map(({ phase }) => phase),
@@ -110,7 +223,7 @@ test("yarn, mouse, furniture, tricks, and butterfly have distinct finite sequenc
     CAT_INTERACTION_SEQUENCES.mouse.map(({ phase }) => phase),
     ["mouse-stalk", "mouse-chase", "mouse-pounce"],
   );
-  assert.equal(CAT_INTERACTION_SEQUENCES.scratch.length, 4);
+  assert.equal(CAT_INTERACTION_SEQUENCES.scratch.length, 3);
   assert.deepEqual(
     CAT_INTERACTION_SEQUENCES.tree.map(({ phase }) => phase),
     ["tree-climb", "tree-perch"],

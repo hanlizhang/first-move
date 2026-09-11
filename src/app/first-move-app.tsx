@@ -57,22 +57,34 @@ import {
   stopSession,
 } from "@/lib/sessions";
 import { getTaskTrackedMs, getTodaySummary, getTodayTimeline } from "@/lib/summaries";
-import { CAT_ITEMS, STORE_CATEGORIES, isCatItemId, isCatItemUnlocked, type CatItemId } from "@/lib/cat-items";
+import { CAT_ITEMS, STORE_CATEGORIES, catItem, isCatItemId, isCatItemUnlocked, type CatItemId } from "@/lib/cat-items";
 import { inventoryQuantity, purchaseCatItem, selectFurniture, useFood as consumeCatFood } from "@/lib/cat-store";
-import { HAPPY_ROLL_DURATION_MS, createCatActionSequencer, messageForPose, previewPose, scheduleIdleBehavior, type CatInteraction, type CatPose, type IdleAction } from "@/lib/cat-behavior";
+import { createCatActionSequencer, messageForPose, scheduleIdleBehavior, type CatInteraction, type CatPose, type IdleAction } from "@/lib/cat-behavior";
 import {
   CAT_HOME_POINT,
   CAT_INTERACTION_CAPTIONS,
+  CAT_QA_PREVIEW_DAYS,
+  CAT_QA_PREVIEW_ITEM_IDS,
+  CAT_ROOM_LAYOUT,
   CAT_WAND_STEP,
+  catButterflyFollowSteps,
+  catFoodVisualFor,
+  catMouseChaseSteps,
+  catQaPreviewEnabled,
   catInteractionAvailability,
-  clampNormalizedRoomPoint,
+  catRoomScrollTarget,
+  catScratchingPostPlacement,
+  catYarnPlaySteps,
+  clampRoomPointToArea,
   facingTowardRoomPoint,
   normalizedRoomPoint,
+  projectCatQaPreview,
   roomPointDistance,
   shouldWandPounce,
   stepTowardRoomPoint,
   type CatFacing,
   type CatInteractionPhase,
+  type CatQaPreviewDay,
   type NormalizedRoomPoint,
 } from "@/lib/cat-interactions";
 import { CAT_MILESTONES } from "@/lib/cat-items";
@@ -1165,6 +1177,7 @@ function FloatingCompanion({ reaction, focusActive, onOpenStore }: { reaction?: 
 
 function CatRoom({ state, today, update }: { state: AppState; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
   const returnMessage = gentleReturnMessage(state.progress.lastActiveDate, today);
+  const qaPreviewAvailable = catQaPreviewEnabled(process.env.NODE_ENV === "development");
   const [pose, setPose] = useState<CatPose>("sitting");
   const [phase, setPhase] = useState<CatInteractionPhase>("sitting");
   const [blinking, setBlinking] = useState(false);
@@ -1173,16 +1186,36 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   const [idleReset, setIdleReset] = useState(0);
   const [wandActive, setWandActive] = useState(false);
   const [outdoor, setOutdoor] = useState(false);
-  const [previewOutdoor, setPreviewOutdoor] = useState(false);
+  const [qaPreviewActiveDay, setQaPreviewActiveDay] = useState<CatQaPreviewDay>();
+  const [qaPreviewOwnedItemIds, setQaPreviewOwnedItemIds] = useState<CatItemId[]>([]);
+  const [qaPreviewFurnitureId, setQaPreviewFurnitureId] = useState<CatItemId>();
   const [notice, setNotice] = useState(returnMessage ? `${returnMessage} ${CAT_INTERACTION_CAPTIONS.sitting}` : CAT_INTERACTION_CAPTIONS.sitting);
   const actionSequencer = useRef<ReturnType<typeof createCatActionSequencer> | undefined>(undefined);
-  const growthStory = catGrowthStory(state.progress.totalActiveDays);
-  const selectedFurnitureId = isCatItemId(state.inventory.selectedFurnitureId) ? state.inventory.selectedFurnitureId : undefined;
-  const ownedItemIds = state.inventory.items.filter((entry) => entry.quantity > 0).map((entry) => entry.itemId).filter(isCatItemId);
+  const catRoomViewRef = useRef<HTMLDivElement>(null);
+  const canonicalSelectedFurnitureId = isCatItemId(state.inventory.selectedFurnitureId) ? state.inventory.selectedFurnitureId : undefined;
+  const canonicalOwnedItemIds = state.inventory.items.filter((entry) => entry.quantity > 0).map((entry) => entry.itemId).filter(isCatItemId);
+  const qaProjection = projectCatQaPreview(
+    {
+      activeDays: state.progress.totalActiveDays,
+      ownedItemIds: canonicalOwnedItemIds,
+      selectedFurnitureId: canonicalSelectedFurnitureId,
+    },
+    {
+      activeDay: qaPreviewActiveDay,
+      ownedItemIds: qaPreviewOwnedItemIds,
+      selectedFurnitureId: qaPreviewFurnitureId,
+    },
+    qaPreviewAvailable,
+  );
+  const qaPreviewActive = qaProjection.active;
+  const activeDays = qaProjection.activeDays;
+  const selectedFurnitureId = qaProjection.selectedFurnitureId;
+  const ownedItemIds = qaProjection.ownedItemIds;
+  const growthStory = catGrowthStory(activeDays);
   const availability = catInteractionAvailability(ownedItemIds, selectedFurnitureId);
-  const bedSelected = selectedFurnitureId === "cat-bed" && inventoryQuantity(state, "cat-bed") > 0;
-  const scratchingPostOwned = inventoryQuantity(state, "scratching-post") > 0;
-  const outdoorVisible = outdoor || previewOutdoor;
+  const bedSelected = selectedFurnitureId === "cat-bed" && ownedItemIds.includes("cat-bed");
+  const scratchingPostOwned = ownedItemIds.includes("scratching-post");
+  const outdoorVisible = outdoor;
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -1260,7 +1293,6 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
     setWandActive(false);
     if (interaction !== "garden" && interaction !== "butterfly") {
       setOutdoor(false);
-      setPreviewOutdoor(false);
     }
     const sequencer = getActionSequencer();
     const started = sequencer.startInteraction(interaction, applyActionPose, (nextPhase) => {
@@ -1276,18 +1308,29 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
     return true;
   }
 
-  function showPreview(nextPose: CatPose) {
-    setWandActive(false);
-    getActionSequencer().cancel();
-    setBlinking(false);
-    setIdleReset((value) => value + 1);
-    const preview = previewPose(nextPose);
-    if (preview === "happy") getActionSequencer().startTemporary("happy", HAPPY_ROLL_DURATION_MS, applyActionPose);
-    else applyActionPose(preview);
-    if (preview === "walking") setWalkingLeft((value) => !value);
+  function beginVisualCommand(command: () => void) {
+    const roomElement = catRoomViewRef.current;
+    if (roomElement) {
+      const rect = roomElement.getBoundingClientRect();
+      const targetY = catRoomScrollTarget({
+        currentScrollY: window.scrollY,
+        padding: 144,
+        roomHeight: rect.height,
+        roomTop: rect.top,
+        viewportHeight: window.innerHeight,
+      });
+      if (targetY !== undefined) {
+        window.scrollTo({ top: targetY, behavior: reducedMotion ? "auto" : "smooth" });
+      }
+    }
+    command();
   }
 
   function buy(itemId: CatItemId) {
+    if (qaPreviewActive) {
+      setNotice("QA preview is transient. Use the ownership controls to preview this item.");
+      return;
+    }
     update((current) => {
       const result = purchaseCatItem(current, itemId);
       const item = CAT_ITEMS.find((candidate) => candidate.id === itemId)!;
@@ -1297,25 +1340,39 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   }
 
   function feed(itemId: CatItemId) {
-    if (inventoryQuantity(state, itemId) < 1) {
+    const availableQuantity = qaPreviewActive && qaPreviewOwnedItemIds.includes(itemId)
+      ? Math.max(1, inventoryQuantity(state, itemId))
+      : inventoryQuantity(state, itemId);
+    if (availableQuantity < 1) {
       setNotice("There is none of that food in the cupboard yet.");
       return;
     }
-    const item = CAT_ITEMS.find((candidate) => candidate.id === itemId);
+    const foodVisual = catFoodVisualFor(itemId);
+    if (!foodVisual) return;
+    if (qaPreviewActive) {
+      showInteraction(foodVisual);
+      return;
+    }
     update((current) => consumeCatFood(current, itemId));
-    showInteraction(itemId === "kitten-milk" ? "milk" : item?.category === "Treats" ? "treat" : "food");
+    showInteraction(foodVisual);
   }
 
-  const ownedFood = CAT_ITEMS.filter((item) => item.kind === "food" && inventoryQuantity(state, item.id) > 0);
+  const ownedFood = CAT_ITEMS.filter((item) => item.kind === "food" && ownedItemIds.includes(item.id));
 
   function chooseFurniture(itemId: CatItemId) {
     getActionSequencer().cancel();
     setWandActive(false);
     setOutdoor(false);
-    setPreviewOutdoor(false);
     setPose("sitting");
     setPhase("sitting");
     setBlinking(false);
+    if (qaPreviewActive) {
+      setQaPreviewFurnitureId(itemId);
+      const item = CAT_ITEMS.find((candidate) => candidate.id === itemId);
+      setNotice(`${item?.name ?? "Furniture"} is temporarily shown for QA.`);
+      setIdleReset((value) => value + 1);
+      return;
+    }
     update((current) => selectFurniture(current, itemId));
     const item = CAT_ITEMS.find((candidate) => candidate.id === itemId);
     setNotice(`${item?.name ?? "Furniture"} is ready in the room.`);
@@ -1325,7 +1382,6 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
   function startWand() {
     getActionSequencer().cancel();
     setOutdoor(false);
-    setPreviewOutdoor(false);
     setBlinking(false);
     setPhase("wand-follow");
     setPose("wand");
@@ -1357,7 +1413,6 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
 
   function returnIndoors() {
     setOutdoor(false);
-    setPreviewOutdoor(false);
     setWandActive(false);
     getActionSequencer().cancel();
     setPose("sitting");
@@ -1367,16 +1422,42 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
     setIdleReset((value) => value + 1);
   }
 
+  function toggleQaPreviewOwnership(itemId: CatItemId) {
+    if (qaPreviewOwnedItemIds.includes(itemId) && qaPreviewFurnitureId === itemId) {
+      setQaPreviewFurnitureId(undefined);
+    }
+    setQaPreviewOwnedItemIds((current) => current.includes(itemId)
+      ? current.filter((candidate) => candidate !== itemId)
+      : [...current, itemId]);
+  }
+
+  function resetQaPreview() {
+    setQaPreviewActiveDay(undefined);
+    setQaPreviewOwnedItemIds([]);
+    setQaPreviewFurnitureId(undefined);
+    returnIndoors();
+  }
+
   return (
     <section id="cat" className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-4 shadow-sm sm:p-6" aria-labelledby="cat-heading">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-700">Cat Store</p><h2 id="cat-heading" className="mt-2 text-3xl font-bold tracking-tight">A little companion for the journey</h2></div>
         <div className="rounded-full bg-white px-4 py-2 text-sm font-bold">✦ {formatPoints(state.progress.points)} points</div>
       </div>
+      {qaPreviewAvailable && (
+        <CatQaPreviewPanel
+          activeDay={qaPreviewActiveDay}
+          active={qaPreviewActive}
+          onActiveDayChange={setQaPreviewActiveDay}
+          onReset={resetQaPreview}
+          onToggleOwnership={toggleQaPreviewOwnership}
+          ownedItemIds={qaPreviewOwnedItemIds}
+        />
+      )}
       <dl className="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-white p-4 text-sm sm:grid-cols-4">
         <div><dt className="text-stone-500">Today</dt><dd className="font-semibold">{formatRoomDate(today)}</dd></div>
         <div><dt className="text-stone-500">Journey day</dt><dd className="font-semibold">{state.progress.journeyDay || 1}</dd></div>
-        <div><dt className="text-stone-500">Active days</dt><dd className="font-semibold">{state.progress.totalActiveDays}</dd></div>
+        <div><dt className="text-stone-500">Active days</dt><dd className="font-semibold">{activeDays}{qaPreviewActive ? " · Preview" : ""}</dd></div>
         <div><dt className="text-stone-500">Gentle streak</dt><dd className="font-semibold">{state.progress.gentleStreak} day{state.progress.gentleStreak === 1 ? "" : "s"}</dd></div>
       </dl>
       <div className={`relative mt-5 overflow-hidden rounded-3xl border border-amber-200 p-4 text-center sm:p-5 ${outdoorVisible ? "cat-garden" : "bg-gradient-to-b from-sky-100 via-amber-50 to-orange-100"}`}>
@@ -1384,7 +1465,7 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
           <p className="text-sm font-bold text-fuchsia-800">{growthStory.title}</p>
           <p className="mx-auto mt-1 max-w-lg text-xs text-stone-600">{growthStory.description}</p>
           <p className="mx-auto mt-1 max-w-lg text-xs italic text-stone-500">Active days are a symbolic journey, not a literal kitten age.</p>
-          <CatPlayStage
+          <div ref={catRoomViewRef}><CatPlayStage
             blinking={blinking}
             key={wandActive ? "wand-active" : "wand-idle"}
             onEndWand={stopWand}
@@ -1399,31 +1480,102 @@ function CatRoom({ state, today, update }: { state: AppState; today: string; upd
             selectedFurnitureId={selectedFurnitureId}
             walkingLeft={walkingLeft}
             wandActive={wandActive}
-          />
+          /></div>
           <p id="cat-room-caption" className="relative z-10 mx-auto max-w-md rounded-xl bg-white/85 px-3 py-2 text-sm text-stone-700" aria-live="polite">{notice}</p>
           {wandActive && <p id="wand-instructions" className="relative z-10 mt-2 text-xs font-semibold text-fuchsia-900">Move the pointer in the room or use the arrow keys. Press Escape to finish.</p>}
           <div className="relative z-10 mt-4 flex flex-wrap justify-center gap-2">
-            {availability.yarn && <MiniButton onClick={() => showInteraction("yarn")}>Play with yarn</MiniButton>}
-            {availability.mouse && <MiniButton onClick={() => showInteraction("mouse")}>Chase toy mouse</MiniButton>}
-            {availability.wand && <MiniButton onClick={wandActive ? stopWand : startWand}>{wandActive ? "End wand play" : "Play with teaser wand"}</MiniButton>}
-            {scratchingPostOwned && <MiniButton onClick={() => showInteraction("scratch")}>Scratch</MiniButton>}
-            {bedSelected && <MiniButton onClick={() => showInteraction("bed-nap")}>Nap in bed</MiniButton>}
-            {availability.perch && <MiniButton onClick={() => showInteraction("perch")}>Watch from perch</MiniButton>}
-            {availability.tree && <MiniButton onClick={() => showInteraction("tree")}>Climb cat tree</MiniButton>}
-            {availability.highFive && <MiniButton onClick={() => showInteraction("high-five")}>High five</MiniButton>}
-            {availability.pawShake && <MiniButton onClick={() => showInteraction("paw-shake")}>Paw shake</MiniButton>}
-            {availability.garden && !outdoor && <MiniButton onClick={visitGarden}>Visit garden</MiniButton>}
-            {availability.garden && outdoor && <MiniButton onClick={returnIndoors}>Return to room</MiniButton>}
-            {availability.butterfly && outdoor && <MiniButton onClick={() => showInteraction("butterfly")}>Follow butterfly</MiniButton>}
+            {availability.yarn && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("yarn"))}>Play with yarn</MiniButton>}
+            {availability.mouse && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("mouse"))}>Chase toy mouse</MiniButton>}
+            {availability.wand && <MiniButton onClick={wandActive ? stopWand : () => beginVisualCommand(startWand)}>{wandActive ? "End wand play" : "Play with teaser wand"}</MiniButton>}
+            {scratchingPostOwned && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("scratch"))}>Scratch</MiniButton>}
+            {bedSelected && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("bed-nap"))}>Nap in bed</MiniButton>}
+            {availability.perch && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("perch"))}>Watch from perch</MiniButton>}
+            {availability.tree && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("tree"))}>Climb cat tree</MiniButton>}
+            {availability.highFive && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("high-five"))}>High five</MiniButton>}
+            {availability.pawShake && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("paw-shake"))}>Paw shake</MiniButton>}
+            {availability.garden && !outdoor && <MiniButton onClick={() => beginVisualCommand(visitGarden)}>Visit garden</MiniButton>}
+            {availability.garden && outdoor && <MiniButton onClick={() => beginVisualCommand(returnIndoors)}>Return to room</MiniButton>}
+            {availability.butterfly && outdoor && <MiniButton onClick={() => beginVisualCommand(() => showInteraction("butterfly"))}>Follow butterfly</MiniButton>}
           </div>
-          {ownedFood.length > 0 && <div className="mt-4"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Use food</p><div className="mt-2 flex flex-wrap justify-center gap-2">{ownedFood.map((item) => <button key={item.id} type="button" className="rounded-lg bg-white px-3 py-2 text-xs font-semibold shadow-sm focus-visible:outline-2 focus-visible:outline-fuchsia-700" onClick={() => feed(item.id)}>{item.name} × {inventoryQuantity(state, item.id)}</button>)}</div></div>}
-          {process.env.NODE_ENV === "development" && <DevelopmentPosePreview onPreview={showPreview} onInteraction={showInteraction} outdoor={previewOutdoor} onOutdoor={() => setPreviewOutdoor((value) => !value)} />}
+          {ownedFood.length > 0 && <div className="mt-4"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Use food</p><div className="mt-2 flex flex-wrap justify-center gap-2">{ownedFood.map((item) => <button key={item.id} type="button" className="rounded-lg bg-white px-3 py-2 text-xs font-semibold shadow-sm focus-visible:outline-2 focus-visible:outline-fuchsia-700" onClick={() => beginVisualCommand(() => feed(item.id))}>{item.name} × {qaPreviewActive && qaPreviewOwnedItemIds.includes(item.id) ? Math.max(1, inventoryQuantity(state, item.id)) : inventoryQuantity(state, item.id)}</button>)}</div></div>}
       </div>
-      <div className="mt-6"><h3 className="text-xl font-bold">Reward shelf</h3><p className="mt-1 text-sm text-stone-600">A few small things, unlocked by active days. Food can be used repeatedly; toys, furniture, and tricks stay yours.</p><div className="mt-4 grid gap-4 md:grid-cols-2">{STORE_CATEGORIES.map((category) => <section key={category} className="rounded-2xl border border-fuchsia-200 bg-white p-4" aria-labelledby={`store-${category}`}><h4 id={`store-${category}`} className="text-sm font-bold uppercase tracking-wide text-fuchsia-800">{category}</h4><ul className="mt-2 space-y-2">{CAT_ITEMS.filter((item) => item.category === category).map((item) => { const quantity = inventoryQuantity(state, item.id); const owned = item.durable && quantity > 0; const selected = item.kind === "furniture" && selectedFurnitureId === item.id; const unlocked = isCatItemUnlocked(item, state.progress.totalActiveDays); const affordable = state.progress.points >= item.price; return <li key={item.id} className="rounded-xl bg-fuchsia-50 p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.name}</p><p className="mt-1 text-xs text-stone-500">{owned || unlocked ? item.description : `Unlocks at ${item.unlockActiveDays} active days`}</p></div><span className="text-sm font-bold">{formatPoints(item.price)}</span></div><button type="button" disabled={owned || !unlocked || !affordable} className="mt-2 rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:cursor-not-allowed disabled:bg-stone-300" onClick={() => buy(item.id)}>{owned ? "Owned" : !unlocked ? `Locked · day ${item.unlockActiveDays}` : !affordable ? "Need more points" : "Buy"}</button>{item.kind === "furniture" && owned && <button type="button" disabled={selected} className="ml-2 mt-2 rounded-lg border border-fuchsia-300 bg-white px-3 py-1.5 text-xs font-bold text-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:border-emerald-300 disabled:bg-emerald-50 disabled:text-emerald-800" onClick={() => chooseFurniture(item.id)}>{selected ? "In room" : "Place in room"}</button>}{!item.durable && quantity > 0 && <span className="ml-2 text-xs text-stone-500">Owned: {quantity}</span>}</li>; })}</ul></section>)}</div></div>
-      <MilestoneCards totalActiveDays={state.progress.totalActiveDays} completed={state.progress.grantedMilestones} />
+      <div className="mt-6">
+        <h3 className="text-xl font-bold">Reward shelf</h3>
+        <p className="mt-1 text-sm text-stone-600">A few small things, unlocked by active days. Food can be used repeatedly; toys, furniture, and tricks stay yours.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {STORE_CATEGORIES.map((category) => (
+            <section key={category} className="rounded-2xl border border-fuchsia-200 bg-white p-4" aria-labelledby={`store-${category}`}>
+              <h4 id={`store-${category}`} className="text-sm font-bold uppercase tracking-wide text-fuchsia-800">{category}</h4>
+              <ul className="mt-2 space-y-2">
+                {CAT_ITEMS.filter((item) => item.category === category).map((item) => {
+                  const canonicalQuantity = inventoryQuantity(state, item.id);
+                  const previewOwned = qaPreviewOwnedItemIds.includes(item.id);
+                  const quantity = qaPreviewActive && previewOwned ? Math.max(1, canonicalQuantity) : canonicalQuantity;
+                  const owned = item.durable && quantity > 0;
+                  const selected = item.kind === "furniture" && selectedFurnitureId === item.id;
+                  const unlocked = isCatItemUnlocked(item, activeDays);
+                  const affordable = state.progress.points >= item.price;
+                  const previewButtonLabel = quantity > 0
+                    ? "Preview owned"
+                    : !unlocked
+                      ? `Preview locked · day ${item.unlockActiveDays}`
+                      : "Preview eligible";
+                  return (
+                    <li key={item.id} className="rounded-xl bg-fuchsia-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">{item.name}</p>
+                          <p className="mt-1 text-xs text-stone-500">{owned || unlocked ? item.description : `Unlocks at ${item.unlockActiveDays} active days`}</p>
+                        </div>
+                        <span className="text-sm font-bold">{formatPoints(item.price)}</span>
+                      </div>
+                      <button type="button" disabled={qaPreviewActive || owned || !unlocked || !affordable} className="mt-2 rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:cursor-not-allowed disabled:bg-stone-300" onClick={() => buy(item.id)}>
+                        {qaPreviewActive ? previewButtonLabel : owned ? "Owned" : !unlocked ? `Locked · day ${item.unlockActiveDays}` : !affordable ? "Need more points" : "Buy"}
+                      </button>
+                      {item.kind === "furniture" && owned && (
+                        <button type="button" disabled={selected} className="ml-2 mt-2 rounded-lg border border-fuchsia-300 bg-white px-3 py-1.5 text-xs font-bold text-fuchsia-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-700 disabled:border-emerald-300 disabled:bg-emerald-50 disabled:text-emerald-800" onClick={() => chooseFurniture(item.id)}>
+                          {selected ? "In room" : "Place in room"}
+                        </button>
+                      )}
+                      {!item.durable && quantity > 0 && <span className="ml-2 text-xs text-stone-500">Owned: {quantity}</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </div>
+      <MilestoneCards totalActiveDays={activeDays} completed={state.progress.grantedMilestones} />
       <p className="mt-5 text-sm text-stone-600">Active days never expire. Missing a day never removes points, items, or companionship.</p>
     </section>
   );
+}
+
+const WEB_MOUSE_STEPS = catMouseChaseSteps(CAT_ROOM_LAYOUT);
+const WEB_YARN_STEPS = catYarnPlaySteps(CAT_ROOM_LAYOUT);
+const WEB_SCRATCH_PLACEMENT = catScratchingPostPlacement(CAT_ROOM_LAYOUT);
+const WEB_BUTTERFLY_STEPS = catButterflyFollowSteps(CAT_ROOM_LAYOUT);
+
+function catRoomPlacement(phase: CatInteractionPhase): { cat: NormalizedRoomPoint; target?: NormalizedRoomPoint; facing?: CatFacing } {
+  if (phase === "yarn-anticipate") return WEB_YARN_STEPS[0]!;
+  if (phase === "yarn-action") return WEB_YARN_STEPS[1]!;
+  if (phase === "yarn-settle") return WEB_YARN_STEPS[2]!;
+  if (phase === "mouse-stalk") return WEB_MOUSE_STEPS[0]!;
+  if (phase === "mouse-chase") return WEB_MOUSE_STEPS[1]!;
+  if (phase === "mouse-pounce") return WEB_MOUSE_STEPS[2]!;
+  if (phase === "scratch") return WEB_SCRATCH_PLACEMENT;
+  if (phase === "bed-nap") return { cat: CAT_ROOM_LAYOUT.bedAnchor };
+  if (phase === "perch") return { cat: CAT_ROOM_LAYOUT.windowPerchAnchor, facing: "left" };
+  if (phase === "tree-climb") return { cat: CAT_ROOM_LAYOUT.catTreeMidAnchor, facing: "left" };
+  if (phase === "tree-perch") return { cat: CAT_ROOM_LAYOUT.catTreeTopAnchor, facing: "left" };
+  if (phase === "butterfly-spot") return WEB_BUTTERFLY_STEPS[0]!;
+  if (phase === "butterfly-chase") return WEB_BUTTERFLY_STEPS[1]!;
+  return { cat: CAT_ROOM_LAYOUT.catHome };
+}
+
+function roomAnchorStyle(point: NormalizedRoomPoint): React.CSSProperties {
+  return { left: `${point.x * 100}%`, top: `${point.y * 100}%` };
 }
 
 function CatPlayStage({
@@ -1456,7 +1608,7 @@ function CatPlayStage({
   wandActive: boolean;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const [wandTarget, setWandTarget] = useState<NormalizedRoomPoint>({ x: 0.78, y: 0.24 });
+  const [wandTarget, setWandTarget] = useState<NormalizedRoomPoint>({ ...CAT_ROOM_LAYOUT.wandStart });
   const [catPoint, setCatPoint] = useState<NormalizedRoomPoint>({ ...CAT_HOME_POINT });
   const [facing, setFacing] = useState<CatFacing>("right");
   const [wandPouncing, setWandPouncing] = useState(false);
@@ -1529,7 +1681,7 @@ function CatPlayStage({
   }, [reducedMotion, wandActive]);
 
   function updateWandTarget(nextTarget: NormalizedRoomPoint) {
-    const clamped = clampNormalizedRoomPoint(nextTarget);
+    const clamped = clampRoomPointToArea(nextTarget, CAT_ROOM_LAYOUT.wandPlayArea);
     targetRef.current = clamped;
     setWandTarget(clamped);
     setFacing((current) => facingTowardRoomPoint(catPointRef.current, clamped, current));
@@ -1565,10 +1717,17 @@ function CatPlayStage({
   }
 
   const displayedPose = wandActive ? (wandPouncing ? "wand-pounce" : "wand") : pose;
-  const catStyle = wandActive
-    ? { left: `${catPoint.x * 100}%`, top: `${catPoint.y * 100}%` }
-    : undefined;
+  const placement = catRoomPlacement(phase);
+  const displayedCatPoint = wandActive ? catPoint : placement.cat;
+  const displayedFacing = wandActive
+    ? facing
+    : placement.facing ?? (placement.target
+      ? facingTowardRoomPoint(placement.cat, placement.target, facing)
+      : facing);
+  const catStyle = roomAnchorStyle(displayedCatPoint);
   const butterflyActive = outdoor && (phase === "butterfly-spot" || phase === "butterfly-chase");
+  const yarnPoint = phase.startsWith("yarn-") && placement.target ? placement.target : WEB_YARN_STEPS[2]!.target;
+  const mousePoint = phase.startsWith("mouse-") && placement.target ? placement.target : WEB_MOUSE_STEPS[0]!.target;
 
   return (
     <div
@@ -1581,70 +1740,135 @@ function CatPlayStage({
       onPointerDown={handlePointerMove}
       onPointerMove={handlePointerMove}
     >
-      <div className="cat-room-floor" aria-hidden="true" />
+      <div className="cat-room-floor" style={{ top: `${CAT_ROOM_LAYOUT.floorY * 100}%` }} aria-hidden="true" />
       {!outdoor && <>
-        {ownsYarn && <YarnBall active={phase === "yarn-anticipate" || phase === "yarn-action" || phase === "yarn-settle"} />}
-        {ownsMouse && <ToyMouse active={phase === "mouse-stalk" || phase === "mouse-chase" || phase === "mouse-pounce"} />}
-        {ownsScratchingPost && <ScratchingPost active={phase === "scratch"} />}
-        {selectedFurnitureId === "cat-bed" && <CatBed active={phase === "bed-nap"} />}
-        {selectedFurnitureId === "window-cushion" && <WindowPerch active={phase === "perch"} />}
-        {selectedFurnitureId === "cat-tree" && <CatTree active={phase === "tree-climb" || phase === "tree-perch"} />}
+        {ownsYarn && phase.startsWith("yarn-") && <YarnBall active point={yarnPoint} />}
+        {ownsMouse && phase.startsWith("mouse-") && <ToyMouse active point={mousePoint} />}
+        {ownsScratchingPost && (selectedFurnitureId === "scratching-post" || phase === "scratch") && <ScratchingPost active={phase === "scratch"} point={CAT_ROOM_LAYOUT.scratchingPostAnchor} />}
+        {selectedFurnitureId === "cat-bed" && <CatBed active={phase === "bed-nap"} point={CAT_ROOM_LAYOUT.bedAnchor} />}
+        {selectedFurnitureId === "window-cushion" && <WindowPerch active={phase === "perch"} point={CAT_ROOM_LAYOUT.windowPerchAnchor} />}
+        {selectedFurnitureId === "cat-tree" && <CatTree active={phase === "tree-climb" || phase === "tree-perch"} point={CAT_ROOM_LAYOUT.catTreeFloorAnchor} />}
       </>}
-      {butterflyActive && <ButterflyTarget chasing={phase === "butterfly-chase"} />}
+      {butterflyActive && placement.target && <ButterflyTarget chasing={phase === "butterfly-chase"} point={placement.target} />}
       {wandActive && <>
         <svg className="cat-wand-line pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <line x1="100" y1="0" x2={wandTarget.x * 100} y2={wandTarget.y * 100} />
+          <line x1={CAT_ROOM_LAYOUT.wandHandleAnchor.x * 100} y1={CAT_ROOM_LAYOUT.wandHandleAnchor.y * 100} x2={wandTarget.x * 100} y2={wandTarget.y * 100} />
         </svg>
         <div className="cat-wand-target pointer-events-none absolute" style={{ left: `${wandTarget.x * 100}%`, top: `${wandTarget.y * 100}%` }} aria-hidden="true"><span /></div>
       </>}
       <div className={`cat-stage-kitten cat-stage-kitten-${displayedPose} ${wandActive ? "cat-stage-kitten-wand" : ""}`} style={catStyle}>
-        <PixelKitten pose={displayedPose} walkingLeft={walkingLeft} blinking={blinking} facing={facing} />
+        <PixelKitten pose={displayedPose} walkingLeft={walkingLeft} blinking={blinking} facing={displayedFacing} showFloor={false} />
       </div>
     </div>
   );
 }
 
-function YarnBall({ active }: { active: boolean }) {
-  return <div className={`cat-room-item cat-yarn-ball ${active ? "is-active" : ""}`} aria-label="Yarn ball" role="img"><span aria-hidden="true" /></div>;
+function YarnBall({ active, point }: { active: boolean; point: NormalizedRoomPoint }) {
+  return <div className={`cat-room-item cat-yarn-ball ${active ? "is-active" : ""}`} style={roomAnchorStyle(point)} aria-label="Yarn ball" role="img"><span aria-hidden="true" /></div>;
 }
 
-function ToyMouse({ active }: { active: boolean }) {
-  return <div className={`cat-room-item cat-toy-mouse ${active ? "is-active" : ""}`} aria-label="Toy mouse" role="img"><span aria-hidden="true" /></div>;
+function ToyMouse({ active, point }: { active: boolean; point: NormalizedRoomPoint }) {
+  return <div className={`cat-room-item cat-toy-mouse ${active ? "is-active" : ""}`} style={roomAnchorStyle(point)} aria-label="Toy mouse" role="img"><span aria-hidden="true" /></div>;
 }
 
-function ScratchingPost({ active }: { active: boolean }) {
-  return <div className={`cat-room-item cat-scratching-post ${active ? "is-active" : ""}`} aria-label="Scratching post" role="img"><span aria-hidden="true" /></div>;
+function ScratchingPost({ active, point }: { active: boolean; point: NormalizedRoomPoint }) {
+  return <div className={`cat-room-item cat-scratching-post ${active ? "is-active" : ""}`} style={roomAnchorStyle(point)} aria-label="Scratching post" role="img"><span aria-hidden="true" /></div>;
 }
 
-function CatBed({ active }: { active: boolean }) {
-  return <div className={`cat-room-item cat-bed ${active ? "is-active" : ""}`} aria-label="Cat bed" role="img"><span aria-hidden="true" /></div>;
+function CatBed({ active, point }: { active: boolean; point: NormalizedRoomPoint }) {
+  return <div className={`cat-room-item cat-bed ${active ? "is-active" : ""}`} style={roomAnchorStyle(point)} aria-label="Cat bed" role="img"><span aria-hidden="true" /></div>;
 }
 
-function WindowPerch({ active }: { active: boolean }) {
-  return <div className={`cat-room-item cat-window-perch ${active ? "is-active" : ""}`} aria-label="Window perch" role="img"><span aria-hidden="true" /></div>;
+function WindowPerch({ active, point }: { active: boolean; point: NormalizedRoomPoint }) {
+  return <div className={`cat-room-item cat-window-perch ${active ? "is-active" : ""}`} style={roomAnchorStyle(point)} aria-label="Window perch" role="img"><span aria-hidden="true" /></div>;
 }
 
-function CatTree({ active }: { active: boolean }) {
-  return <div className={`cat-room-item cat-tree ${active ? "is-active" : ""}`} aria-label="Cat tree" role="img"><span aria-hidden="true" /><i aria-hidden="true" /></div>;
+function CatTree({ active, point }: { active: boolean; point: NormalizedRoomPoint }) {
+  return <div className={`cat-room-item cat-tree ${active ? "is-active" : ""}`} style={roomAnchorStyle(point)} aria-label="Cat tree" role="img"><span aria-hidden="true" /><i aria-hidden="true" /></div>;
 }
 
-function ButterflyTarget({ chasing }: { chasing: boolean }) {
-  return <div className={`cat-butterfly-target ${chasing ? "is-chasing" : ""}`} role="img" aria-label="Butterfly"><span aria-hidden="true" /><i aria-hidden="true" /></div>;
+function ButterflyTarget({ chasing, point }: { chasing: boolean; point: NormalizedRoomPoint }) {
+  return <div className={`cat-butterfly-target ${chasing ? "is-chasing" : ""}`} style={roomAnchorStyle(point)} role="img" aria-label="Butterfly"><span aria-hidden="true" /><i aria-hidden="true" /></div>;
 }
 
-function DevelopmentPosePreview({ onPreview, onInteraction, outdoor, onOutdoor }: { onPreview: (pose: CatPose) => void; onInteraction: (interaction: CatInteraction) => void; outdoor: boolean; onOutdoor: () => void }) {
-  const previews: Array<[string, CatInteraction]> = [["Milk", "milk"], ["Kibble", "food"], ["Treat", "treat"], ["Yarn", "yarn"], ["Wand", "wand"], ["High-five", "high-five"], ["Paw shake", "paw-shake"], ["Butterfly", "butterfly"]];
-  return <div className="relative z-10 mx-auto mt-4 max-w-2xl rounded-xl border border-dashed border-stone-400 bg-white/80 p-3"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Development interaction preview</p><div className="mt-2 flex flex-wrap justify-center gap-1.5">{previews.map(([label, interaction]) => <MiniButton key={interaction} onClick={() => onInteraction(interaction)}>{label}</MiniButton>)}<MiniButton onClick={() => onPreview("happy")}>Happy roll</MiniButton><MiniButton onClick={onOutdoor}>{outdoor ? "Indoor scene" : "Garden milestone"}</MiniButton><MiniButton onClick={() => onPreview("sitting")}>Reset</MiniButton></div></div>;
+function CatQaPreviewPanel({
+  active,
+  activeDay,
+  onActiveDayChange,
+  onReset,
+  onToggleOwnership,
+  ownedItemIds,
+}: {
+  active: boolean;
+  activeDay?: CatQaPreviewDay;
+  onActiveDayChange: (day?: CatQaPreviewDay) => void;
+  onReset: () => void;
+  onToggleOwnership: (itemId: CatItemId) => void;
+  ownedItemIds: readonly CatItemId[];
+}) {
+  const previewSummary = [
+    activeDay === undefined ? "Real Active Day" : `Day ${activeDay}`,
+    ...ownedItemIds.map((itemId) => catItem(itemId)?.name ?? itemId),
+  ].join(" · ");
+
+  return (
+    <details className="mt-4 rounded-xl border border-dashed border-violet-500 bg-violet-50 p-3" aria-label="Cat QA development preview">
+      <summary className="cursor-pointer text-xs font-bold uppercase tracking-[0.16em] text-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700">
+        Cat QA · DEV ONLY
+      </summary>
+      <p className="mt-2 text-xs font-semibold text-violet-900">Preview: {previewSummary}</p>
+      <p className="mt-1 max-w-2xl text-xs text-stone-600">Preview only. Does not change your real account, points, inventory, or cloud data.</p>
+      <p className="mt-1 max-w-2xl text-xs text-stone-600">Preview Active Day controls store eligibility. Preview ownership controls interaction availability.</p>
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-2">
+        <label className="block text-xs font-bold text-stone-700">
+          Preview Active Day
+          <select
+            className="ml-2 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700"
+            id="cat-qa-active-day"
+            name="cat-qa-active-day"
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              onActiveDayChange(CAT_QA_PREVIEW_DAYS.find((day) => day === value));
+            }}
+            value={activeDay ?? ""}
+          >
+            <option value="">Use real Active Day</option>
+            {CAT_QA_PREVIEW_DAYS.map((day) => <option key={day} value={day}>Day {day}</option>)}
+          </select>
+        </label>
+        <button type="button" className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-bold text-violet-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 disabled:opacity-50" disabled={!active} onClick={onReset}>Reset Preview</button>
+      </div>
+      <fieldset className="mt-3">
+        <legend className="text-xs font-bold text-stone-700">Preview ownership</legend>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {CAT_QA_PREVIEW_ITEM_IDS.map((itemId) => {
+            const selected = ownedItemIds.includes(itemId);
+            return (
+              <button
+                aria-pressed={selected}
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 ${selected ? "border-violet-700 bg-violet-700 text-white" : "border-violet-300 bg-white text-violet-900"}`}
+                key={itemId}
+                onClick={() => onToggleOwnership(itemId)}
+                type="button"
+              >
+                {catItem(itemId)?.name ?? itemId}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+    </details>
+  );
 }
 
-function PixelKitten({ pose, walkingLeft, blinking, facing = "right", compact = false }: { pose: CatPose; walkingLeft: boolean; blinking: boolean; facing?: CatFacing; compact?: boolean }) {
+function PixelKitten({ pose, walkingLeft, blinking, facing = "right", compact = false, showFloor = true }: { pose: CatPose; walkingLeft: boolean; blinking: boolean; facing?: CatFacing; compact?: boolean; showFloor?: boolean }) {
   const facingLeft = (pose === "walking" && walkingLeft) || facing === "left";
   return (
     <div className={`pixel-kitten pixel-kitten-${pose} ${compact ? "pixel-kitten-compact" : ""} relative mx-auto my-2`} role="img" aria-label={`Pixel-art kitten ${pose}`}>
       <svg className="kitten-sprite h-auto w-full" viewBox="0 0 160 110" shapeRendering="crispEdges" aria-hidden="true">
-        <rect x="8" y="94" width="144" height="4" fill="#b08968"/><rect x="18" y="98" width="124" height="3" fill="#ddb892"/>
+        {showFloor && <><rect x="8" y="94" width="144" height="4" fill="#b08968"/><rect x="18" y="98" width="124" height="3" fill="#ddb892"/></>}
         <g className={pose === "walking" && walkingLeft ? "kitten-walker kitten-walker-left" : "kitten-walker"}><g className={facingLeft ? "kitten-facing-left" : undefined}>
-          {pose === "sleeping" || pose === "bed-nap" ? <SleepingKitten /> : pose === "walking" || pose === "mouse-chase" || pose === "tree-climb" ? <WalkingKitten /> : pose === "drinking" ? <DrinkingKitten /> : pose === "eating" ? <EatingKitten /> : pose === "licking" ? <LickingKitten /> : pose === "yarn-anticipate" ? <AlertKitten /> : pose === "yarn" ? <PlayingKitten /> : pose === "yarn-settle" ? <SettledKitten /> : pose === "mouse-stalk" ? <StalkingKitten /> : pose === "mouse-pounce" || pose === "wand-pounce" ? <PouncingKitten /> : pose === "wand" ? <WandKitten /> : pose === "scratching" ? <ScratchingKitten /> : pose === "perch" || pose === "tree-perch" ? <PerchedKitten /> : pose === "high-five" ? <HighFiveKitten /> : pose === "paw-shake" ? <PawShakeKitten /> : pose === "butterfly-spot" ? <AlertKitten /> : pose === "butterfly" ? <ButterflyKitten /> : pose === "happy" ? <HappyRollKitten /> : pose === "proud" ? <ProudKitten /> : pose === "milestone" ? <MilestoneKitten /> : <SittingKitten blinking={blinking} />}
+          {pose === "sleeping" || pose === "bed-nap" ? <SleepingKitten /> : pose === "walking" || pose === "mouse-chase" || pose === "tree-climb" ? <WalkingKitten /> : pose === "drinking" ? <DrinkingKitten /> : pose === "wet-food" ? <WetFoodKitten /> : pose === "eating" ? <EatingKitten /> : pose === "licking" ? <LickingKitten /> : pose === "freeze-dried-treat" ? <FreezeDriedTreatKitten /> : pose === "yarn-anticipate" ? <AlertKitten /> : pose === "yarn" ? <PlayingKitten /> : pose === "yarn-settle" ? <SettledKitten /> : pose === "mouse-stalk" ? <StalkingKitten /> : pose === "mouse-pounce" || pose === "wand-pounce" ? <PouncingKitten /> : pose === "wand" ? <WandKitten /> : pose === "scratching" ? <ScratchingKitten /> : pose === "perch" || pose === "tree-perch" ? <PerchedKitten /> : pose === "high-five" ? <HighFiveKitten /> : pose === "paw-shake" ? <PawShakeKitten /> : pose === "butterfly-spot" ? <AlertKitten /> : pose === "butterfly" ? <ButterflyKitten /> : pose === "happy" ? <HappyRollKitten /> : pose === "proud" ? <ProudKitten /> : pose === "milestone" ? <MilestoneKitten /> : <SittingKitten blinking={blinking} />}
         </g></g>
       </svg>
     </div>
@@ -1685,7 +1909,11 @@ function SleepingKitten() {
 }
 
 function DrinkingKitten() {
-  return <g><rect x="121" y="88" width="27" height="6" fill="#8aa4a8"/><rect x="125" y="86" width="19" height="3" fill="#f8fafc"/><rect x="112" y="59" width="8" height="26" fill="#f4f1de"/><rect x="114" y="62" width="4" height="7" fill="#9ad1d4"/><CurvedTail x={42} y={75}/><rect x="52" y="62" width="49" height="24" fill={fur}/><rect x="59" y="68" width="34" height="15" fill={furLight}/><CatFace x={99} y={49}/><rect x="57" y="82" width="10" height="12" fill={furDark}/><rect x="72" y="84" width="10" height="10" fill={fur}/><rect x="91" y="84" width="10" height="10" fill={furDark}/></g>;
+  return <g><rect x="120" y="88" width="30" height="6" rx="3" fill="#8aa4a8"/><rect x="124" y="86" width="22" height="4" rx="2" fill="#fffdf2"/><rect x="116" y="78" width="5" height="4" fill="#e8a4a4"/><CurvedTail x={42} y={75}/><rect x="52" y="62" width="49" height="24" fill={fur}/><rect x="59" y="68" width="34" height="15" fill={furLight}/><CatFace x={99} y={51}/><rect x="57" y="82" width="10" height="12" fill={furDark}/><rect x="72" y="84" width="10" height="10" fill={fur}/><rect x="91" y="84" width="10" height="10" fill={furDark}/></g>;
+}
+
+function WetFoodKitten() {
+  return <g><rect x="119" y="86" width="31" height="8" rx="3" fill="#52796f"/><rect x="124" y="82" width="21" height="6" rx="3" fill="#b96f5b"/><rect x="130" y="80" width="9" height="4" fill="#cf8a72"/><rect x="116" y="77" width="5" height="4" fill="#e8a4a4"/><CurvedTail x={42} y={75}/><rect x="52" y="62" width="49" height="24" fill={fur}/><rect x="59" y="68" width="34" height="15" fill={furLight}/><CatFace x={99} y={50} happy/><rect x="57" y="82" width="10" height="12" fill={furDark}/><rect x="72" y="84" width="10" height="10" fill={fur}/><rect x="91" y="84" width="10" height="10" fill={furDark}/></g>;
 }
 
 function EatingKitten() {
@@ -1693,6 +1921,8 @@ function EatingKitten() {
 }
 
 function LickingKitten() { return <g><rect x="125" y="63" width="14" height="27" fill="#d97757"/><rect x="128" y="67" width="8" height="5" fill="#f8d5c2"/><rect x="121" y="75" width="5" height="4" fill="#e8a4a4"/><CurvedTail x={43} y={76}/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={78} y={28} happy/><rect x="63" y="81" width="9" height="13" fill={furDark}/><rect x="78" y="81" width="9" height="13" fill={fur}/><rect x="95" y="81" width="9" height="13" fill={furDark}/></g>; }
+
+function FreezeDriedTreatKitten() { return <g><g fill="#c98a54" stroke="#8a5a35" strokeWidth="1"><rect x="124" y="76" width="8" height="8"/><rect x="136" y="84" width="7" height="7"/><rect x="145" y="79" width="5" height="5"/></g><rect x="96" y="73" width="31" height="7" fill={fur}/><rect x="119" y="78" width="9" height="8" fill={furDark}/><CurvedTail x={43} y={76}/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={78} y={29}/><rect x="63" y="81" width="9" height="13" fill={furDark}/><rect x="78" y="81" width="9" height="13" fill={fur}/><rect x="95" y="81" width="9" height="13" fill={furDark}/></g>; }
 
 function PlayingKitten() {
   return <g><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="74" y="81" width="8" height="13" fill={fur}/><rect x="91" y="78" width="28" height="7" fill={fur}/><rect x="105" y="84" width="8" height="8" fill={furDark}/></g>;
@@ -1705,10 +1935,10 @@ function PouncingKitten() { return <g><CurvedTail x={31} y={68} raised/><rect x=
 function WandKitten() { return <g><CurvedTail x={43} y={75} raised/><rect x="58" y="55" width="43" height="31" fill={fur}/><CatFace x={74} y={25}/><rect x="62" y="81" width="8" height="13" fill={furDark}/><rect x="76" y="81" width="8" height="13" fill={fur}/><rect x="94" y="74" width="25" height="7" fill={fur}/><rect x="111" y="79" width="8" height="8" fill={furDark}/></g>; }
 function ScratchingKitten() { return <g><CurvedTail x={57} y={77} raised/><rect x="69" y="48" width="34" height="41" fill={fur}/><rect x="76" y="54" width="20" height="31" fill={furLight}/><CatFace x={66} y={17}/><g className="scratch-paw scratch-paw-a"><rect x="99" y="47" width="29" height="7" fill={fur}/><rect x="121" y="44" width="8" height="10" fill={furDark}/></g><g className="scratch-paw scratch-paw-b"><rect x="99" y="62" width="29" height="7" fill={fur}/><rect x="121" y="60" width="8" height="10" fill={furDark}/></g><rect x="69" y="83" width="9" height="11" fill={furDark}/><rect x="91" y="83" width="9" height="11" fill={furDark}/></g>; }
 function PerchedKitten() { return <g><CurvedTail x={97} y={79} raised/><rect x="65" y="50" width="34" height="38" fill={fur}/><rect x="71" y="56" width="22" height="30" fill={furLight}/><CatFace x={62} y={18} happy/><rect x="64" y="82" width="12" height="10" fill={furDark}/><rect x="84" y="82" width="12" height="10" fill={furDark}/></g>; }
-function HighFiveKitten() { return <g><SittingKitten blinking={false}/><rect x="105" y="53" width="9" height="28" fill={fur}/><rect x="113" y="50" width="8" height="9" fill={furDark}/><rect x="128" y="45" width="20" height="28" rx="3" fill="#d8a47f"/><rect x="122" y="51" width="10" height="7" fill="#d8a47f"/></g>; }
+function HighFiveKitten() { return <g><SittingKitten blinking={false}/><rect x="99" y="43" width="8" height="38" fill={fur}/><rect x="98" y="37" width="10" height="10" rx="3" fill={furDark}/><g fill="#d8a47f"><rect x="108" y="35" width="20" height="27" rx="5"/><rect x="111" y="26" width="4" height="14" rx="2"/><rect x="117" y="24" width="4" height="16" rx="2"/><rect x="123" y="27" width="4" height="13" rx="2"/><rect x="127" y="49" width="25" height="8" rx="4"/></g></g>; }
 function ProudKitten() { return <g><CurvedTail x={101} y={68} raised/><rect x="65" y="49" width="34" height="39" fill={fur}/><rect x="71" y="55" width="22" height="33" fill={furLight}/><CatFace x={62} y={17} happy/><rect x="64" y="82" width="8" height="12" fill={furDark}/><rect x="78" y="82" width="8" height="12" fill={fur}/><rect x="92" y="82" width="8" height="12" fill={furDark}/><g className="proud-sparkles" fill="#e9a23b"><rect x="42" y="30" width="4" height="10"/><rect x="39" y="33" width="10" height="4"/><rect x="121" y="26" width="4" height="9"/><rect x="118" y="29" width="10" height="4"/></g></g>; }
 function MilestoneKitten() { return <g><ProudKitten/><g className="milestone-sparkles" fill="#d946ef"><rect x="29" y="50" width="4" height="11"/><rect x="25" y="54" width="12" height="4"/><rect x="132" y="52" width="4" height="11"/><rect x="128" y="56" width="12" height="4"/></g></g>; }
-function PawShakeKitten() { return <g><SittingKitten blinking={false}/><rect x="98" y="78" width="28" height="8" fill={fur}/><rect x="119" y="80" width="25" height="12" rx="3" fill="#d8a47f"/><rect x="137" y="70" width="10" height="20" fill="#d8a47f"/></g>; }
+function PawShakeKitten() { return <g><SittingKitten blinking={false}/><rect x="96" y="76" width="31" height="8" fill={fur}/><rect x="120" y="74" width="11" height="10" rx="3" fill={furDark}/><g fill="#d8a47f"><rect x="119" y="84" width="27" height="10" rx="5"/><rect x="124" y="91" width="24" height="6" rx="3"/><rect x="142" y="76" width="9" height="17" rx="4"/><rect x="148" y="69" width="7" height="15" rx="3"/></g></g>; }
 function ButterflyKitten() { return <PouncingKitten />; }
 
 function GardenScene() { return <div className="pointer-events-none absolute inset-0" aria-hidden="true"><div className="absolute inset-x-0 bottom-0 h-1/3 bg-emerald-200/70"/><span className="absolute bottom-5 left-[10%] text-2xl">🌼</span><span className="absolute bottom-8 left-[28%] text-xl">🌷</span><span className="absolute bottom-4 right-[18%] text-2xl">🌻</span></div>; }

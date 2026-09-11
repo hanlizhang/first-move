@@ -143,7 +143,7 @@ test("pending authenticated writes disable economic actions but not loaded trans
 });
 
 test("temporary Cat poses use deterministic return durations", () => {
-  for (const pose of ["milk", "food", "treat"] as const) {
+  for (const pose of ["milk", "wet-food", "food", "treat", "freeze-dried-treat"] as const) {
     assert.equal(catPoseReturnDelayMs(pose), CAT_FEEDING_POSE_DURATION_MS, pose);
   }
   for (const pose of [

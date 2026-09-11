@@ -357,6 +357,14 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 **Cat v1B interaction status:** Web and Mobile now share the same transient interaction captions, phase timings, item gates, bounded room targeting, reduced-motion rules, and forgiving idle schedule. Teaser wand, yarn, toy mouse, scratching post, selected bed/perch/tree, tricks, and garden/butterfly interactions are implemented without changing the Cat catalog, economy, sync contracts, or database. Today's Hearts, Total Hearts / Bond, Little Finds, and celebration systems remain unimplemented.
 
+**Known non-blocking post-v1B Cat visual-polish issues:**
+
+- Mobile scratching-post facing/contact can still look wrong.
+- Mobile toy-mouse facing can still mismatch its target.
+- Mobile butterfly facing can still mismatch its target.
+- Mobile/Web cat-tree and perch alignment still need visual polish.
+- Trick poses remain intentionally simple pixel abstractions.
+
 ## Release backlog
 
 These items are intentionally deferred and are not implemented:

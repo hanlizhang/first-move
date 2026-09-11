@@ -6,11 +6,12 @@ import {
   MIN_CAT_IDLE_DELAY_MS,
   idleActionFor as semanticIdleActionFor,
   randomCatIdleDelay,
+  type CatFoodVisual,
   type CatInteractionPhase,
 } from "./cat-interactions.ts";
 
 export const CAT_POSES = [
-  "sitting", "walking", "sleeping", "drinking", "eating", "licking",
+  "sitting", "walking", "sleeping", "drinking", "wet-food", "eating", "licking", "freeze-dried-treat",
   "yarn-anticipate", "yarn", "yarn-settle",
   "mouse-stalk", "mouse-chase", "mouse-pounce",
   "wand", "wand-pounce", "scratching", "bed-nap", "perch",
@@ -19,7 +20,7 @@ export const CAT_POSES = [
 ] as const;
 export type CatPose = (typeof CAT_POSES)[number];
 export type IdleAction = "walk" | "sleep" | "blink";
-export type CatInteraction = "milk" | "food" | "treat" | "wand" | "garden" | keyof typeof CAT_INTERACTION_SEQUENCES;
+export type CatInteraction = CatFoodVisual | "food" | "treat" | "wand" | "garden" | keyof typeof CAT_INTERACTION_SEQUENCES;
 
 export const FIRST_IDLE_DELAY_MS = FIRST_CAT_IDLE_DELAY_MS;
 export const MIN_IDLE_DELAY_MS = MIN_CAT_IDLE_DELAY_MS;
@@ -46,7 +47,7 @@ export function createCatActionSequencer(setTimer: (callback: () => void, delayM
   let timer: number | undefined;
   const phasePose: Record<CatInteractionPhase, CatPose> = {
     sitting: "sitting", walking: "walking", sleeping: "sleeping",
-    milk: "drinking", food: "eating", treat: "licking",
+    milk: "drinking", "wet-food": "wet-food", kibble: "eating", "soft-treat": "licking", "freeze-dried-treat": "freeze-dried-treat", food: "eating", treat: "licking",
     "wand-follow": "wand", "wand-pounce": "wand-pounce",
     "yarn-anticipate": "yarn-anticipate", "yarn-action": "yarn", "yarn-settle": "yarn-settle",
     "mouse-stalk": "mouse-stalk", "mouse-chase": "mouse-chase", "mouse-pounce": "mouse-pounce",
@@ -89,8 +90,10 @@ export function createCatActionSequencer(setTimer: (callback: () => void, delayM
   return {
     startInteraction(interaction, onPose, onPhase) {
       if (interaction === "milk") return sequence([{ pose: "drinking", phase: "milk", durationMs: EATING_DURATION_MS }], onPose, onPhase);
-      if (interaction === "food") return sequence([{ pose: "eating", phase: "food", durationMs: EATING_DURATION_MS }], onPose, onPhase);
-      if (interaction === "treat") return sequence([{ pose: "licking", phase: "treat", durationMs: EATING_DURATION_MS }, { pose: "happy", phase: "treat", durationMs: HAPPY_ROLL_DURATION_MS }], onPose, onPhase);
+      if (interaction === "wet-food") return sequence([{ pose: "wet-food", phase: "wet-food", durationMs: EATING_DURATION_MS }], onPose, onPhase);
+      if (interaction === "food" || interaction === "kibble") return sequence([{ pose: "eating", phase: "kibble", durationMs: EATING_DURATION_MS }], onPose, onPhase);
+      if (interaction === "treat" || interaction === "soft-treat") return sequence([{ pose: "licking", phase: "soft-treat", durationMs: EATING_DURATION_MS }], onPose, onPhase);
+      if (interaction === "freeze-dried-treat") return sequence([{ pose: "freeze-dried-treat", phase: "freeze-dried-treat", durationMs: EATING_DURATION_MS }], onPose, onPhase);
       if (interaction === "wand") return sequence([{ pose: "wand", phase: "wand-follow", durationMs: USER_ACTION_DURATION_MS }], onPose, onPhase);
       if (interaction === "garden") return sequence([{ pose: "walking", phase: "garden", durationMs: USER_ACTION_DURATION_MS }], onPose, onPhase);
       return sequence(CAT_INTERACTION_SEQUENCES[interaction].map((step) => ({ ...step, pose: phasePose[step.phase] })), onPose, onPhase);
@@ -106,6 +109,6 @@ export const randomIdleDelay = randomCatIdleDelay;
 export function idleActionFor(value: number, reducedMotion = false): IdleAction { return semanticIdleActionFor(value, reducedMotion); }
 export function previewPose(pose: CatPose): CatPose { return pose; }
 export function messageForPose(pose: CatPose): string {
-  const messages: Record<CatPose, string> = { sitting: CAT_INTERACTION_CAPTIONS.sitting, walking: CAT_INTERACTION_CAPTIONS.walking, sleeping: CAT_INTERACTION_CAPTIONS.sleeping, drinking: CAT_INTERACTION_CAPTIONS.milk, eating: CAT_INTERACTION_CAPTIONS.food, licking: CAT_INTERACTION_CAPTIONS.treat, "yarn-anticipate": CAT_INTERACTION_CAPTIONS["yarn-anticipate"], yarn: CAT_INTERACTION_CAPTIONS["yarn-action"], "yarn-settle": CAT_INTERACTION_CAPTIONS["yarn-settle"], "mouse-stalk": CAT_INTERACTION_CAPTIONS["mouse-stalk"], "mouse-chase": CAT_INTERACTION_CAPTIONS["mouse-chase"], "mouse-pounce": CAT_INTERACTION_CAPTIONS["mouse-pounce"], wand: CAT_INTERACTION_CAPTIONS["wand-follow"], "wand-pounce": CAT_INTERACTION_CAPTIONS["wand-pounce"], scratching: CAT_INTERACTION_CAPTIONS.scratch, "bed-nap": CAT_INTERACTION_CAPTIONS["bed-nap"], perch: CAT_INTERACTION_CAPTIONS.perch, "tree-climb": CAT_INTERACTION_CAPTIONS["tree-climb"], "tree-perch": CAT_INTERACTION_CAPTIONS["tree-perch"], "high-five": CAT_INTERACTION_CAPTIONS["high-five"], "paw-shake": CAT_INTERACTION_CAPTIONS["paw-shake"], "butterfly-spot": CAT_INTERACTION_CAPTIONS["butterfly-spot"], butterfly: CAT_INTERACTION_CAPTIONS["butterfly-chase"], happy: "The kitten rolls over, happy and content.", proud: "The kitten closes its eyes and purrs proudly.", milestone: "The kitten celebrates a new adventure milestone." };
+  const messages: Record<CatPose, string> = { sitting: CAT_INTERACTION_CAPTIONS.sitting, walking: CAT_INTERACTION_CAPTIONS.walking, sleeping: CAT_INTERACTION_CAPTIONS.sleeping, drinking: CAT_INTERACTION_CAPTIONS.milk, "wet-food": CAT_INTERACTION_CAPTIONS["wet-food"], eating: CAT_INTERACTION_CAPTIONS.kibble, licking: CAT_INTERACTION_CAPTIONS["soft-treat"], "freeze-dried-treat": CAT_INTERACTION_CAPTIONS["freeze-dried-treat"], "yarn-anticipate": CAT_INTERACTION_CAPTIONS["yarn-anticipate"], yarn: CAT_INTERACTION_CAPTIONS["yarn-action"], "yarn-settle": CAT_INTERACTION_CAPTIONS["yarn-settle"], "mouse-stalk": CAT_INTERACTION_CAPTIONS["mouse-stalk"], "mouse-chase": CAT_INTERACTION_CAPTIONS["mouse-chase"], "mouse-pounce": CAT_INTERACTION_CAPTIONS["mouse-pounce"], wand: CAT_INTERACTION_CAPTIONS["wand-follow"], "wand-pounce": CAT_INTERACTION_CAPTIONS["wand-pounce"], scratching: CAT_INTERACTION_CAPTIONS.scratch, "bed-nap": CAT_INTERACTION_CAPTIONS["bed-nap"], perch: CAT_INTERACTION_CAPTIONS.perch, "tree-climb": CAT_INTERACTION_CAPTIONS["tree-climb"], "tree-perch": CAT_INTERACTION_CAPTIONS["tree-perch"], "high-five": CAT_INTERACTION_CAPTIONS["high-five"], "paw-shake": CAT_INTERACTION_CAPTIONS["paw-shake"], "butterfly-spot": CAT_INTERACTION_CAPTIONS["butterfly-spot"], butterfly: CAT_INTERACTION_CAPTIONS["butterfly-chase"], happy: "The kitten rolls over, happy and content.", proud: "The kitten closes its eyes and purrs proudly.", milestone: "The kitten celebrates a new adventure milestone." };
   return messages[pose];
 }
