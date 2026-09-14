@@ -53,6 +53,11 @@ import {
   localWorkspaceKey,
 } from "../local/repository.ts";
 import { getSupabaseClient } from "../supabase/client.ts";
+import { revenueCatSubscription } from "../subscriptions/revenuecat-native.ts";
+import type {
+  RevenueCatPresentationSnapshot,
+  SubscriptionState,
+} from "../subscriptions/revenuecat.ts";
 import { localWorkspaceOwnerForAuth } from "./local-workspace-owner.ts";
 import {
   createWorkspaceStartupController,
@@ -65,6 +70,7 @@ interface AppContextValue {
   auth: AuthState;
   cloud: CloudHydrationState;
   sync: AppSyncState;
+  subscription: SubscriptionState;
   localWorkspace: AppState;
   localWorkspaceStatus: LocalWorkspaceStatus;
   localWorkspaceMessage?: string;
@@ -114,6 +120,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     status: "local",
     pendingCount: 0,
   });
+  const [subscriptionSnapshot, setSubscriptionSnapshot] =
+    useState<RevenueCatPresentationSnapshot>(
+      revenueCatSubscription.getPresentationSnapshot,
+    );
   const [localWorkspace, setLocalWorkspace] = useState<AppState>(createEmptyState);
   const [loadedLocalOwnerKey, setLoadedLocalOwnerKey] = useState<
     string | undefined
@@ -174,6 +184,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           queueSummary: summarizePendingMutations([]),
         };
   }, [auth, sync]);
+  const visibleSubscription = useMemo<SubscriptionState>(
+    () =>
+      authenticatedUserId && subscriptionSnapshot.userId === authenticatedUserId
+        ? subscriptionSnapshot.state
+        : { status: "unavailable" },
+    [authenticatedUserId, subscriptionSnapshot],
+  );
   const workspaceEditable =
     visibleLocalWorkspaceStatus === "ready" &&
     (auth.status === "guest" ||
@@ -259,6 +276,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     authenticatedUserIdRef.current = authenticatedUserId;
     hydrationRequestRef.current += 1;
+  }, [authenticatedUserId]);
+
+  useEffect(
+    () => revenueCatSubscription.subscribe(setSubscriptionSnapshot),
+    [],
+  );
+
+  useEffect(() => {
+    void revenueCatSubscription.updateIdentity(authenticatedUserId);
   }, [authenticatedUserId]);
 
   useEffect(() => {
@@ -363,6 +389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (state === "active") {
         client.auth.startAutoRefresh();
         void syncRuntimeRef.current?.refresh();
+        void revenueCatSubscription.refresh();
       } else {
         client.auth.stopAutoRefresh();
       }
@@ -619,6 +646,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => ({
       auth,
+      subscription: visibleSubscription,
       cloud: visibleCloud,
       sync: visibleSync,
       localWorkspace: visibleLocalWorkspace,
@@ -637,6 +665,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       auth,
+      visibleSubscription,
       visibleCloud,
       visibleSync,
       visibleLocalWorkspace,
