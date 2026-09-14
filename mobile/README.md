@@ -1,8 +1,8 @@
-# First Move Mobile — M0 through M1E
+# First Move Mobile — M0 through RevenueCat R1
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
-Current status: M0 through M1E are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration are manually verified on iOS Simulator. True-device iOS/Android acceptance and the full Mobile↔Web/offline/restart/account-switch M1E checklist remain pending.
+Current status: M0 through M1E and the RevenueCat R1 identity/entitlement-read foundation are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration are manually verified on iOS Simulator. RevenueCat purchase, restore, paywall, feature-gate, webhook, and server-authorization work remains deferred.
 
 The M0–M1D sections below preserve each increment’s historical boundary. M1E supersedes their authenticated read-only/no-business-write constraints for the current app.
 
@@ -73,7 +73,15 @@ At their original milestone boundaries, M1A/M1B/M1C/M1D did not implement authen
 - Mobile reuses `sync_cloud_workspace_v1` with schema-v8 state, unchanged canonical daily-plan passthrough, empty economic-command arrays, current IANA timezone, and stable relationship UUIDs. Retained local consumed Intent history is filtered from the wire so the RPC receives only the active pending Intent view.
 - Task/Habit completion and Session rewards remain server-derived. Mobile never calculates or submits a point balance, reward ledger mutation, purchase, or inventory consumption command.
 - Running timers remain device-owned and non-realtime; only persisted Session state converges through this sync runtime.
-- Deliberately still local or unavailable: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, RevenueCat, notifications, and background services.
+- Deliberately still local or unavailable at the M1E boundary: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, notifications, and background services. The later RevenueCat R1 foundation is described below.
+
+## RevenueCat R1 foundation
+
+- The core `react-native-purchases` SDK is configured only after a valid authenticated Supabase session exists, using that session's UUID as the RevenueCat App User ID. Email is never passed as identity.
+- Guest Mode never configures RevenueCat. Sign-out and Guest transitions clear the app-visible subscription state without calling RevenueCat `logOut()`, so no anonymous RevenueCat identity is created by that transition.
+- A later account switch uses `logIn(newSupabaseUuid)`. Identity changes immediately mask the previous account's state while the new CustomerInfo loads.
+- The provider exposes only `unavailable`, `loading`, `free`, `pro`, or `error`. `pro` requires the exact active entitlement identifier `pro`; CustomerInfo refresh and update-listener paths feed the same mapping.
+- This client state is presentation-only. It does not authorize AI or other paid behavior, gate any current feature, purchase, restore, show a paywall, use RevenueCatUI, or change Guest/core feature behavior.
 
 ## Local setup
 
@@ -84,14 +92,17 @@ npm install
 npm start
 ```
 
-Fill `.env.local` with only:
+Fill `.env.local` with the Supabase values and the RevenueCat keys needed by the build:
 
 ```text
 EXPO_PUBLIC_SUPABASE_URL=...
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=...
+EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=...
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=...
 ```
 
-Do not place a service-role key, database password, JWT signing secret, OpenAI key, or RevenueCat secret in the mobile project.
+Development builds use only `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`. Release builds ignore the Test Store key and require the platform-specific iOS or Android key. Missing RevenueCat configuration leaves subscriptions unavailable without blocking Guest Mode or core features. These public SDK keys may be embedded in the app; never place a RevenueCat secret key, service-role key, database password, JWT signing secret, or OpenAI key in the mobile project.
 
 Press `i` for iOS or `a` for Android from the Expo CLI. Guest navigation can be inspected in Expo Go. The custom `firstmove://` callback needs a native development build:
 
@@ -103,6 +114,8 @@ npx expo run:android
 ```
 
 The generated `/mobile/ios` and `/mobile/android` directories are ignored. The simulator development profile does not require committing generated native projects.
+
+`react-native-purchases` contains native code. After adding or upgrading it, rebuild the Expo development client with `npx expo run:ios`, `npx expo run:android`, or the corresponding approved EAS development build before runtime acceptance; an existing client binary cannot load the new module.
 
 ## Supabase redirect URL
 
