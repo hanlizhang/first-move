@@ -8,7 +8,9 @@ import {
   addTask,
   editHabit,
   editTask,
+  isHabitActive,
   isHabitScheduled,
+  isTaskVisibleToday,
   softDeleteHabit,
   softDeleteTask,
   toggleHabitCompletion,
@@ -81,6 +83,69 @@ test("legacy Tasks with multiple completion dates remain completed and retain th
     state,
   );
   assert.deepEqual(state.tasks[0]?.completedOn, ["2026-08-30", "2026-09-01"]);
+});
+
+test("Task list presentation keeps unfinished and current-date Tasks while Habits still recur", () => {
+  const yesterday = "2026-09-01";
+  const today = "2026-09-02";
+  const tomorrow = "2026-09-03";
+  const state = createEmptyState();
+  state.tasks = [
+    {
+      id: "10000000-0000-4000-8000-000000000002",
+      title: "Incomplete Task",
+      direction: "Work & Study",
+      order: 0,
+      createdAt: firstTimestamp,
+      updatedAt: firstTimestamp,
+      completedOn: [],
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000003",
+      title: "Completed today",
+      direction: "Daily Life",
+      order: 1,
+      createdAt: firstTimestamp,
+      updatedAt: secondTimestamp,
+      completedOn: [today],
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000004",
+      title: "Completed yesterday",
+      direction: "Rest",
+      order: 2,
+      createdAt: firstTimestamp,
+      updatedAt: firstTimestamp,
+      completedOn: [yesterday],
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000005",
+      title: "Legacy completed Task",
+      direction: "Exercise & Movement",
+      order: 3,
+      createdAt: firstTimestamp,
+      updatedAt: firstTimestamp,
+      completedOn: ["2026-08-30", yesterday],
+    },
+  ];
+  state.habits = [
+    {
+      id: habitId,
+      title: "Daily Habit",
+      direction: "Rest",
+      schedule: { kind: "daily" },
+      createdAt: firstTimestamp,
+      updatedAt: secondTimestamp,
+      completedOn: [yesterday],
+    },
+  ];
+
+  assert.equal(isTaskVisibleToday(state.tasks[0]!, tomorrow), true);
+  assert.equal(isTaskVisibleToday(state.tasks[1]!, today), true);
+  assert.equal(isTaskVisibleToday(state.tasks[2]!, today), false);
+  assert.equal(isTaskVisibleToday(state.tasks[3]!, today), false);
+  assert.equal(isHabitScheduled(state.habits[0]!, today), true);
+  assert.equal(isHabitActive(state.habits[0]!, today), true);
 });
 
 test("Task deletion removes only the active parent and retains stable historical relationships", () => {
