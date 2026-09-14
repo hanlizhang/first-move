@@ -7,14 +7,16 @@ import {
   cancelPendingIntent,
   createPendingIntent,
   getPendingIntent,
-  isTaskActive,
+  isHabitActive,
   isHabitScheduled,
+  isTaskActive,
+  isTaskVisibleToday,
   localDateKey,
   normalizeAppState,
   toggleHabit,
   toggleTask,
 } from "./app-state.ts";
-import { createEmptyState, DIRECTIONS, STUCK_STATES, type Habit } from "./models.ts";
+import { createEmptyState, DIRECTIONS, STUCK_STATES, type Habit, type Task } from "./models.ts";
 import { loadAppState, saveAppState, type StorageLike } from "./repository.ts";
 import { calculateSessionReward } from "./rewards.ts";
 import { FIRST_MOVE_TEMPLATES, templatesFor } from "./templates.ts";
@@ -799,6 +801,43 @@ test("legacy Tasks with multiple completion dates stay completed without rewriti
   assert.equal(isTaskActive(state.tasks[0]), false);
   assert.equal(toggleTask(state, "legacy-task", "2026-07-18", clock), state);
   assert.deepEqual(state.tasks[0].completedOn, ["2026-07-16", "2026-07-17"]);
+});
+
+test("Task list visibility keeps active and current-date completions while Habits remain recurring", () => {
+  const today = "2026-07-18";
+  const tomorrow = "2026-07-19";
+  const task = (id: string, completedOn: string[]): Task => ({
+    id,
+    title: id,
+    direction: "Daily Life",
+    order: 0,
+    createdAt: clock(),
+    updatedAt: clock(),
+    completedOn,
+  });
+  const incomplete = task("incomplete", []);
+  const completedToday = task("completed-today", [today]);
+  const completedYesterday = task("completed-yesterday", ["2026-07-17"]);
+  const legacy = task("legacy", ["2026-07-15", "2026-07-16"]);
+  const recurringHabit: Habit = {
+    id: "recurring-habit",
+    title: "Stretch",
+    direction: "Exercise & Movement",
+    schedule: { kind: "daily" },
+    createdAt: clock(),
+    updatedAt: clock(),
+    completedOn: ["2026-07-17"],
+  };
+
+  assert.equal(isTaskVisibleToday(incomplete, today), true);
+  assert.equal(isTaskVisibleToday(incomplete, tomorrow), true);
+  assert.equal(isTaskVisibleToday(completedToday, today), true);
+  assert.equal(isTaskVisibleToday(completedYesterday, today), false);
+  assert.equal(isTaskVisibleToday(legacy, today), false);
+  assert.deepEqual(legacy.completedOn, ["2026-07-15", "2026-07-16"]);
+  assert.equal(isHabitScheduled(recurringHabit, today), true);
+  assert.equal(isHabitActive(recurringHabit, today), true);
+  assert.deepEqual(recurringHabit.completedOn, ["2026-07-17"]);
 });
 
 test("a habit completion awards points only once for a date", () => {

@@ -996,10 +996,16 @@ function linkedItemLabel(intent: ActivityIntent, tasks: Task[], habits: Habit[])
 }
 
 function TaskEditor({ state, today, update }: { state: AppState; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
-  const tasks = state.tasks;
+  const tasks = state.tasks.filter((task) => isTaskVisibleToday(task, today));
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
+
+  if (editing && !tasks.some((task) => task.id === editing)) {
+    setEditing(null);
+    setTitle("");
+    setDirection(DIRECTIONS[0]);
+  }
 
   function reset() { setEditing(null); setTitle(""); setDirection(DIRECTIONS[0]); }
   function submit(event: React.FormEvent) {
@@ -1021,7 +1027,7 @@ function TaskEditor({ state, today, update }: { state: AppState; today: string; 
         </div>
       </form>
       <div>
-        {tasks.length === 0 ? <EmptyState>No tasks yet. Add one small, concrete action.</EmptyState> : (
+        {tasks.length === 0 ? <EmptyState>No active Tasks. Add one small, concrete action.</EmptyState> : (
           <ul className="space-y-3">
             {tasks.map((task, index) => {
               const complete = !isTaskActive(task);

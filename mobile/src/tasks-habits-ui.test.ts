@@ -29,3 +29,21 @@ test("Task and Habit controls use the owner-scoped working and sync boundary", (
   assert.match(habitsSource, /toggleHabitCompletion/);
   assert.match(habitsSource, /softDeleteHabit/);
 });
+
+test("the ordinary Tasks list renders only active or current-date completed Tasks", () => {
+  assert.match(tasksSource, /isTaskVisibleToday\(task, today\)/);
+  assert.match(tasksSource, /\{visibleTasks\.length\}/);
+  assert.match(tasksSource, /visibleTasks\.map/);
+  assert.match(tasksSource, /No active Tasks/);
+});
+
+test("hidden Tasks cannot remain selected in the ordinary Tasks editor", () => {
+  assert.match(tasksSource, /const requestedTask = visibleTasks\.find/);
+  assert.match(tasksSource, /editingId\s+\? visibleTasks\.find/);
+  assert.match(
+    tasksSource,
+    /if \(editingId && !editingTask\) \{\s+setEditingId\(undefined\);\s+setTitle\(""\);\s+setDirection\(DIRECTIONS\[0\]\);/,
+  );
+  assert.match(tasksSource, /const editorTitle = editingId && !editingTask \? "" : title/);
+  assert.match(tasksSource, /const editing = editingTask\?\.id/);
+});

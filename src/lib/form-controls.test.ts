@@ -51,3 +51,12 @@ test("Focus keeps the pending First Move separate from Quick Countdown and optio
   assert.doesNotMatch(sessionReview, /state\.habits\.map/);
   assert.doesNotMatch(sessionReview, />Save session</);
 });
+
+test("the ordinary Tasks list uses current-local-date visibility", () => {
+  const source = readFileSync("src/app/first-move-app.tsx", "utf8");
+  const taskEditor = source.slice(source.indexOf("function TaskEditor"), source.indexOf("function HabitEditor"));
+
+  assert.match(taskEditor, /state\.tasks\.filter\(\(task\) => isTaskVisibleToday\(task, today\)\)/);
+  assert.match(taskEditor, /if \(editing && !tasks\.some\(\(task\) => task\.id === editing\)\)/);
+  assert.doesNotMatch(taskEditor, /const tasks = state\.tasks;/);
+});

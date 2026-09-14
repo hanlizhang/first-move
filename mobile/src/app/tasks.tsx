@@ -24,6 +24,7 @@ import {
   addTask,
   editTask,
   isTaskActive,
+  isTaskVisibleToday,
   softDeleteTask,
   toggleTaskCompletion,
 } from "../domain/tasks-habits.ts";
@@ -44,8 +45,11 @@ export default function TasksScreen() {
     workspaceEditable,
   } = useFirstMoveApp();
   const today = useCurrentLocalDate();
+  const visibleTasks = localWorkspace.tasks.filter((task) =>
+    isTaskVisibleToday(task, today),
+  );
   const requestedId = Array.isArray(requestedEdit) ? requestedEdit[0] : requestedEdit;
-  const requestedTask = localWorkspace.tasks.find(
+  const requestedTask = visibleTasks.find(
     (candidate) => candidate.id === requestedId,
   );
   const [editingId, setEditingId] = useState<string | undefined>(requestedTask?.id);
@@ -55,6 +59,17 @@ export default function TasksScreen() {
   );
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const editingTask = editingId
+    ? visibleTasks.find((candidate) => candidate.id === editingId)
+    : undefined;
+  const editorTitle = editingId && !editingTask ? "" : title;
+  const editorDirection = editingId && !editingTask ? DIRECTIONS[0] : direction;
+
+  if (editingId && !editingTask) {
+    setEditingId(undefined);
+    setTitle("");
+    setDirection(DIRECTIONS[0]);
+  }
 
   if (localWorkspaceStatus === "loading") {
     return (
@@ -91,21 +106,21 @@ export default function TasksScreen() {
       ) : null}
 
       <Card>
-        <Label>{editingId ? "Edit Task" : "New Task"}</Label>
+        <Label>{editingTask ? "Edit Task" : "New Task"}</Label>
         <FormLabel>Task title</FormLabel>
         <TitleInput
           accessibilityLabel="Task title"
           onChangeText={setTitle}
           placeholder="Open the document"
-          value={title}
+          value={editorTitle}
         />
-        <DirectionPicker onSelect={setDirection} selected={direction} />
+        <DirectionPicker onSelect={setDirection} selected={editorDirection} />
         <PrimaryButton
-          disabled={saving || !workspaceEditable || !title.trim()}
-          title={editingId ? "Save Task changes" : "Create Task"}
+          disabled={saving || !workspaceEditable || !editorTitle.trim()}
+          title={editingTask ? "Save Task changes" : "Create Task"}
           onPress={() => void submitTask()}
         />
-        {editingId ? (
+        {editingTask ? (
           <SecondaryButton
             disabled={saving}
             title="Cancel editing"
@@ -116,15 +131,15 @@ export default function TasksScreen() {
 
       <View style={styles.sectionHeader}>
         <Label>Tasks</Label>
-        <Text style={styles.count}>{localWorkspace.tasks.length}</Text>
+        <Text style={styles.count}>{visibleTasks.length}</Text>
       </View>
-      {localWorkspace.tasks.length === 0 ? (
+      {visibleTasks.length === 0 ? (
         <Card>
-          <Heading>No Tasks yet</Heading>
+          <Heading>No active Tasks</Heading>
           <Body muted>Add one small action above.</Body>
         </Card>
       ) : (
-        localWorkspace.tasks.map((task) => (
+        visibleTasks.map((task) => (
           <EditableTaskCard
             key={task.id}
             disabled={saving || !workspaceEditable}
@@ -158,12 +173,15 @@ export default function TasksScreen() {
   );
 
   async function submitTask(): Promise<void> {
-    const editing = editingId;
+    const editing = editingTask?.id;
     const changed = await saveChange(
       (state) =>
         editing
-          ? editTask(state, editing, { title, direction })
-          : addTask(state, { title, direction }),
+          ? editTask(state, editing, {
+              title: editorTitle,
+              direction: editorDirection,
+            })
+          : addTask(state, { title: editorTitle, direction: editorDirection }),
       editing ? "Task changes saved." : "Task created.",
     );
     if (changed) resetEditor();
