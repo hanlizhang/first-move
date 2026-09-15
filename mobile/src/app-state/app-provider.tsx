@@ -55,7 +55,9 @@ import {
 import { getSupabaseClient } from "../supabase/client.ts";
 import { revenueCatSubscription } from "../subscriptions/revenuecat-native.ts";
 import type {
+  PurchaseFlowOutcome,
   RevenueCatPresentationSnapshot,
+  RestoreFlowOutcome,
   SubscriptionState,
 } from "../subscriptions/revenuecat.ts";
 import { localWorkspaceOwnerForAuth } from "./local-workspace-owner.ts";
@@ -81,6 +83,8 @@ interface AppContextValue {
   signOut(): Promise<void>;
   retryAuthRestore(): Promise<void>;
   refreshCloud(): Promise<void>;
+  presentProPaywall(): Promise<PurchaseFlowOutcome>;
+  restorePurchases(): Promise<RestoreFlowOutcome>;
   updateLocalWorkspace(
     recipe: (current: AppState) => AppState,
   ): Promise<AppState | undefined>;
@@ -540,6 +544,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [auth]);
 
+  const presentProPaywall = useCallback(
+    () => revenueCatSubscription.presentProPaywall(),
+    [],
+  );
+
+  const restorePurchases = useCallback(
+    () => revenueCatSubscription.restorePurchases(),
+    [],
+  );
+
   const updateLocalWorkspace = useCallback(
     async (recipe: (current: AppState) => AppState) => {
       if (!localOwner || !activeLocalOwnerKey) return undefined;
@@ -659,6 +673,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       retryAuthRestore: restore,
       refreshCloud,
+      presentProPaywall,
+      restorePurchases,
       updateLocalWorkspace,
       buyCatItem,
       feedCatFood,
@@ -678,6 +694,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       restore,
       refreshCloud,
+      presentProPaywall,
+      restorePurchases,
       updateLocalWorkspace,
       buyCatItem,
       feedCatFood,

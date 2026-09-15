@@ -1,8 +1,8 @@
-# First Move Mobile — M0 through RevenueCat R1
+# First Move Mobile — M0 through RevenueCat R2
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
-Current status: M0 through M1E and the RevenueCat R1 identity/entitlement-read foundation are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration are manually verified on iOS Simulator. RevenueCat purchase, restore, paywall, feature-gate, webhook, and server-authorization work remains deferred.
+Current status: M0 through M1E plus RevenueCat R1 identity/entitlement reads and R2 Test Store purchase/restore presentation are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration are manually verified on iOS Simulator. RevenueCat production-store products, feature gates, webhooks, and server authorization remain deferred.
 
 The M0–M1D sections below preserve each increment’s historical boundary. M1E supersedes their authenticated read-only/no-business-write constraints for the current app.
 
@@ -73,15 +73,18 @@ At their original milestone boundaries, M1A/M1B/M1C/M1D did not implement authen
 - Mobile reuses `sync_cloud_workspace_v1` with schema-v8 state, unchanged canonical daily-plan passthrough, empty economic-command arrays, current IANA timezone, and stable relationship UUIDs. Retained local consumed Intent history is filtered from the wire so the RPC receives only the active pending Intent view.
 - Task/Habit completion and Session rewards remain server-derived. Mobile never calculates or submits a point balance, reward ledger mutation, purchase, or inventory consumption command.
 - Running timers remain device-owned and non-realtime; only persisted Session state converges through this sync runtime.
-- Deliberately still local or unavailable at the M1E boundary: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, notifications, and background services. The later RevenueCat R1 foundation is described below.
+- Deliberately still local or unavailable at the M1E boundary: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, notifications, and background services. The later RevenueCat R1/R2 work is described below.
 
-## RevenueCat R1 foundation
+## RevenueCat R1 identity and R2 purchase/restore
 
 - The core `react-native-purchases` SDK is configured only after a valid authenticated Supabase session exists, using that session's UUID as the RevenueCat App User ID. Email is never passed as identity.
 - Guest Mode never configures RevenueCat. Sign-out and Guest transitions clear the app-visible subscription state without calling RevenueCat `logOut()`, so no anonymous RevenueCat identity is created by that transition.
 - A later account switch uses `logIn(newSupabaseUuid)`. Identity changes immediately mask the previous account's state while the new CustomerInfo loads.
 - The provider exposes only `unavailable`, `loading`, `free`, `pro`, or `error`. `pro` requires the exact active entitlement identifier `pro`; CustomerInfo refresh and update-listener paths feed the same mapping.
-- This client state is presentation-only. It does not authorize AI or other paid behavior, gate any current feature, purchase, restore, show a paywall, use RevenueCatUI, or change Guest/core feature behavior.
+- Settings shows the current Free/Pro plan for authenticated users. Free users can open the published dashboard paywall for the current/default Offering; the app does not hardcode products or prices.
+- Authenticated users can restore through `Purchases.restorePurchases()`. Purchase, dismissal, and restore paths refresh CustomerInfo, and only the exact active `pro` entitlement changes Settings to Pro.
+- Guest and signed-out users cannot launch purchase or restore calls. They receive sign-in guidance while Guest Mode and every current core feature remain fully functional.
+- Purchase/restore state is presentation-only. It does not authorize AI or other paid behavior, gate any current feature, add production products, or change Guest/core feature behavior.
 
 ## Local setup
 
@@ -115,7 +118,7 @@ npx expo run:android
 
 The generated `/mobile/ios` and `/mobile/android` directories are ignored. The simulator development profile does not require committing generated native projects.
 
-`react-native-purchases` contains native code. After adding or upgrading it, rebuild the Expo development client with `npx expo run:ios`, `npx expo run:android`, or the corresponding approved EAS development build before runtime acceptance; an existing client binary cannot load the new module.
+`react-native-purchases` and `react-native-purchases-ui` contain native code. After adding or upgrading either package, rebuild the Expo development client with `npx expo run:ios`, `npx expo run:android`, or the corresponding approved EAS development build before runtime acceptance; an existing client binary cannot load the new module.
 
 ## Supabase redirect URL
 
@@ -246,3 +249,16 @@ Prerequisite: use a Web-initialized Supabase account and the same account on Mob
 - [ ] Make and sync a B change, then return to A and retry. Confirm each owner converges independently and A’s queued mutation is sent only while A is the revalidated current session.
 - [ ] Continue as Guest, make Task/Habit/Intent/Session changes offline, and confirm no cloud status/read/write RPC is issued and no account namespace changes.
 - [ ] Sign into an uninitialized account and confirm **Cloud writes disabled**, no editing controls, and no initialization/import/write RPC. **Check cloud setup again** may only re-run the existing status boundary.
+
+## Manual RevenueCat R2 acceptance
+
+Prerequisite: rebuild the development client after installing `react-native-purchases-ui`, then use an authenticated Supabase account with the RevenueCat Test Store key.
+
+- [ ] Authenticated Free Settings shows **Current plan: Free**, **Upgrade to Pro**, and **Restore purchases** without app-authored prices.
+- [ ] **Upgrade to Pro** opens the published **First Move Pro** paywall from the current/default Offering and exposes its configured Monthly and Annual Test Store packages.
+- [ ] Complete a Test Store purchase and confirm Settings immediately changes to **Current plan: Pro** without an upgrade CTA.
+- [ ] Dismiss or cancel the paywall and confirm Settings remains Free with neutral feedback and all features usable.
+- [ ] Restore an active `pro` purchase and confirm Settings changes to Pro; restore with no active entitlement remains Free with neutral feedback.
+- [ ] Continue as Guest and confirm purchase/restore controls are unavailable, sign-in guidance is shown, and Guest Mode remains fully functional.
+- [ ] Switch from Pro account A to Free account B and confirm A’s Pro state never appears for B, including while B loads.
+- [ ] Simulate purchase/restore failures and confirm Settings remains usable with the last verified plan and no feature gate.

@@ -1,10 +1,12 @@
 import { Platform } from "react-native";
 import Purchases, { type CustomerInfo } from "react-native-purchases";
+import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
 
 import {
   RevenueCatSubscriptionController,
   type RevenueCatCustomerInfo,
   type RevenueCatCustomerInfoListener,
+  type RevenueCatPaywallResult,
   type RevenueCatPlatform,
   type RevenueCatSdk,
 } from "./revenuecat.ts";
@@ -18,6 +20,8 @@ const sdk: RevenueCatSdk = {
     return { customerInfo: asCustomerInfo(result.customerInfo) };
   },
   getCustomerInfo: async () => asCustomerInfo(await Purchases.getCustomerInfo()),
+  restorePurchases: async () =>
+    asCustomerInfo(await Purchases.restorePurchases()),
   addCustomerInfoUpdateListener: (listener) => {
     Purchases.addCustomerInfoUpdateListener(asNativeListener(listener));
   },
@@ -25,6 +29,14 @@ const sdk: RevenueCatSdk = {
 
 export const revenueCatSubscription = new RevenueCatSubscriptionController({
   sdk,
+  paywallUi: {
+    async presentCurrentOfferingPaywall() {
+      const result = await RevenueCatUI.presentPaywall({
+        displayCloseButton: true,
+      });
+      return asPaywallResult(result);
+    },
+  },
   environment: {
     EXPO_PUBLIC_REVENUECAT_TEST_API_KEY:
       process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY,
@@ -50,4 +62,19 @@ function asNativeListener(
 
 function asCustomerInfo(customerInfo: CustomerInfo): RevenueCatCustomerInfo {
   return customerInfo;
+}
+
+function asPaywallResult(result: PAYWALL_RESULT): RevenueCatPaywallResult {
+  switch (result) {
+    case PAYWALL_RESULT.NOT_PRESENTED:
+      return "not-presented";
+    case PAYWALL_RESULT.ERROR:
+      return "error";
+    case PAYWALL_RESULT.CANCELLED:
+      return "cancelled";
+    case PAYWALL_RESULT.PURCHASED:
+      return "purchased";
+    case PAYWALL_RESULT.RESTORED:
+      return "restored";
+  }
 }
