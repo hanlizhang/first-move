@@ -150,9 +150,9 @@ Current Web/Mobile v1 keeps a running timer on the device that started it and do
 - Logs redact Authorization, cookies, OTPs, email addresses where possible, journal fields, AI request bodies, and mutation payload text.
 - Export contains journal only after explicit confirmation and is protected from accidental analytics upload.
 
-## 14. Deferred Free, Pro, entitlement, and quota enforcement
+## 14. Free, Pro, entitlement, and quota enforcement
 
-RevenueCat and server-controlled AI quota enforcement are not implemented. These are future acceptance tests for the product decision that authenticated Free users receive five lifetime introductory actions and Guest is intended to receive five once durable server-side Guest identity/enforcement is designed in TASK-11.
+RevenueCat Mobile Test Store purchase/restore and authenticated server-controlled AI quota enforcement are implemented. Migration `20260915120000_ai_access_r1.sql` is remotely applied. The implemented application/database coverage exercises the core authenticated cases below; production storefront lifecycle, region/rate controls, Mobile AI UI, Web Billing, and full manual acceptance remain future work. Guest receives no live paid-provider AI and retains manual/local/mock fallback.
 
 - Authenticated Free receives exactly 5 lifetime introductory AI dispatches across daily plan, toothbrush verification, and Make this smaller; the sixth is rejected before dispatch.
 - Active Pro receives exactly 1 daily-plan, 3 toothbrush-verification, and 5 Make this smaller dispatches per valid local day; each next request is rejected.

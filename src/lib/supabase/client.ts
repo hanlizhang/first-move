@@ -10,3 +10,12 @@ export function createClient() {
   browserClient = createBrowserClient(url, publishableKey);
   return browserClient;
 }
+
+export async function currentSupabaseAccessToken(): Promise<string | undefined> {
+  try {
+    const { data, error } = await createClient().auth.getSession();
+    return error ? undefined : data.session?.access_token;
+  } catch {
+    return undefined;
+  }
+}

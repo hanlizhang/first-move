@@ -4,9 +4,10 @@ import { useId, useRef, useState } from "react";
 
 import { requestDayPlan } from "@/lib/day-planning";
 import { DIRECTIONS, INTENDED_DURATIONS, type AppState, type Direction, type IntendedDuration } from "@/lib/models";
-import { applyPlanningReview, makeReviewItemSmaller, planToReviewItems, validPlanningReview, type PlanningReviewItem, type ReviewGroup } from "@/lib/planning-review";
+import { applyConfirmedPlanFirstMove, applyPlanningReview, makeReviewItemSmaller, planToReviewItems, validPlanningReview, type PlanningReviewItem, type ReviewGroup } from "@/lib/planning-review";
+import { currentSupabaseAccessToken } from "@/lib/supabase/client";
 
-export default function DayPlanner({ id, state, update, initialItems, onConfirmed, onClose, onOpenTasks }: { id: string; state: AppState; update: (recipe: (state: AppState) => AppState) => void; initialItems?: PlanningReviewItem[]; onConfirmed: (items: PlanningReviewItem[]) => void; onClose?: () => void; onOpenTasks: () => void }) {
+export default function DayPlanner({ id, update, initialItems, onConfirmed, onClose, onOpenTasks }: { id: string; update: (recipe: (state: AppState) => AppState) => void; initialItems?: PlanningReviewItem[]; onConfirmed: (items: PlanningReviewItem[]) => void; onClose?: () => void; onOpenTasks: () => void }) {
   const [brainDump, setBrainDump] = useState("");
   const [items, setItems] = useState<PlanningReviewItem[] | undefined>(() => initialItems?.map((item) => ({ ...item })));
   const [selectedId, setSelectedId] = useState(initialItems?.[0]?.id ?? "");
@@ -18,7 +19,7 @@ export default function DayPlanner({ id, state, update, initialItems, onConfirme
     if (requestActive.current || !brainDump.trim() || brainDump.trim().length > 2_000) return;
     requestActive.current = true; setLoading(true); setNotice("");
     try {
-      const result = await requestDayPlan(brainDump);
+      const result = await requestDayPlan(brainDump, fetch, await currentSupabaseAccessToken());
       if (result.outcome === "success") { const review = planToReviewItems(result.plan); setItems(review); setSelectedId(review[0]?.id ?? ""); setNotice(`${result.mode === "mock" ? "Mock" : "AI"} suggestions are ready to review. Nothing is saved yet.`); }
       else setNotice(result.message);
     } finally { requestActive.current = false; setLoading(false); }
@@ -53,11 +54,10 @@ export default function DayPlanner({ id, state, update, initialItems, onConfirme
 
   function confirm() {
     if (!items || !validPlanningReview(items)) { setNotice("Each remaining item needs a title, category, duration, and concrete first step."); return; }
-    const hadPending = state.activityIntents.some((intent) => intent.status === "pending");
-    if (!initialItems) update((current) => applyPlanningReview(current, items));
+    update((current) => initialItems ? applyConfirmedPlanFirstMove(current, items) : applyPlanningReview(current, items));
     onConfirmed(items);
     setItems(undefined); setBrainDump(""); setSelectedId("");
-    setNotice(hadPending ? "Tasks saved. Your existing pending First Move was kept." : "Plan saved. Your reviewed First Move is ready in the existing Focus flow.");
+    setNotice(items.some((item) => item.group === "first-move") ? "Plan saved. Your reviewed First Move is ready in Focus." : "Plan saved. No pending First Move was added.");
   }
 
   return <section id={id} className="mt-6 min-w-0 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-6" aria-labelledby={`${id}-heading`}>

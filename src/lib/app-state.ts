@@ -139,6 +139,20 @@ export function createPendingIntent(
   return { ...state, activityIntents: [...state.activityIntents, intent] };
 }
 
+export function replacePendingIntent(
+  state: AppState,
+  input: CreateIntentInput,
+  clock: Clock = now,
+  idFactory: () => string = () => makeId("intent"),
+): AppState {
+  const pending = getPendingIntent(state);
+  const withoutPending = pending
+    ? cancelPendingIntent(state, pending.id)
+    : state;
+  const replaced = createPendingIntent(withoutPending, input, clock, idFactory);
+  return getPendingIntent(replaced) ? replaced : state;
+}
+
 export function cancelPendingIntent(state: AppState, intentId: string): AppState {
   return {
     ...state,

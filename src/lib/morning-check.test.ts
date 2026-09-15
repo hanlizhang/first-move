@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { normalizeAppState } from "./app-state.ts";
@@ -6,6 +7,8 @@ import { MAX_MORNING_ATTEMPTS, completeMorningCheck, morningAttemptCount, mornin
 import { createEmptyState } from "./models.ts";
 import { loadAppState, saveAppState, type StorageLike } from "./repository.ts";
 import { MORNING_REWARD_POINTS } from "./rewards.ts";
+import { plannerPresentation } from "./app-navigation.ts";
+import { markMorningStartSkipped, morningStartSkippedForDate } from "./morning-skip.ts";
 
 const dateKey = "2026-07-20";
 const clock = () => "2026-07-20T07:00:00.000Z";
@@ -24,6 +27,57 @@ test("live mode is explicit and client network errors do not retry", async () =>
   const request: typeof fetch = async () => { calls += 1; throw new Error("offline"); };
   assert.equal((await verifyToothbrushPhoto(new Blob(), "pass", request)).outcome, "unavailable");
   assert.equal(calls, 1);
+});
+
+test("trusted AI denial messages keep Morning Start optional", async () => {
+  const cases = [
+    ["unauthenticated", /Sign in to use live AI verification/],
+    ["introductory_quota_exhausted", /five introductory AI actions are used/],
+    ["pro_feature_quota_exhausted", /today’s three Pro AI verification actions/],
+    ["revenuecat_unavailable", /temporarily unavailable/],
+    ["quota_service_unavailable", /temporarily unavailable/],
+    ["openai_provider_failure", /AI verification request failed/],
+  ] as const;
+  for (const [code, expected] of cases) {
+    const status = code === "unauthenticated" ? 401 : code === "openai_provider_failure" ? 502 : code.includes("quota_exhausted") ? 429 : 503;
+    const result = await verifyToothbrushPhoto(
+      new Blob(["photo"]),
+      "pass",
+      async () => Response.json({ code }, { status }),
+      "access-token",
+    );
+    assert.equal(result.outcome, "unavailable");
+    if (result.outcome === "unavailable") {
+      assert.match(result.message, expected);
+      assert.match(result.message, /skip/i);
+    }
+  }
+});
+
+test("Morning Skip advances presentation without creating a check, reward, attempt, or AI call", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+  };
+  const state = createEmptyState();
+  markMorningStartSkipped(storage, dateKey);
+  assert.equal(morningStartSkippedForDate(storage, dateKey), true);
+  assert.equal(morningStartSkippedForDate(storage, "2026-07-21"), false);
+  assert.equal(plannerPresentation(morningStartSkippedForDate(storage, dateKey), false, false), "full");
+  assert.equal(state.morningChecks.length, 0);
+  assert.equal(state.morningAttempts.length, 0);
+  assert.equal(state.rewardEvents.length, 0);
+  assert.equal(state.progress.points, 0);
+
+  const appSource = readFileSync(new URL("../app/first-move-app.tsx", import.meta.url), "utf8");
+  const skipHandler = appSource.slice(appSource.indexOf("function skip()"), appSource.indexOf("function resetToday()"));
+  assert.match(skipHandler, /onSkip\(\)/);
+  assert.doesNotMatch(skipHandler, /verifyToothbrushPhoto|completeMorningCheck|recordMorningAttempt|update\(/);
+  const failureControls = appSource.slice(appSource.indexOf("phase === \"failure\""), appSource.indexOf("Development mock result"));
+  assert.match(failureControls, /Skip without reward/);
+  assert.match(appSource, /plannerPresentation\(morningComplete \|\| morningSkipped/);
+  assert.match(appSource, /Skipped for today/);
 });
 
 test("morning verification attempts stop at three per local date", () => {

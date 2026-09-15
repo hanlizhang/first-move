@@ -1,6 +1,6 @@
 # First Move cloud sync architecture
 
-Status: approved architecture and design reference. The frozen Web Sync v1 MVP and its remotely applied migrations are implemented; Mobile M1E now uses the same Supabase Auth UUID, RPCs, schema-v8 snapshot, and canonical-response contract for already-initialized accounts. The normalized B5 outbox/change-cursor/conflict design, realtime timer takeover, RevenueCat, server-controlled AI quotas, and release hardening remain deferred and are not claims about current behavior.
+Status: approved architecture and design reference. The frozen Web Sync v1 MVP and its remotely applied migrations are implemented; Mobile M1E uses the same Supabase Auth UUID, RPCs, schema-v8 snapshot, and canonical-response contract for already-initialized accounts. RevenueCat Mobile Test Store purchase/restore and the authenticated server AI gateway are implemented; AI migration `20260915120000_ai_access_r1.sql` is remotely applied. Web Billing, Mobile AI UI, production AI region/rate controls, the normalized B5 outbox/change-cursor/conflict design, realtime timer takeover, and release hardening remain deferred.
 
 ## 1. Goals and boundaries
 
@@ -119,7 +119,7 @@ Open sessions receive special treatment: pull them before enabling session contr
 | Task completions | Unique `(user_id, task_id, local_date)`. Complete is idempotent. Uncomplete sets a tombstone but never removes an already-earned reward ledger event. Explicit later re-complete restores the row without a second reward. |
 | Habits/schedule | Habit fields use task rules. Weekdays are independent set rows, so different-day edits merge. |
 | Habit completions | Same as task completions. |
-| Activity intents | Only one active/pending intent per user via partial unique index. Concurrent creation: first accepted wins; the other stays local for user review. Consumed/cancelled is a state transition, not hard deletion. |
+| Activity intents | Only one active/pending intent per user via partial unique index. Concurrent creation: first accepted wins; the other stays local for user review. Explicit plan confirmation supersedes the current pending Intent through the existing cancelled/tombstone transition before creating the reviewed First Move; consumed/cancelled rows and Session links are historical, not hard-deleted. |
 | Sessions | Server state machine and optimistic version. One open session per user. Pause/resume/close transitions are idempotent; a closed session cannot reopen. First valid close wins, later close returns canonical state. Review fields may be edited after close. |
 | Journal | One row per local date. Never auto-merge private free text. If both changed from the same base, retain both versions locally and ask the user; deletion tombstone wins over stale edits, with explicit restore. |
 | Morning check | One immutable success per local date. Duplicate success returns existing row/reward. Attempt count is an atomic server counter; offline verification cannot claim a cloud reward until acknowledged. No image or image hash is stored. |
@@ -175,16 +175,16 @@ Account deletion requires recent authentication and a confirmation step describi
 - Do not use journal fields in telemetry. Redact request bodies and tokens from logs. Encrypt transport and rely on Supabase encryption at rest; document that RLS is access control, not end-to-end encryption.
 - Do not create a toothbrush-photo bucket. Verification endpoints use `Cache-Control: no-store`, bounded payloads, no body logging, and immediate memory disposal.
 
-## 15. Deferred Free, Pro, entitlement, and AI quota design
+## 15. Free, Pro, entitlement, and AI quota implementation
 
-This section records product and target-server behavior, not an implemented quota or entitlement system. Authenticated Free users are allotted five lifetime introductory actions; Guest is intended to receive five as well, but durable server-side Guest identity/enforcement remains unresolved in TASK-11. RevenueCat and the server-controlled AI quota gateway remain deferred.
+Authenticated Free users receive five lifetime introductory actions. Guest receives no live paid-provider AI and retains manual/local/mock fallback. RevenueCat Mobile Test Store purchase/restore and the server-controlled authenticated AI quota gateway are implemented; production deployment/configuration, Web Billing, Mobile AI UI, supported-region gating, and server abuse/rate limits remain incomplete.
 
 | Capability | Free | Pro |
 | --- | --- | --- |
 | Core non-AI productivity | Included | Included |
 | Manual daily planning and local First Move templates | Included | Included |
 | Tasks, habits, timers, Mini Journal, cat, and cross-device sync | Included | Included |
-| Introductory AI actions | Authenticated Free: 5 lifetime total per account. Guest: 5 intended, with durable identity/enforcement unresolved. | Not applicable while Pro is active; unused introductory credits remain if Pro lapses |
+| Introductory AI actions | Authenticated Free: 5 lifetime total per account. Guest: no paid-provider AI. | Not applicable while Pro is active; unused introductory credits remain if Pro lapses |
 | AI daily plan | Uses a remaining lifetime introductory action | 1 per local day |
 | AI toothbrush verification | Uses a remaining lifetime introductory action; manual/mock fallback remains | Up to 3 per local day |
 | AI “Make this smaller” | Uses a remaining lifetime introductory action | Up to 5 per local day |
@@ -193,27 +193,27 @@ This section records product and target-server behavior, not an implemented quot
 
 An “AI action” is one server-dispatched provider request. Local templates, manual planning, manual toothbrush fallback, deterministic local shrinking, validation failures before dispatch, entitlement checks, quota checks, and unsupported-region checks do not consume an action. Once a request is dispatched to a paid provider it consumes quota even if the provider times out or rejects it, because cost may already have been incurred. There are no automatic model retries.
 
-The product ceilings are therefore 5 lifetime calls for an authenticated Free account and 9 per local day for an active Pro account. The intended Guest allowance is also five, subject to the unresolved durable identity/enforcement design. These are target product ceilings, not implemented concurrency or abuse limits; future server-side minute/hour rate limits can be lower.
+The product ceilings are therefore 5 lifetime calls for an authenticated Free account and 9 per local day for an active Pro account. Guest has no paid-provider ceiling because live provider dispatch is unavailable. Concurrency-safe quota enforcement is implemented; future server-side minute/hour abuse limits may be lower.
 
 ### Server-side authorization and reservation flow
 
-The future paid AI gateway must use the following order:
+The paid AI gateway uses the following order:
 
 1. Validate the Supabase access token on the trusted server and derive `auth.uid()`; never accept a user UUID from the client body.
-2. Validate feature input, payload size, requested timezone/local date, and launch-region availability before spending quota.
+2. Validate feature input and payload size before spending quota. Production launch-region availability remains deferred.
 3. Use `auth.uid()` as the RevenueCat App User ID and verify the active `pro` entitlement from RevenueCat. A signed webhook mirror may improve UI/cache performance, but RevenueCat remains authoritative. A short server cache is acceptable only with a defined freshness bound; a stale or unavailable check fails closed without spending an introductory credit.
-4. Apply a server-side rate limit keyed by authenticated user plus IP/device risk signals. A rejected request creates no usage reservation.
+4. Apply future server-side rate limiting keyed by authenticated user plus appropriate risk signals. Current validation, auth, entitlement, and quota rejections create no usage reservation.
 5. In one database transaction, apply a per-user lock, look up the idempotency UUID, count authoritative usage, and reserve exactly one `ai_usage_events` row. Active Pro enforces the feature quota for the valid local day; otherwise enforce fewer than 5 lifetime introductory events across all features.
 6. Dispatch exactly one provider request using `gpt-5.6-luna`, short structured output, bounded input/output, a timeout, and `maxRetries: 0`.
 7. Validate the structured response and return a reviewable proposal. Never apply an AI result automatically.
 
 The design requires reservation and counting to serialize concurrent devices at quota boundaries. Repeating the same request UUID must never cause another provider call; the server should return a stored safe status or an “already dispatched” response if model output is deliberately not retained. Different payload or feature with a reused request UUID must be rejected.
 
-Daily quotas use the request’s server-validated IANA timezone and `local_date`. The server checks plausibility against its current time and profile timezone, permits a documented travel transition, and prevents arbitrary historic/future dates from evading limits.
+Daily quotas derive `local_date` from the authoritative profile IANA timezone and server/database time. Clients cannot submit a quota-authorizing timezone or date. Web status counts use the same profile timezone for presentation and are never an authorization source. After bearer validation, the read-only status path queries owner-scoped profile and usage rows with that same user bearer under existing RLS; the service role remains limited to the reservation RPC and is not assumed to have direct table-read grants.
 
 ### Subscription lifecycle
 
-Purchase and restore run through RevenueCat SDKs for the applicable storefront/platform. After login, the client identifies the RevenueCat user with the Supabase UUID; anonymous RevenueCat identities must be aliased under an approved account-transfer policy before purchase restoration. Webhooks may populate a server-side read model for UI and audit, but do not replace authoritative entitlement verification.
+Mobile Test Store purchase and restore run through RevenueCat SDKs and identify the signed-in user with the Supabase UUID. Web can display the same trusted entitlement but Web Billing is not implemented. Anonymous identity transfer policy, production storefront behavior, and webhooks/read models remain future work and do not replace authoritative entitlement verification.
 
 Upgrade takes effect after RevenueCat reports active `pro`. Downgrade, expiry, refund, billing grace, and transfer behavior follow RevenueCat entitlement state. Losing Pro never deletes synced data, local data, history, cat items, or journal entries. Pro-only views/content become unavailable without destructive mutation. Remaining lifetime introductory credits are preserved and may be used after Pro lapses.
 
@@ -240,7 +240,7 @@ This list is retained as architecture history. Decisions already resolved—incl
 
 ## 17. Original staged implementation plan
 
-This sequence is preserved as design history. Web Sync v1 and Mobile M1E implement the documented full-snapshot compatibility path; B5, RevenueCat, AI quota, platform hardening, and store release stages remain deferred.
+This sequence is preserved as design history. Web Sync v1 and Mobile M1E implement the documented full-snapshot compatibility path; RevenueCat Mobile Test Store behavior and authenticated AI quotas are partially implemented, while B5, Web Billing, Mobile AI UI, platform hardening, and store release remain deferred.
 
 1. **Product specification:** finalize remaining decisions, regional allowlist, subscription copy, privacy disclosures, and store policies.
 2. **Repository boundary:** introduce normalized domain DTOs, UUID generation, a repository interface, legacy-ID mapper, and migration tests without enabling auth.

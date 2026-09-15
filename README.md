@@ -39,7 +39,7 @@ Web provides the complete feature set below. Mobile currently implements Guest/a
 - Client-side application shell in `src/app/first-move-app.tsx`
 - Small domain modules under `src/lib` for dates, models, repository validation, sessions, rewards, history, planning, Morning Check, and cat progress
 - Versioned Web browser persistence and owner-scoped Mobile AsyncStorage persistence with validation and migration
-- Two Node.js route handlers: `/api/verify-toothbrush` and `/api/organize-day`
+- Two paid-AI dispatch route handlers (`/api/verify-toothbrush` and `/api/organize-day`) plus the read-only `/api/ai-access/status` presentation route
 - Official OpenAI JavaScript SDK using the Responses API and strict structured outputs
 - Dependency-free SVG/CSS charts and original SVG kitten artwork
 
@@ -60,7 +60,9 @@ GPT-5.6 Luna powers two optional, reviewable capabilities:
 1. **Multimodal toothbrush verification:** the server submits one low-detail image and accepts only a structured result indicating whether a real physical toothbrush is clearly visible. Ambiguous scenes, drawings, screenshots, and text-only images must fail.
 2. **Structured daily planning:** the server submits only the user’s explicit brain dump and receives one First Move, up to three priority tasks, up to three optional tasks, fixed categories and durations, and a concrete first step for every item. Nothing is saved before review and confirmation.
 
-Both integrations default to the `gpt-5.6-luna` model identifier and can be overridden with `OPENAI_MODEL`.
+Both integrations use the fixed `gpt-5.6-luna` model identifier. Live dispatch requires an authenticated Supabase bearer session, authoritative RevenueCat entitlement verification, and an atomic server-side quota reservation.
+
+Authenticated Free accounts receive exactly five lifetime paid-provider actions shared across AI features. Active Pro accounts receive 1 daily-plan, 3 toothbrush-verification, and 5 Make this smaller actions per authoritative local day. Web Settings displays the trusted plan and remaining allowance; it does not authorize dispatch. Guest has no live paid-provider access and retains manual/local/mock fallbacks.
 
 ## Codex collaboration
 
@@ -85,6 +87,7 @@ The project documents decisions in `PRD.md`, tracks delivery in `TASKS.md`, and 
 - Images must be JPEG or PNG and no larger than 2 MiB; planning input is limited to 2,000 characters and an 8 KiB request.
 - Morning Check allows at most three client attempts per local date.
 - Manual tasks, local templates, manual planning, and all core tracking remain usable when AI is disabled or fails.
+- Skipping Morning Start records no verification or reward and advances to Plan my day with a date-scoped local presentation marker.
 
 ## Local setup
 
@@ -108,9 +111,11 @@ Open [http://localhost:3000](http://localhost:3000).
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Auth/sync only | unset | Public Supabase client key protected by RLS |
 | `NEXT_PUBLIC_CLOUD_SETUP_ENABLED` | Web cloud setup/sync | unset | Enables the Web Sync v1 setup/runtime when exactly `true` |
 | `OPENAI_API_KEY` | Live AI only | unset | Server-side OpenAI credential |
-| `OPENAI_MODEL` | No | `gpt-5.6-luna` | Model used by both live routes |
 | `OPENAI_LIVE_VISION` | No | `false` | Set exactly `true` to enable live toothbrush verification |
 | `OPENAI_LIVE_PLANNING` | No | `false` | Set exactly `true` to enable live daily planning |
+| `SUPABASE_SERVICE_ROLE_KEY` | Live AI only | unset | Server-only key for the narrowly granted quota reservation RPC |
+| `REVENUECAT_SECRET_API_KEY` | Live AI only | unset | Server-only RevenueCat REST API v1 secret used to verify `pro` |
+| `AI_SERVER_REGION_CODE` | No | `ZZ` | Trusted two-letter deployment-region ledger metadata; not an allowlist |
 
 Never commit `.env.local` or credentials. Enabling a live flag without `OPENAI_API_KEY` returns a safe configuration error and does not fall back to an undisclosed paid call.
 
@@ -133,8 +138,9 @@ Tests mock OpenAI clients and make no live requests. For a manual mock test, lea
 1. Import the repository into a Node-compatible Next.js host such as Vercel.
 2. Use `npm run build` as the build command and the normal Next.js output preset.
 3. Deploy with both live flags unset or `false` for a no-cost mock demo.
-4. For a live demo, add `OPENAI_API_KEY` as a protected server environment variable, set only the desired live flag to `true`, and optionally set `OPENAI_MODEL`.
-5. Redeploy, then verify one request manually. Monitor OpenAI usage limits and hosting logs without logging submitted text or images.
+4. For a live demo, add `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `REVENUECAT_SECRET_API_KEY` as protected server environment variables, then set only the desired live flag to `true`.
+5. Migration `20260915120000_ai_access_r1.sql` is already remotely applied; do not reapply it as part of Web presentation work.
+6. Redeploy, then verify plan/allowance status and one request manually. Monitor OpenAI usage limits and hosting logs without logging submitted text or images.
 
 The API routes require a Node.js runtime. A static-only host cannot provide live AI verification or planning.
 
@@ -146,7 +152,7 @@ Vercel builds the root Next.js Web app. EAS builds the independent `/mobile` Exp
 - True-device iOS/Android and remaining Mobile↔Web/offline/restart/account-switch acceptance remain release gates
 - Running timers are device-owned and are not taken over or synchronized in realtime across devices
 - Browser timers cannot guarantee system-level alarms when the browser or device suspends the page
-- RevenueCat, server-controlled AI quotas, payments, app/site blocking, social features, and shared pets are not implemented
+- Authenticated server-controlled AI quotas and Web plan/allowance presentation are implemented; Guest paid-provider AI is excluded, while production region allowlisting/rate limits and Mobile AI UI remain deferred
 - Camera behavior depends on browser support, HTTPS, and user permission
 - AI output can be wrong and always requires user review
 - The kitten is intentionally lightweight SVG/CSS animation rather than a full game
@@ -154,7 +160,7 @@ Vercel builds the root Next.js Web app. EAS builds the independent `/mobile` Exp
 
 ## Release backlog
 
-The current deferred release work—including Mobile Today, Cat interaction polish, release UI, RevenueCat, server-controlled AI quotas, true-device testing, and store submission—is tracked in `TASKS.md`.
+The current deferred release work—including Web Billing, Mobile AI UI, Make this smaller provider integration, production AI region/rate controls, true-device testing, and store submission—is tracked in `TASKS.md`.
 
 ## License
 
