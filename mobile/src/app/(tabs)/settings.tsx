@@ -1,4 +1,5 @@
 import { AccountPanel } from "../../components/account-panel.tsx";
+import { SubscriptionPanel } from "../../components/subscription-panel.tsx";
 import { Body, Card, Heading, Label, Screen } from "../../components/ui.tsx";
 
 export default function SettingsScreen() {
@@ -9,6 +10,7 @@ export default function SettingsScreen() {
       description="Authentication is optional. Initialized accounts can sync core Mobile work; Guest Mode stays completely local."
     >
       <AccountPanel />
+      <SubscriptionPanel />
       <Card>
         <Label>Privacy</Label>
         <Heading>Secrets stay out of the app</Heading>
