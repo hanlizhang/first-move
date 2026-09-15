@@ -1,4 +1,4 @@
-import { addTask, createPendingIntent, getPendingIntent } from "./app-state.ts";
+import { addTask, replacePendingIntent } from "./app-state.ts";
 import { DIRECTIONS, INTENDED_DURATIONS, type AppState, type Direction, type IntendedDuration } from "./models.ts";
 import { nextShorterDuration } from "./templates.ts";
 import type { DayPlan, PlannedItem } from "./day-planning.ts";
@@ -27,7 +27,27 @@ export function applyPlanningReview(state: AppState, items: PlanningReviewItem[]
   if (!validPlanningReview(items)) return state;
   let next = state;
   for (const item of items.filter((candidate) => candidate.group !== "first-move")) next = addTask(next, { title: item.title, direction: item.category });
+  return applyConfirmedPlanFirstMove(next, items);
+}
+
+export function applyConfirmedPlanFirstMove(
+  state: AppState,
+  items: PlanningReviewItem[],
+  clock?: () => string,
+  idFactory?: () => string,
+): AppState {
+  if (!validPlanningReview(items)) return state;
   const firstMove = items.find((item) => item.group === "first-move");
-  if (firstMove && !getPendingIntent(next)) next = createPendingIntent(next, { stuckState: "unsure what is needed", direction: firstMove.category, moveText: firstMove.firstStep, intendedDurationMinutes: firstMove.durationMinutes });
-  return next;
+  if (!firstMove) return state;
+  return replacePendingIntent(
+    state,
+    {
+      stuckState: "unsure what is needed",
+      direction: firstMove.category,
+      moveText: firstMove.firstStep,
+      intendedDurationMinutes: firstMove.durationMinutes,
+    },
+    clock,
+    idFactory,
+  );
 }

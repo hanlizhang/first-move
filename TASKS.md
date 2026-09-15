@@ -243,22 +243,29 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 ## TASK-10: RevenueCat subscriptions and product access
 
-- [ ] Configure RevenueCat `pro` entitlement with Supabase Auth UUID as App User ID.
+- [x] Configure RevenueCat `pro` entitlement with Supabase Auth UUID as App User ID for the accepted Mobile Test Store flow.
+- [x] Verify the current `pro` entitlement from the trusted AI server using the Supabase Auth UUID and RevenueCat REST API; fail closed without treating an outage as Free.
+- [x] Implement and manually accept RevenueCat Mobile Test Store purchase and restore presentation.
 - [ ] Implement purchase, restore, account switch, downgrade/expiry/refund, grace-period, and webhook/read-model behavior.
+- [x] Show trusted server-derived Free/Pro and AI allowance status in Web Settings without adding Web purchase controls.
 - [ ] Add transparent Free/Pro comparison, usage display, manage-subscription flow, and non-destructive feature gates.
-- [ ] Keep cross-device sync and all core non-AI productivity features Free.
+- [x] Keep cross-device sync and all core non-AI productivity features Free.
 - [ ] Define advanced-history and premium-cat scope without degrading Free data or earned items.
 
 ## TASK-11: Server AI gateway, quotas, and regional providers
 
 - [ ] Define provider contracts for daily plan, toothbrush verification, and Make this smaller, with OpenAI, manual/local, and fake future regional implementations.
 - [ ] Before dispatch, verify authenticated user, supported region, RevenueCat Pro or remaining introductory credit, feature daily quota, and server rate limit.
-- [ ] Add append-only, idempotent server-side AI usage events; enforce 5 lifetime actions for authenticated Free users and Pro limits of 1/3/5 per local day under concurrency.
-- [ ] Design a durable server-side Guest identity and enforcement model so Guest can receive its intended 5 introductory actions without trusting a client-resettable counter.
-- [ ] Use `gpt-5.6-luna`, short validated structured outputs, bounded inputs/outputs, explicit user action, timeouts, and no automatic retries.
-- [ ] Preserve manual fallback for every AI feature and consume no usage when rejected before provider dispatch.
+- [x] Add append-only, idempotent server-side AI usage events; enforce 5 lifetime actions for authenticated Free users and Pro limits of 1/3/5 per local day under concurrency.
+- [x] Enforce the current Guest rule: no live paid-provider AI; manual/local/mock fallback only, with no client-resettable credit counter.
+- [x] Use `gpt-5.6-luna`, short validated structured outputs, bounded inputs/outputs, explicit user action, timeouts, and no automatic retries.
+- [x] Preserve manual fallback for every AI feature and consume no usage when rejected before provider dispatch.
+- [x] Make confirmed reviewed-plan First Moves supersede only the current pending Intent through the existing cancellation lifecycle, while preserving consumed/session-linked history and handing the replacement directly to Focus.
+- [x] Read Web Free/Pro presentation counts without reservation by using the validated user's bearer under existing owner RLS; do not depend on direct service-role table grants.
 - [ ] Launch only in an approved supported-international-market allowlist; exclude Mainland China initially.
 - [ ] Test entitlement forgery, quota races, timezone abuse, provider/RevenueCat outages, privacy boundaries, and absence of secrets from clients.
+
+**AI Access R1 status:** The Web daily-plan and toothbrush live routes require a validated Supabase bearer token, verify RevenueCat `pro` server-side, and call a service-role-only atomic quota reservation before one OpenAI dispatch. Web Settings reads Free/Pro and remaining allowance from a separate server status path that never reserves usage; owner-scoped status reads reuse the validated bearer and existing RLS. Confirmed planning reviews replace only the active pending Intent and preserve historical Session links. Database/application tests cover the authenticated 5-lifetime and Pro 1/3/5 contracts, idempotency, per-user locking, authoritative profile timezone, fail-closed outages, privacy fields, no provider retry, status reads, and reviewed First Move handoff. Migration `20260915120000_ai_access_r1.sql` is remotely applied. Web Billing, Mobile AI UI, the Make this smaller provider call, production region allowlisting/rate limits, environment configuration, and deployment remain incomplete.
 
 ## TASK-12: Mobile v1
 

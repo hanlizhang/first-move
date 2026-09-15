@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { handleVerifyToothbrush, MAX_IMAGE_BYTES } from "../app/api/verify-toothbrush/route.ts";
+import type { AiAuthorizer } from "./ai-access.ts";
 import { parseToothbrushVerification, verifyWithOpenAI } from "./toothbrush-openai.ts";
+
+const authorize: AiAuthorizer = async (_request, input) => ({
+  outcome: "authorized",
+  quota: {
+    accessBasis: "pro",
+    feature: input.feature,
+    remainingFeatureActionsToday: 2,
+  },
+});
 
 test("OpenAI verification uses the bounded low-detail Responses request", async () => {
   let captured: Record<string, unknown> | undefined;
@@ -32,11 +42,13 @@ test("route mock mode never constructs an OpenAI client", async () => {
 test("route calls the mocked OpenAI client once only in configured live mode", async () => {
   let calls = 0;
   const response = await handleVerifyToothbrush(new Request("http://local/api/verify-toothbrush", { method: "POST", headers: { "Content-Type": "image/png" }, body: new Uint8Array([1, 2]) }), {
-    environment: { OPENAI_LIVE_VISION: "true", OPENAI_API_KEY: "test-only", OPENAI_MODEL: "test-model" },
-    createClient: () => ({ create: async (parameters: unknown) => { calls += 1; assert.equal((parameters as { model: string }).model, "test-model"); return { output_text: JSON.stringify({ passed: false, detectedObject: "unclear", shortMessage: "The scene is unclear." }) }; } }) as never,
+    environment: { OPENAI_LIVE_VISION: "true", OPENAI_API_KEY: "test-only", OPENAI_MODEL: "must-not-override" },
+    authorize,
+    createClient: () => ({ create: async (parameters: unknown) => { calls += 1; assert.equal((parameters as { model: string }).model, "gpt-5.6-luna"); return { output_text: JSON.stringify({ passed: false, detectedObject: "unclear", shortMessage: "The scene is unclear." }) }; } }) as never,
   });
   assert.equal(response.status, 200); assert.equal(calls, 1);
   assert.equal(response.headers.get("x-verification-mode"), "live");
+  assert.deepEqual((await response.json() as { quota: unknown }).quota, { accessBasis: "pro", feature: "toothbrush_verification", remainingFeatureActionsToday: 2 });
 });
 
 test("route rejects unsupported and oversized images before OpenAI", async () => {
@@ -45,4 +57,39 @@ test("route rejects unsupported and oversized images before OpenAI", async () =>
   const wrongType = await handleVerifyToothbrush(new Request("http://local", { method: "POST", headers: { "Content-Type": "text/plain" }, body: "x" }), dependencies);
   const oversized = await handleVerifyToothbrush(new Request("http://local", { method: "POST", headers: { "Content-Type": "image/jpeg", "Content-Length": String(MAX_IMAGE_BYTES + 1) }, body: new Uint8Array([1]) }), dependencies);
   assert.equal(wrongType.status, 415); assert.equal(oversized.status, 413); assert.equal(clients, 0);
+});
+
+test("unauthenticated live verification is rejected before OpenAI dispatch", async () => {
+  let clients = 0;
+  const response = await handleVerifyToothbrush(new Request("http://local", { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: new Uint8Array([1]) }), {
+    environment: { OPENAI_LIVE_VISION: "true", OPENAI_API_KEY: "test-only" },
+    createClient: () => { clients += 1; throw new Error("must not run"); },
+  });
+  assert.equal(response.status, 401);
+  assert.equal((await response.json() as { code: string }).code, "unauthenticated");
+  assert.equal(clients, 0);
+});
+
+test("a denied Pro quota returns safe metadata and does not construct OpenAI", async () => {
+  let clients = 0;
+  const response = await handleVerifyToothbrush(new Request("http://local", { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: new Uint8Array([1]) }), {
+    environment: { OPENAI_LIVE_VISION: "true", OPENAI_API_KEY: "test-only" },
+    authorize: async () => ({ outcome: "denied", code: "pro_feature_quota_exhausted", quota: { accessBasis: "pro", feature: "toothbrush_verification", remainingFeatureActionsToday: 0 } }),
+    createClient: () => { clients += 1; throw new Error("must not run"); },
+  });
+  assert.equal(response.status, 429);
+  assert.deepEqual(await response.json(), { code: "pro_feature_quota_exhausted", error: "Today’s Pro toothbrush-verification quota is exhausted.", quota: { accessBasis: "pro", feature: "toothbrush_verification", remainingFeatureActionsToday: 0 } });
+  assert.equal(clients, 0);
+});
+
+test("provider failure after reservation makes exactly one OpenAI request", async () => {
+  let providerCalls = 0;
+  const response = await handleVerifyToothbrush(new Request("http://local", { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: new Uint8Array([1]) }), {
+    environment: { OPENAI_LIVE_VISION: "true", OPENAI_API_KEY: "test-only" },
+    authorize,
+    createClient: () => ({ create: async () => { providerCalls += 1; throw new Error("provider failed"); } }) as never,
+  });
+  assert.equal(response.status, 502);
+  assert.equal((await response.json() as { code: string }).code, "openai_provider_failure");
+  assert.equal(providerCalls, 1);
 });

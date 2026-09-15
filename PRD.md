@@ -147,6 +147,7 @@ Each direction uses neutral language and can be changed before or after a sessio
 - Never apply proposals automatically. Manual task entry and organization remain complete alternatives.
 - Exclude reflections, toothbrush images, history, habits, cat state, and unrelated local data from AI requests.
 - Offer Plan my day after Morning Start and inside Today. Submit only an explicitly entered brain dump (maximum 2,000 characters), return one First Move plus up to three priority and three optional tasks, and require editable confirmation before saving.
+- Confirming a reviewed plan makes its reviewed First Move the one current executable pending Intent, with the reviewed first step, direction, and duration. Any older pending Intent is superseded through the existing cancelled/tombstone sync lifecycle; completed/consumed Intent and Session relationships remain historical and Focus can immediately use the replacement.
 - Keep mock planning as the safe default. Live planning uses one non-retried Responses API request only after the user clicks Organize with AI; local manual planning and ordinary task creation remain available at all times.
 - Pro permits one AI daily-plan request per local day. A Free account may use one of its five lifetime introductory AI actions.
 
@@ -234,16 +235,18 @@ Mobile now reuses that frozen contract for already-initialized accounts only. We
 | Core non-AI productivity | Included | Included |
 | Manual daily planning and local First Move templates | Included | Included |
 | Tasks, habits, timers, Mini Journal, core cat, and cross-device sync | Included | Included |
-| Introductory AI | Authenticated Free: 5 lifetime actions per account. Guest: 5 intended actions, with durable identity/enforcement unresolved. | Unused introductory credits remain if Pro later lapses |
+| Introductory AI | Authenticated Free: 5 lifetime actions per account. Guest: no paid-provider AI; manual/local/mock fallback only. | Unused introductory credits remain if Pro later lapses |
 | AI daily plan | Uses an introductory action | 1 per local day |
 | AI toothbrush verification | Uses an introductory action | Up to 3 per local day |
 | AI Make this smaller | Uses an introductory action | Up to 5 per local day |
 | Advanced history | Not included | Included |
 | Premium cat content | Not included | Included |
 
-One AI action means one paid provider request dispatched by the server. Manual/local fallbacks and requests rejected before provider dispatch do not consume quota. The product decision gives authenticated Free users five lifetime actions and intends the same five-action allowance for Guest. Durable server-side Guest identity and enforcement remain unresolved in TASK-11. Pro limits remain 9 paid calls per local day across the documented feature quotas. This quota system is not yet implemented.
+One AI action means one paid provider request dispatched by the server. Manual/local/mock fallbacks and requests rejected before provider dispatch do not consume quota. Guest has no paid-provider AI access. Authenticated Free receives exactly five lifetime actions shared across AI features. Pro limits remain 9 paid calls per local day across the documented feature quotas. AI Access R1 enforces authenticated Free/Pro quotas for the existing daily-plan and toothbrush routes; the Make this smaller 5/day contract is enforced by the shared reservation operation while its current UI remains deterministic/local.
 
-Before production paid OpenAI dispatch, the server must verify the authenticated Supabase user or future durable Guest identity, RevenueCat `pro` entitlement or remaining introductory credit, feature-specific local-day quota, supported region, and server-side rate limit, then record one idempotent usage event. Client counters and entitlement claims must not be trusted.
+Before paid OpenAI dispatch, AI Access R1 validates a Supabase bearer session, derives its UUID, verifies RevenueCat `pro` through the server REST API, derives the local date from the authoritative profile timezone and server time, and atomically reserves one idempotent usage event. Client counters, user IDs, dates, and entitlement claims are not trusted. Production supported-region allowlisting and server abuse/rate limits remain later TASK-11 work.
+
+Web Settings reads presentation-safe Free/Pro and remaining-quota status from a separate authenticated server path that never reserves usage or authorizes dispatch. Web Plan my day and toothbrush AI UI are implemented; Mobile Test Store purchase/restore is implemented, but Web Billing and Mobile AI UI are not. AI quota migration `20260915120000_ai_access_r1.sql` is remotely applied; production deployment/configuration is not complete.
 
 ## Regional AI strategy
 
@@ -269,5 +272,5 @@ Initial production launch targets supported international markets and does not o
 - Effort receives gentle feedback, while missed days and failed or cancelled sessions receive no punishment.
 - AI is optional and user-initiated; local templates and manual controls are always available.
 - RevenueCat is authoritative for Pro; Supabase Auth UUID is its App User ID.
-- Authenticated Free users receive 5 lifetime introductory AI actions. Guest is also intended to receive 5, but durable server-side Guest identity/enforcement remains an unresolved TASK-11 design item. The quota system is not implemented; Pro product limits remain 1 plan, 3 toothbrush verifications, and 5 Make this smaller requests per local day.
+- Authenticated Free users receive 5 lifetime introductory AI actions. Guest has no live paid-provider AI access and retains manual/local/mock fallbacks. AI Access R1 enforces the authenticated quotas server-side; Pro product limits remain 1 plan, 3 toothbrush verifications, and 5 Make this smaller requests per local day.
 - OpenAI-backed features launch only in supported international markets, use `gpt-5.6-luna` with short structured outputs and no automatic retries, and keep credentials server-side.

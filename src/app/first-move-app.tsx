@@ -107,6 +107,8 @@ import {
   reflectionPrivacyText,
   shouldOpenAdditionalNote,
 } from "@/lib/reflection-presentation";
+import { currentSupabaseAccessToken } from "@/lib/supabase/client";
+import { markMorningStartSkipped, morningStartSkippedForDate } from "@/lib/morning-skip";
 
 const weekdayLabels: Record<Weekday, string> = {
   sun: "Sun",
@@ -129,6 +131,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
   const [activeView, setActiveView] = useState<AppView>("first-moves");
   const [dailyPlan, setDailyPlan] = useState<DailyPlanRecord>();
   const [reviewingPlan, setReviewingPlan] = useState(false);
+  const [morningSkippedDate, setMorningSkippedDate] = useState<string>();
   const [cloudSetupStatus, setCloudSetupStatus] = useState<CloudSyncStatus>("not-initialized");
   const [companionReaction, setCompanionReaction] = useState<CompanionReaction>();
   const companionController = useRef<ReturnType<typeof createCompanionEventController> | undefined>(undefined);
@@ -173,6 +176,15 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
     return () => window.clearTimeout(timer);
   }, [today]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setMorningSkippedDate(
+        morningStartSkippedForDate(window.localStorage, today) ? today : undefined,
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [today]);
+
   function navigate(view: AppView) {
     setActiveView(view);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -187,7 +199,12 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
   }
 
   function reviewPlan() { setReviewingPlan(true); navigate("first-moves"); }
-  const plannerState = plannerPresentation(morningComplete, Boolean(dailyPlan), reviewingPlan);
+  function skipMorningStart() {
+    markMorningStartSkipped(window.localStorage, today);
+    setMorningSkippedDate(today);
+  }
+  const morningSkipped = !morningComplete && morningSkippedDate === today;
+  const plannerState = plannerPresentation(morningComplete || morningSkipped, Boolean(dailyPlan), reviewingPlan);
   const effectiveCloudStatus = cloudRuntime.active ? cloudRuntime.status : cloudSetupStatus;
   const accountLabel = accountSyncLabel(Boolean(initialEmail), getCloudSetupEnabled() ? effectiveCloudStatus : "not-initialized");
 
@@ -228,10 +245,10 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
           </p>
         </div>
 
-        {plannerState === "morning" && <MorningStart state={state} today={today} update={update} />}
-        {plannerState === "full" && <><MorningStart state={state} today={today} update={update} /><DayPlanner id="daily-plan" state={state} update={update} onConfirmed={savePlan} onOpenTasks={() => navigate("tasks")} /></>}
+        {plannerState === "morning" && <MorningStart state={state} today={today} skipped={morningSkipped} onSkip={skipMorningStart} update={update} />}
+        {plannerState === "full" && <><MorningStart state={state} today={today} skipped={morningSkipped} onSkip={skipMorningStart} update={update} /><DayPlanner id="daily-plan" update={update} onConfirmed={savePlan} onOpenTasks={() => navigate("tasks")} /></>}
         {plannerState === "summary" && dailyPlan && <PlanSummary plan={dailyPlan} pendingIntent={pendingIntent} actionLabel="Review or edit plan" onAction={reviewPlan} />}
-        {plannerState === "review" && dailyPlan && <DayPlanner id="daily-plan" state={state} update={update} initialItems={dailyPlan.items} onConfirmed={savePlan} onClose={() => setReviewingPlan(false)} onOpenTasks={() => navigate("tasks")} />}
+        {plannerState === "review" && dailyPlan && <DayPlanner id="daily-plan" update={update} initialItems={dailyPlan.items} onConfirmed={savePlan} onClose={() => setReviewingPlan(false)} onOpenTasks={() => navigate("tasks")} />}
 
         <div className="mt-8 grid items-start gap-5 xl:grid-cols-[1.05fr_0.95fr]">
           <FirstMovePicker
@@ -292,7 +309,7 @@ export default function FirstMoveApp({ initialEmail }: { initialEmail: string | 
 
 type MorningPhase = "idle" | "permission" | "camera" | "preview" | "loading" | "failure" | "unsupported";
 
-function MorningStart({ state, today, update }: { state: AppState; today: string; update: (recipe: (state: AppState) => AppState) => void }) {
+function MorningStart({ state, today, skipped, onSkip, update }: { state: AppState; today: string; skipped: boolean; onSkip: () => void; update: (recipe: (state: AppState) => AppState) => void }) {
   const completed = state.morningChecks.some((check) => check.dateKey === today);
   const [phase, setPhase] = useState<MorningPhase>("idle");
   const [image, setImage] = useState<Blob>();
@@ -348,7 +365,7 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
     update((current) => recordMorningAttempt(current, today));
     setPhase("loading"); setMessage("Checking this photo…");
     try {
-      const result = await verifyToothbrushPhoto(image, mockOutcome);
+      const result = await verifyToothbrushPhoto(image, mockOutcome, fetch, await currentSupabaseAccessToken());
       if (result.outcome === "pass") {
         update((current) => completeMorningCheck(current, today, captureMethod, result.mode));
         window.dispatchEvent(new Event("first-move:morning-success"));
@@ -360,13 +377,14 @@ function MorningStart({ state, today, update }: { state: AppState; today: string
   }
 
   function retry() { stopCamera(); clearImage(); setMessage(""); setPhase("idle"); }
-  function skip() { stopCamera(); clearImage(); setMessage("Skipped for today. No reward or penalty was recorded."); setPhase("idle"); }
+  function skip() { stopCamera(); clearImage(); onSkip(); }
   function resetToday() { stopCamera(); clearImage(); setMessage(""); setPhase("idle"); update((current) => resetMorningCheck(current, today)); }
 
   if (completed) return <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4" aria-labelledby="morning-heading"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Morning Start complete</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">The kitten enjoyed breakfast.</h2></div>{process.env.NODE_ENV === "development" && <details className="mt-3 border-t border-emerald-200 pt-2 text-xs text-stone-500"><summary className="cursor-pointer">Development tools</summary><button type="button" className="mt-2 underline underline-offset-2" onClick={resetToday}>Reset today&apos;s Morning Check</button></details>}</section>;
+  if (skipped) return <section className="mt-8 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4" aria-labelledby="morning-heading"><p className="text-xs font-bold uppercase tracking-[0.18em] text-stone-600">Morning Start</p><h2 id="morning-heading" className="mt-1 text-lg font-bold">Skipped for today</h2><p className="mt-2 text-sm text-stone-600">No morning reward or verified check was recorded. You can continue with Plan my day.</p></section>;
 
   return <section className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm sm:p-6" aria-labelledby="morning-heading"><p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Morning Start · Fixed daily mission</p><h2 id="morning-heading" className="mt-2 text-2xl font-bold">Take a current photo with your toothbrush</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">The photo is resized to a maximum of 768 px in this browser and is never saved to local storage. This is a routine check, not dental analysis.</p>
-    {phase === "idle" && <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={startCamera}>Open camera</button><UploadButton onFile={chooseFile} /></div>}
+    {phase === "idle" && <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={startCamera}>Open camera</button><UploadButton onFile={chooseFile} /><button type="button" className="rounded-xl px-3 py-2 text-sm font-semibold text-stone-600" onClick={skip}>Skip without reward</button></div>}
     {phase === "permission" && <p className="mt-5 rounded-xl bg-white p-4 text-sm" role="status">Waiting for camera permission. Your browser may ask you to allow camera access.</p>}
     {phase === "camera" && <div className="mt-5"><video ref={videoRef} autoPlay playsInline muted className="max-h-96 w-full rounded-2xl bg-stone-900 object-contain" aria-label="Live camera preview" /><div className="mt-3 flex gap-2"><button type="button" className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white" onClick={capture}>Take photo</button><SecondaryButton onClick={retry}>Cancel</SecondaryButton></div></div>}
     {phase === "preview" && previewUrl && <div className="mt-5"><Image src={previewUrl} alt="Preview of the selected toothbrush check photo" width={768} height={768} unoptimized className="max-h-96 w-full rounded-2xl bg-stone-100 object-contain" /><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={attempts >= MAX_MORNING_ATTEMPTS} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={verify}>Verify photo</button><SecondaryButton onClick={retry}>Retake</SecondaryButton></div></div>}

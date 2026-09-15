@@ -4,6 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { AUTH_UNAVAILABLE_MESSAGE, requestMagicLink, signOut } from "@/lib/auth-flow";
+import {
+  loadWebAiAccessStatus,
+  webAiAccessPresentation,
+  type WebAiAccessState,
+} from "@/lib/ai-access-status";
 import type { CloudSyncStatus } from "@/lib/account-sync-status";
 import { accountSyncLabel } from "@/lib/account-sync-status";
 import { getCloudSetupEnabled } from "@/lib/cloud-setup-feature";
@@ -20,7 +25,7 @@ import {
   type CloudSetupPhase,
 } from "@/lib/cloud-setup";
 import type { SafeCloudImportDiagnostic } from "@/lib/cloud-import";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, currentSupabaseAccessToken } from "@/lib/supabase/client";
 
 interface AuthSettingsProps {
   initialEmail: string | null;
@@ -47,8 +52,24 @@ export default function AuthSettings({
   const [confirmCloudHydration, setConfirmCloudHydration] = useState(false);
   const [safeDiagnostic, setSafeDiagnostic] = useState<SafeCloudImportDiagnostic>();
   const [diagnosticCopied, setDiagnosticCopied] = useState(false);
+  const [aiAccess, setAiAccess] = useState<WebAiAccessState>(
+    initialEmail ? { kind: "loading" } : { kind: "guest" },
+  );
   const setupClient = useRef<ReturnType<typeof createClient> | undefined>(undefined);
   const setupEnabled = getCloudSetupEnabled();
+
+  useEffect(() => {
+    if (!authenticatedEmail) return;
+    let active = true;
+    void currentSupabaseAccessToken()
+      .then((token) => loadWebAiAccessStatus(token))
+      .then((status) => {
+        if (active) setAiAccess(status);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authenticatedEmail]);
 
   useEffect(() => {
     if (!setupEnabled || !authenticatedEmail || cloudModeActive) return;
@@ -146,6 +167,7 @@ export default function AuthSettings({
     setMessage(result.message);
     if (result.ok) {
       setAuthenticatedEmail(null);
+      setAiAccess({ kind: "guest" });
       router.refresh();
     }
     setPending(false);
@@ -159,6 +181,8 @@ export default function AuthSettings({
         Sign in with a secure email link. Guest Mode stays available. After cloud mode is activated,
         Supabase is the canonical account copy and this device keeps an immediate local cache.
       </p>
+
+      <AiAccessPanel state={aiAccess} />
 
       {authenticatedEmail ? (
         <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -260,6 +284,29 @@ export default function AuthSettings({
           ? "Cloud mode saves locally first, then sends authenticated owner-scoped changes to the canonical cloud workspace."
           : "Local changes continue saving on this device whether you sign in or not."}
       </div>
+    </section>
+  );
+}
+
+function AiAccessPanel({ state }: { state: WebAiAccessState }) {
+  const presentation = webAiAccessPresentation(state);
+  return (
+    <section
+      className={`mt-6 rounded-xl border p-4 ${presentation.tone === "success" ? "border-violet-200 bg-violet-50" : "border-stone-200 bg-stone-50"}`}
+      aria-labelledby="ai-access-heading"
+    >
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-700">First Move AI</p>
+      <h2 id="ai-access-heading" className="mt-1 text-xl font-bold">{presentation.heading}</h2>
+      <p className="mt-2 text-sm leading-6 text-stone-600">{presentation.summary}</p>
+      {presentation.allowances.length > 0 && (
+        <ul className="mt-3 space-y-1 text-sm text-stone-700">
+          {presentation.allowances.map((allowance) => <li key={allowance}>{allowance}</li>)}
+        </ul>
+      )}
+      {state.kind === "ready" && state.status.accessBasis === "introductory" && (
+        <p className="mt-3 text-xs text-stone-500">Pro purchasing is currently available in the Mobile app. Web purchasing is not yet available.</p>
+      )}
+      <p className="mt-3 text-xs text-stone-500">This display is informational. The server checks access again before every live AI request.</p>
     </section>
   );
 }

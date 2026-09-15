@@ -26,13 +26,25 @@ export function planningMode(environment: Record<string, string | undefined>): "
   return environment.OPENAI_LIVE_PLANNING === "true" ? "live" : "mock";
 }
 
-export async function requestDayPlan(brainDump: string, request: typeof fetch = fetch): Promise<PlanningResult> {
+export async function requestDayPlan(
+  brainDump: string,
+  request: typeof fetch = fetch,
+  accessToken?: string,
+): Promise<PlanningResult> {
   const text = brainDump.trim();
   if (!text || text.length > MAX_BRAIN_DUMP_LENGTH) return { outcome: "failure", message: "Enter between 1 and 2,000 characters." };
   try {
-    const response = await request("/api/organize-day", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brainDump: text }) });
+    const response = await request("/api/organize-day", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-Id": crypto.randomUUID(),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ brainDump: text }),
+    });
     const value = await response.json() as unknown;
-    if (!response.ok || !isDayPlan(value)) return { outcome: "failure", message: response.status === 503 ? "AI planning is not configured. You can keep planning manually." : "The plan could not be organized. Your text is still here, and manual planning remains available." };
+    if (!response.ok || !isDayPlan(value)) return { outcome: "failure", message: planningFailureMessage(value, response.status) };
     return { outcome: "success", plan: value, mode: response.headers.get("x-planning-mode") === "live" ? "live" : "mock" };
   } catch {
     return { outcome: "failure", message: "Planning is unavailable. No retry was made; your text is still here." };
@@ -115,6 +127,17 @@ function validText(value: unknown): value is string { return typeof value === "s
 function isDirection(value: unknown): value is Direction { return typeof value === "string" && DIRECTIONS.includes(value as Direction); }
 function isDuration(value: unknown): value is IntendedDuration { return typeof value === "number" && INTENDED_DURATIONS.includes(value as IntendedDuration); }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+
+function planningFailureMessage(value: unknown, status: number): string {
+  const code = isRecord(value) && typeof value.code === "string" ? value.code : "";
+  if (code === "unauthenticated") return "Sign in to use live AI planning, or keep planning manually.";
+  if (code === "introductory_quota_exhausted") return "Your five introductory AI actions are used. Manual planning remains available.";
+  if (code === "pro_feature_quota_exhausted") return "Today’s Pro AI planning action is used. Manual planning remains available.";
+  if (code === "duplicate_request") return "That AI request was already sent and was not repeated. Your text is still here.";
+  if (code === "revenuecat_unavailable" || code === "quota_service_unavailable" || status === 503) return "AI planning is temporarily unavailable. You can keep planning manually.";
+  if (code === "openai_provider_failure") return "The AI planning request failed. Your text is still here, and manual planning remains available.";
+  return "The plan could not be organized. Your text is still here, and manual planning remains available.";
+}
 
 const plannedItemSchema = { type: "object", additionalProperties: false, properties: { title: { type: "string", minLength: 1, maxLength: 160 }, category: { type: "string", enum: DIRECTIONS }, durationMinutes: { type: "integer", enum: INTENDED_DURATIONS }, firstStep: { type: "string", minLength: 1, maxLength: 160 } }, required: ["title", "category", "durationMinutes", "firstStep"] };
 const dayPlanJsonSchema = { type: "object", additionalProperties: false, properties: { firstMove: plannedItemSchema, priorityTasks: { type: "array", maxItems: 3, items: plannedItemSchema }, optionalTasks: { type: "array", maxItems: 3, items: plannedItemSchema }, suggestedCategory: { type: "string", enum: DIRECTIONS }, suggestedDuration: { type: "integer", enum: INTENDED_DURATIONS } }, required: ["firstMove", "priorityTasks", "optionalTasks", "suggestedCategory", "suggestedDuration"] };

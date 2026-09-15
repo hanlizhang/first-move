@@ -2,7 +2,7 @@
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
-Current status: M0 through M1E plus RevenueCat R1 identity/entitlement reads and R2 Test Store purchase/restore presentation are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, and canonical initialized-workspace hydration are manually verified on iOS Simulator. RevenueCat production-store products, feature gates, webhooks, and server authorization remain deferred.
+Current status: M0 through M1E plus RevenueCat R1 identity/entitlement reads and R2 Test Store purchase/restore presentation are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, canonical initialized-workspace hydration, and RevenueCat Test Store purchase/restore are manually verified on iOS Simulator. The shared Web server now authorizes authenticated AI independently of Mobile presentation state. RevenueCat production-store products, feature gates beyond AI access, webhooks, Web Billing, and Mobile AI UI remain deferred.
 
 The M0–M1D sections below preserve each increment’s historical boundary. M1E supersedes their authenticated read-only/no-business-write constraints for the current app.
 
@@ -254,11 +254,11 @@ Prerequisite: use a Web-initialized Supabase account and the same account on Mob
 
 Prerequisite: rebuild the development client after installing `react-native-purchases-ui`, then use an authenticated Supabase account with the RevenueCat Test Store key.
 
-- [ ] Authenticated Free Settings shows **Current plan: Free**, **Upgrade to Pro**, and **Restore purchases** without app-authored prices.
-- [ ] **Upgrade to Pro** opens the published **First Move Pro** paywall from the current/default Offering and exposes its configured Monthly and Annual Test Store packages.
-- [ ] Complete a Test Store purchase and confirm Settings immediately changes to **Current plan: Pro** without an upgrade CTA.
-- [ ] Dismiss or cancel the paywall and confirm Settings remains Free with neutral feedback and all features usable.
-- [ ] Restore an active `pro` purchase and confirm Settings changes to Pro; restore with no active entitlement remains Free with neutral feedback.
+- [x] Authenticated Free Settings shows **Current plan: Free**, **Upgrade to Pro**, and **Restore purchases** without app-authored prices.
+- [x] **Upgrade to Pro** opens the published **First Move Pro** paywall from the current/default Offering and exposes its configured Monthly and Annual Test Store packages.
+- [x] Complete a Test Store purchase and confirm Settings immediately changes to **Current plan: Pro** without an upgrade CTA.
+- [x] Dismiss or cancel the paywall and confirm Settings remains Free with neutral feedback and all features usable.
+- [x] Restore an active `pro` purchase and confirm Settings changes to Pro; restore with no active entitlement remains Free with neutral feedback.
 - [ ] Continue as Guest and confirm purchase/restore controls are unavailable, sign-in guidance is shown, and Guest Mode remains fully functional.
 - [ ] Switch from Pro account A to Free account B and confirm A’s Pro state never appears for B, including while B loads.
 - [ ] Simulate purchase/restore failures and confirm Settings remains usable with the last verified plan and no feature gate.
