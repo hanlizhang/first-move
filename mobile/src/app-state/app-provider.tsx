@@ -18,6 +18,19 @@ import {
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  aiAccessForUser,
+  type MobileAiAccessState,
+} from "../ai/access.ts";
+import {
+  loadMobileAiAccessStatus,
+  requestMobileDayPlan,
+  requestMobileToothbrushVerification,
+  type DayPlanRequestResult,
+  type MobileAiSessionSource,
+  type ToothbrushRequestResult,
+} from "../ai/client.ts";
+
+import {
   initialAuthState,
   reduceAuthState,
   restoreAuthSession,
@@ -46,12 +59,27 @@ import {
   type CatPurchaseOutcome,
 } from "../domain/cat.ts";
 import { catItem, type CatItemId } from "../domain/cat-items.ts";
-import { createEmptyState, type AppState } from "../domain/models.ts";
+import {
+  createEmptyState,
+  type AppState,
+  type DailyPlanRecord,
+  type PlanningReviewItem,
+} from "../domain/models.ts";
+import {
+  applyConfirmedPlanFirstMove,
+  applyPlanningReview,
+  validPlanningReview,
+} from "../domain/day-planning.ts";
 import { reconcileRunningCountdown } from "../domain/sessions.ts";
 import {
   createMobileRepository,
   localWorkspaceKey,
 } from "../local/repository.ts";
+import {
+  loadGuestDailyPlans,
+  saveGuestDailyPlan,
+} from "../local/daily-plans.ts";
+import { getFirstMoveApiBaseUrl } from "../config.ts";
 import { getSupabaseClient } from "../supabase/client.ts";
 import { revenueCatSubscription } from "../subscriptions/revenuecat-native.ts";
 import type {
@@ -73,7 +101,9 @@ interface AppContextValue {
   cloud: CloudHydrationState;
   sync: AppSyncState;
   subscription: SubscriptionState;
+  aiAccess: MobileAiAccessState;
   localWorkspace: AppState;
+  dailyPlans: DailyPlanRecord[];
   localWorkspaceStatus: LocalWorkspaceStatus;
   localWorkspaceMessage?: string;
   workspaceEditable: boolean;
@@ -83,6 +113,13 @@ interface AppContextValue {
   signOut(): Promise<void>;
   retryAuthRestore(): Promise<void>;
   refreshCloud(): Promise<void>;
+  refreshAiAccess(): Promise<void>;
+  organizeDay(brainDump: string): Promise<DayPlanRequestResult>;
+  verifyToothbrush(image: Blob): Promise<ToothbrushRequestResult>;
+  confirmDailyPlan(
+    dateKey: string,
+    items: PlanningReviewItem[],
+  ): Promise<AppState | undefined>;
   presentProPaywall(): Promise<PurchaseFlowOutcome>;
   restorePurchases(): Promise<RestoreFlowOutcome>;
   updateLocalWorkspace(
@@ -128,7 +165,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     useState<RevenueCatPresentationSnapshot>(
       revenueCatSubscription.getPresentationSnapshot,
     );
+  const [aiAccess, setAiAccess] = useState<MobileAiAccessState>({
+    status: "guest",
+  });
   const [localWorkspace, setLocalWorkspace] = useState<AppState>(createEmptyState);
+  const [dailyPlanSnapshot, setDailyPlanSnapshot] = useState<{
+    ownerKey?: string;
+    plans: DailyPlanRecord[];
+  }>({ plans: [] });
   const [loadedLocalOwnerKey, setLoadedLocalOwnerKey] = useState<
     string | undefined
   >();
@@ -144,6 +188,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<SupabaseClient | undefined>(undefined);
   const syncRuntimeRef = useRef<MobileSyncRuntime | undefined>(undefined);
   const hydrationRequestRef = useRef(0);
+  const aiAccessRequestRef = useRef(0);
   const accountBootstrapEnabledRef = useRef(false);
   const authenticatedUserId =
     auth.status === "authenticated" ? auth.user.id : undefined;
@@ -162,6 +207,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? localWorkspace
         : createEmptyState(),
     [activeLocalOwnerKey, loadedLocalOwnerKey, localWorkspace],
+  );
+  const visibleDailyPlans = useMemo(
+    () =>
+      activeLocalOwnerKey && dailyPlanSnapshot.ownerKey === activeLocalOwnerKey
+        ? dailyPlanSnapshot.plans
+        : [],
+    [activeLocalOwnerKey, dailyPlanSnapshot],
   );
   const visibleLocalWorkspaceStatus: LocalWorkspaceStatus =
     activeLocalOwnerKey && loadedLocalOwnerKey === activeLocalOwnerKey
@@ -195,6 +247,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : { status: "unavailable" },
     [authenticatedUserId, subscriptionSnapshot],
   );
+  const visibleAiAccess = useMemo(
+    () => aiAccessForUser(aiAccess, authenticatedUserId),
+    [aiAccess, authenticatedUserId],
+  );
   const workspaceEditable =
     visibleLocalWorkspaceStatus === "ready" &&
     (auth.status === "guest" ||
@@ -207,6 +263,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     clientRef.current = client;
     return client;
   }, []);
+
+  const refreshAiAccess = useCallback(async () => {
+    const userId = authenticatedUserIdRef.current;
+    if (!userId) {
+      aiAccessRequestRef.current += 1;
+      setAiAccess({ status: "guest" });
+      return;
+    }
+    const requestId = aiAccessRequestRef.current + 1;
+    aiAccessRequestRef.current = requestId;
+    setAiAccess({ status: "loading", userId });
+    try {
+      const result = await loadMobileAiAccessStatus({
+        apiBaseUrl: getFirstMoveApiBaseUrl(),
+        auth: resolveClient().auth as MobileAiSessionSource,
+        userId,
+      });
+      if (
+        aiAccessRequestRef.current === requestId &&
+        authenticatedUserIdRef.current === userId
+      ) {
+        setAiAccess(result);
+      }
+    } catch {
+      if (
+        aiAccessRequestRef.current === requestId &&
+        authenticatedUserIdRef.current === userId
+      ) {
+        setAiAccess({ status: "unavailable", userId });
+      }
+    }
+  }, [resolveClient]);
 
   const restoreAccountAuth = useCallback(async () => {
     try {
@@ -226,16 +314,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authenticatedUserIdRef.current = undefined;
     activeLocalOwnerKeyRef.current = guestWorkspaceKey;
     hydrationRequestRef.current += 1;
+    aiAccessRequestRef.current += 1;
     syncRuntimeRef.current?.dispose();
     syncRuntimeRef.current = undefined;
     setCloud({ status: "idle" });
     setSync({ status: "local", pendingCount: 0 });
+    setAiAccess({ status: "guest" });
   }, []);
 
   const applyGuestStartup = useCallback(
     (result: Extract<WorkspaceStartupResult, { mode: "guest" }>) => {
       if (activeLocalOwnerKeyRef.current !== guestWorkspaceKey) return;
       setLocalWorkspace(result.state);
+      void loadGuestDailyPlans(AsyncStorage).then((plans) => {
+        if (activeLocalOwnerKeyRef.current === guestWorkspaceKey) {
+          setDailyPlanSnapshot({ ownerKey: guestWorkspaceKey, plans });
+        }
+      });
       setLoadedLocalOwnerKey(guestWorkspaceKey);
       setLocalWorkspaceStatus(result.status);
       setLocalWorkspaceMessage(
@@ -281,6 +376,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authenticatedUserIdRef.current = authenticatedUserId;
     hydrationRequestRef.current += 1;
   }, [authenticatedUserId]);
+
+  useEffect(() => {
+    void refreshAiAccess();
+  }, [authenticatedUserId, refreshAiAccess]);
 
   useEffect(
     () => revenueCatSubscription.subscribe(setSubscriptionSnapshot),
@@ -394,6 +493,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         client.auth.startAutoRefresh();
         void syncRuntimeRef.current?.refresh();
         void revenueCatSubscription.refresh();
+        void refreshAiAccess();
       } else {
         client.auth.stopAutoRefresh();
       }
@@ -404,7 +504,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subscription.remove();
       client.auth.stopAutoRefresh();
     };
-  }, [accountBootstrapEnabled, resolveClient]);
+  }, [accountBootstrapEnabled, refreshAiAccess, resolveClient]);
 
   useEffect(() => {
     if (auth.status !== "authenticated") return;
@@ -452,13 +552,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
         if (!isCurrent()) return;
         setLocalWorkspace(workspace.state);
+        setDailyPlanSnapshot({ ownerKey, plans: workspace.dailyPlans });
         setLoadedLocalOwnerKey(ownerKey);
         setLocalWorkspaceStatus("ready");
         setLocalWorkspaceMessage(undefined);
       },
-      applyWorkingState(state) {
+      applyWorkingState(state, dailyPlans) {
         if (!isCurrent()) return;
         setLocalWorkspace(state);
+        if (dailyPlans) setDailyPlanSnapshot({ ownerKey, plans: dailyPlans });
         setLoadedLocalOwnerKey(ownerKey);
         setLocalWorkspaceStatus("ready");
         setLocalWorkspaceMessage(undefined);
@@ -543,6 +645,118 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await syncRuntimeRef.current?.retry();
     }
   }, [auth]);
+
+  const organizeDay = useCallback(
+    async (brainDump: string): Promise<DayPlanRequestResult> => {
+      if (auth.status !== "authenticated") {
+        return {
+          outcome: "failure",
+          kind: "sign-in-required",
+          message: "Sign in to use live AI planning. Manual planning remains available.",
+        };
+      }
+      let result: DayPlanRequestResult;
+      try {
+        result = await requestMobileDayPlan(brainDump, {
+          apiBaseUrl: getFirstMoveApiBaseUrl(),
+          auth: resolveClient().auth as MobileAiSessionSource,
+          userId: auth.user.id,
+        });
+      } catch {
+        result = {
+          outcome: "failure",
+          kind: "service-unavailable",
+          message: "AI planning is temporarily unavailable. Manual planning remains available.",
+        };
+      }
+      if (result.outcome === "failure" && result.kind === "sign-in-required") {
+        await restore();
+      } else {
+        void refreshAiAccess();
+      }
+      return result;
+    },
+    [auth, refreshAiAccess, resolveClient, restore],
+  );
+
+  const verifyToothbrush = useCallback(
+    async (image: Blob): Promise<ToothbrushRequestResult> => {
+      if (auth.status !== "authenticated") {
+        return {
+          outcome: "failure",
+          kind: "sign-in-required",
+          message: "Sign in to use live AI verification, or skip without a reward.",
+        };
+      }
+      let result: ToothbrushRequestResult;
+      try {
+        result = await requestMobileToothbrushVerification(image, {
+          apiBaseUrl: getFirstMoveApiBaseUrl(),
+          auth: resolveClient().auth as MobileAiSessionSource,
+          userId: auth.user.id,
+        });
+      } catch {
+        result = {
+          outcome: "failure",
+          kind: "service-unavailable",
+          message: "AI verification is temporarily unavailable. You can skip without a reward.",
+        };
+      }
+      if (result.outcome === "failure" && result.kind === "sign-in-required") {
+        await restore();
+      } else {
+        void refreshAiAccess();
+      }
+      return result;
+    },
+    [auth, refreshAiAccess, resolveClient, restore],
+  );
+
+  const confirmDailyPlan = useCallback(
+    async (
+      dateKey: string,
+      items: PlanningReviewItem[],
+    ): Promise<AppState | undefined> => {
+      if (!validPlanningReview(items) || !localOwner || !activeLocalOwnerKey) {
+        return undefined;
+      }
+      const ownerKey = activeLocalOwnerKey;
+      const plan: DailyPlanRecord = { dateKey, items };
+      const hasExistingPlan = visibleDailyPlans.some(
+        (candidate) => candidate.dateKey === dateKey,
+      );
+      const applyReview = (state: AppState) =>
+        hasExistingPlan
+          ? applyConfirmedPlanFirstMove(state, items)
+          : applyPlanningReview(state, items);
+      try {
+        if (localOwner.kind === "guest") {
+          const next = await repository.updateLocalWorkspace(localOwner, applyReview);
+          const plans = await saveGuestDailyPlan(AsyncStorage, plan);
+          if (activeLocalOwnerKeyRef.current === ownerKey) {
+            setLocalWorkspace(next);
+            setLoadedLocalOwnerKey(ownerKey);
+            setDailyPlanSnapshot({ ownerKey, plans });
+          }
+          return next;
+        }
+        const result = await syncRuntimeRef.current?.saveDailyPlan(
+          plan,
+          applyReview,
+        );
+        if (!result) return undefined;
+        if (activeLocalOwnerKeyRef.current === ownerKey) {
+          setLocalWorkspace(result.state);
+          setLoadedLocalOwnerKey(ownerKey);
+          setDailyPlanSnapshot({ ownerKey, plans: result.dailyPlans });
+        }
+        return result.state;
+      } catch {
+        return undefined;
+      }
+    },
+    [activeLocalOwnerKey, localOwner, visibleDailyPlans],
+  );
 
   const presentProPaywall = useCallback(
     () => revenueCatSubscription.presentProPaywall(),
@@ -661,9 +875,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       auth,
       subscription: visibleSubscription,
+      aiAccess: visibleAiAccess,
       cloud: visibleCloud,
       sync: visibleSync,
       localWorkspace: visibleLocalWorkspace,
+      dailyPlans: visibleDailyPlans,
       localWorkspaceStatus: visibleLocalWorkspaceStatus,
       localWorkspaceMessage: visibleLocalWorkspaceMessage,
       workspaceEditable,
@@ -673,6 +889,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       retryAuthRestore: restore,
       refreshCloud,
+      refreshAiAccess,
+      organizeDay,
+      verifyToothbrush,
+      confirmDailyPlan,
       presentProPaywall,
       restorePurchases,
       updateLocalWorkspace,
@@ -682,9 +902,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       auth,
       visibleSubscription,
+      visibleAiAccess,
       visibleCloud,
       visibleSync,
       visibleLocalWorkspace,
+      visibleDailyPlans,
       visibleLocalWorkspaceStatus,
       visibleLocalWorkspaceMessage,
       workspaceEditable,
@@ -694,6 +916,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       restore,
       refreshCloud,
+      refreshAiAccess,
+      organizeDay,
+      verifyToothbrush,
+      confirmDailyPlan,
       presentProPaywall,
       restorePurchases,
       updateLocalWorkspace,

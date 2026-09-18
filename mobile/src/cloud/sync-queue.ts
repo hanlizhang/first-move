@@ -3,6 +3,7 @@ import { isCatItemId, type CatItemId } from "../domain/cat-items.ts";
 import { isLocalDateKey } from "../domain/dates.ts";
 import { createUuidV4, isUuid } from "../domain/ids.ts";
 import type { AppState, DailyPlanRecord } from "../domain/models.ts";
+import { normalizeDailyPlans } from "../domain/day-planning.ts";
 import type { AsyncKeyValueStore } from "../local/repository.ts";
 
 export const MOBILE_SYNC_QUEUE_KEY_PREFIX = "first-move:mobile:cloud-sync:v1:";
@@ -156,6 +157,9 @@ function validatePendingMutation(
     ) {
       throw new Error("The local consumption command is invalid.");
     }
+  }
+  if (normalizeDailyPlans(value.dailyPlans).length !== value.dailyPlans.length) {
+    throw new Error("The local daily plans are invalid.");
   }
   validateSyncState(value.state);
 }

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MOBILE_AUTH_CALLBACK_URL, validateMobilePublicConfig } from "./config.ts";
+import {
+  MOBILE_AUTH_CALLBACK_URL,
+  validateFirstMoveApiBaseUrl,
+  validateMobilePublicConfig,
+} from "./config.ts";
 
 test("accepts only public Expo Supabase configuration and fixes the development callback", () => {
   assert.deepEqual(
@@ -16,6 +20,30 @@ test("accepts only public Expo Supabase configuration and fixes the development 
     },
   );
   assert.equal(MOBILE_AUTH_CALLBACK_URL, "firstmove://auth/callback");
+});
+
+test("validates the public First Move server base URL without choosing a hostname", () => {
+  assert.equal(
+    validateFirstMoveApiBaseUrl({
+      EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL: "https://first-move.example/api-root/",
+    }),
+    "https://first-move.example/api-root",
+  );
+  assert.throws(() => validateFirstMoveApiBaseUrl({}), /not configured/);
+  assert.throws(
+    () =>
+      validateFirstMoveApiBaseUrl({
+        EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL: "file:///private/server",
+      }),
+    /not configured/,
+  );
+  assert.throws(
+    () =>
+      validateFirstMoveApiBaseUrl({
+        EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL: "https://first-move.example?token=nope",
+      }),
+    /not configured/,
+  );
 });
 
 test("rejects missing or malformed public configuration without exposing values", () => {

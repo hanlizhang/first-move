@@ -265,7 +265,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [ ] Launch only in an approved supported-international-market allowlist; exclude Mainland China initially.
 - [ ] Test entitlement forgery, quota races, timezone abuse, provider/RevenueCat outages, privacy boundaries, and absence of secrets from clients.
 
-**AI Access R1 status:** The Web daily-plan and toothbrush live routes require a validated Supabase bearer token, verify RevenueCat `pro` server-side, and call a service-role-only atomic quota reservation before one OpenAI dispatch. Web Settings reads Free/Pro and remaining allowance from a separate server status path that never reserves usage; owner-scoped status reads reuse the validated bearer and existing RLS. Confirmed planning reviews replace only the active pending Intent and preserve historical Session links. Database/application tests cover the authenticated 5-lifetime and Pro 1/3/5 contracts, idempotency, per-user locking, authoritative profile timezone, fail-closed outages, privacy fields, no provider retry, status reads, and reviewed First Move handoff. Migration `20260915120000_ai_access_r1.sql` is remotely applied. Web Billing, Mobile AI UI, the Make this smaller provider call, production region allowlisting/rate limits, environment configuration, and deployment remain incomplete.
+**AI Access status:** The Web daily-plan and toothbrush live routes require a validated Supabase bearer token, verify RevenueCat `pro` server-side, and call a service-role-only atomic quota reservation before one OpenAI dispatch. Web Settings and Mobile read Free/Pro and remaining allowance from the status path without reserving usage; Mobile always sends the current Supabase access token and never submits `user_id`, `isPro`, or a RevenueCat entitlement claim. Confirmed planning reviews replace only the active pending Intent and preserve historical Session links. Database/application tests cover the authenticated 5-lifetime and Pro 1/3/5 contracts, idempotency, per-user locking, authoritative profile timezone, fail-closed outages, privacy fields, no provider retry, status reads, reviewed First Move handoff, and Mobile owner isolation. Migration `20260915120000_ai_access_r1.sql` is remotely applied. Mobile Plan my day and toothbrush presentation are implemented and automated-tested locally; Web Billing, Mobile Make Smaller AI, production region allowlisting/rate limits, production environment configuration, deployment, and device acceptance remain incomplete.
 
 ## TASK-12: Mobile v1
 
@@ -342,6 +342,18 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 **M1E status:** Implemented in the current `/mobile` tree; automated Mobile checks pass. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance remains required before release. No backend or native dependency change was made.
 
+### AI Access R2 — Mobile Plan my day and toothbrush parity
+
+- [x] Add the public `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` boundary and call the existing status, day-planning, and toothbrush routes with the current Supabase bearer token only.
+- [x] Show Guest sign-in guidance, authenticated Free lifetime actions, and Pro day-plan/toothbrush daily remaining values from the server without using local RevenueCat state for AI authorization.
+- [x] Integrate Plan my day into Today/Morning without a new tab: 2,000-character brain dump, AI and manual paths, editable one/three/three review, canonical DailyPlan save, safe pending-Intent replacement, and immediate Focus handoff.
+- [x] Add authenticated camera/library selection, maximum-768-pixel JPEG preparation, one-shot raw-image upload, explicit temporary-file deletion, Morning check/reward sync semantics, and Skip without check/reward/AI usage.
+- [x] Keep manual planning and Skip usable for quota, service, and provider denials; distinguish safe user-facing failure states without exposing provider/server internals.
+- [x] Cover Guest no-call, current bearer, forbidden client claims, server-derived Free/Pro/zero counts, owner switching, planning/replacement/Focus, transient images, Morning success/Skip, and denial fallback behavior with focused Mobile tests.
+- [ ] Configure a real server base URL and complete development-client/true-device iOS and Android acceptance; no production AI deployment is claimed.
+
+**Mobile AI Access R2 status:** Implemented and automated-tested in the current `/mobile` tree. `expo-image-picker` and `expo-image-manipulator` 57.0.18 plus direct `expo-file-system` 57.0.7 were installed with `npx expo install`; the native development client must be rebuilt. Make Smaller provider integration remains deferred.
+
 ### Mobile Today v1
 
 - [x] Show never-completed active Tasks plus Tasks completed today, and scheduled Habits with current-date check-in controls, through the existing owner-scoped mutation path.
@@ -391,8 +403,8 @@ These items are intentionally deferred and are not implemented:
    - replace them with simple user-facing Local / Pending / Synced / Offline states;
    - user-facing points may later be labeled `Coins` with one shared Web/Mobile icon as a presentation-only change; keep stored points, reward-ledger fields, reward values, RPCs, and economy semantics unchanged;
    - consider dedicated/full-screen active Focus session UI.
-4. RevenueCat Pro entitlement.
-5. Server-controlled AI quota.
+4. Production RevenueCat lifecycle, storefront, webhook/read-model, and account-transfer behavior.
+5. Mobile Make Smaller AI plus production AI region/rate-limit/configuration rollout.
 6. True-device iOS/Android testing.
 7. App Store / Google Play release requirements.
 

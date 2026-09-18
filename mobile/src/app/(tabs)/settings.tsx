@@ -1,4 +1,5 @@
 import { AccountPanel } from "../../components/account-panel.tsx";
+import { AiAccessPanel } from "../../components/ai-access-panel.tsx";
 import { SubscriptionPanel } from "../../components/subscription-panel.tsx";
 import { Body, Card, Heading, Label, Screen } from "../../components/ui.tsx";
 
@@ -11,6 +12,7 @@ export default function SettingsScreen() {
     >
       <AccountPanel />
       <SubscriptionPanel />
+      <AiAccessPanel />
       <Card>
         <Label>Privacy</Label>
         <Heading>Secrets stay out of the app</Heading>

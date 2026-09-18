@@ -83,13 +83,39 @@ test("a denied Pro quota returns safe metadata and does not construct OpenAI", a
 });
 
 test("provider failure after reservation makes exactly one OpenAI request", async () => {
-  let providerCalls = 0;
+  let providerCalls = 0; const diagnostics: unknown[] = [];
   const response = await handleVerifyToothbrush(new Request("http://local", { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: new Uint8Array([1]) }), {
-    environment: { OPENAI_LIVE_VISION: "true", OPENAI_API_KEY: "test-only" },
+    environment: { OPENAI_LIVE_VISION: "true", OPENAI_API_KEY: "sk-test-only-secret" },
     authorize,
-    createClient: () => ({ create: async () => { providerCalls += 1; throw new Error("provider failed"); } }) as never,
+    createClient: () => ({ create: async (parameters: unknown) => {
+      providerCalls += 1;
+      const imageDataUrl = JSON.stringify(parameters);
+      throw {
+        name: "APIConnectionError",
+        status: 502,
+        code: "upstream_connection_error",
+        type: "provider_error",
+        requestID: "req_toothbrush_safe",
+        message: `provider failed for ${imageDataUrl} with sk-test-only-secret`,
+        headers: { authorization: "Bearer supabase-secret-token" },
+        error: { message: "raw provider response body" },
+        user_id: "00000000-0000-4000-8000-000000000001",
+        email: "private@example.com",
+      };
+    } }) as never,
+    logProviderFailure: (diagnostic) => { diagnostics.push(diagnostic); },
   });
   assert.equal(response.status, 502);
-  assert.equal((await response.json() as { code: string }).code, "openai_provider_failure");
+  assert.deepEqual(await response.json(), { code: "openai_provider_failure", error: "Verification failed without retrying." });
   assert.equal(providerCalls, 1);
+  assert.deepEqual(diagnostics, [{
+    route: "/api/verify-toothbrush",
+    feature: "toothbrush_verification",
+    errorName: "APIConnectionError",
+    httpStatus: 502,
+    providerErrorCode: "upstream_connection_error",
+    providerErrorType: "provider_error",
+    providerRequestId: "req_toothbrush_safe",
+  }]);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /data:image|base64|sk-test|supabase|provider response|00000000|private@example/);
 });

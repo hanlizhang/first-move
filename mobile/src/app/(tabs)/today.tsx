@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import type { AuthState } from "../../auth/auth-state.ts";
 import { useFirstMoveApp, type AppSyncState } from "../../app-state/app-provider.tsx";
 import { ReflectionEditor } from "../../components/reflection-editor.tsx";
+import { MorningPlanFlow } from "../../components/morning-plan-flow.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import {
   Body,
@@ -77,6 +78,8 @@ export default function TodayScreen() {
         title="I’m Stuck"
         onPress={() => router.push("/(tabs)/first-moves")}
       />
+
+      <MorningPlanFlow dateKey={today} />
 
       {localWorkspaceMessage ? (
         <Card tone="danger">
