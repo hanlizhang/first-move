@@ -1,4 +1,5 @@
-import type { AppState } from "../domain/models.ts";
+import type { AppState, DailyPlanRecord } from "../domain/models.ts";
+import { normalizeDailyPlans, upsertDailyPlan } from "../domain/day-planning.ts";
 import type { CatItemId } from "../domain/cat-items.ts";
 import { isLocalDateKey } from "../domain/dates.ts";
 import { createUuidV4, isUuid } from "../domain/ids.ts";
@@ -118,7 +119,7 @@ export interface MobileSyncRuntimeDependencies {
     workspace: CanonicalWorkspace,
     hydratedAt: string,
   ): Promise<void>;
-  applyWorkingState(state: AppState): void;
+  applyWorkingState(state: AppState, dailyPlans?: DailyPlanRecord[]): void;
   setCloudState(state: CloudHydrationState): void;
 }
 
@@ -319,6 +320,27 @@ export class MobileSyncRuntime {
     return operation;
   }
 
+  saveDailyPlan(
+    plan: DailyPlanRecord,
+    stateRecipe: (current: AppState) => AppState,
+  ): Promise<{ state: AppState; dailyPlans: DailyPlanRecord[] } | undefined> {
+    this.revision += 1;
+    const operation = this.mutationTail.then(() =>
+      this.persistDailyPlanMutation(plan, stateRecipe),
+    );
+    this.mutationTail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    void operation.then(
+      (workspace) => {
+        if (workspace) void this.flush();
+      },
+      () => undefined,
+    );
+    return operation;
+  }
+
   purchaseInventoryItem(
     itemId: CatItemId,
     localDate: string,
@@ -409,6 +431,42 @@ export class MobileSyncRuntime {
     if (!this.isCurrent()) return next;
     this.dependencies.applyWorkingState(next);
     return next;
+  }
+
+  private async persistDailyPlanMutation(
+    plan: DailyPlanRecord,
+    stateRecipe: (current: AppState) => AppState,
+  ): Promise<{ state: AppState; dailyPlans: DailyPlanRecord[] } | undefined> {
+    if (!this.canWrite() || !this.record) return undefined;
+    const normalizedPlan = normalizeDailyPlans([plan])[0];
+    if (!normalizedPlan) return undefined;
+    const current = await this.dependencies.repository.loadLocalWorkspace({
+      kind: "account",
+      userId: this.dependencies.userId,
+    });
+    if (!this.isCurrent()) return undefined;
+    const next = stateRecipe(current);
+    const dailyPlans = upsertDailyPlan(this.workspaceDailyPlans, normalizedPlan);
+    const mutationId = this.dependencies.uuid();
+    if (!isUuid(mutationId)) throw new Error("Mutation identity is invalid.");
+    const mutation: PendingWorkspaceMutation = {
+      mutationId,
+      state: prepareSyncState(next),
+      dailyPlans: structuredClone(dailyPlans),
+      commands: { purchases: [], consumptions: [] },
+      queuedAt: this.dependencies.now(),
+    };
+    this.record.pending.push(mutation);
+    await this.dependencies.queue.save(this.record);
+    this.workspaceDailyPlans = structuredClone(dailyPlans);
+    this.setPendingStatus();
+    await this.dependencies.repository.saveLocalWorkspace(
+      { kind: "account", userId: this.dependencies.userId },
+      next,
+    );
+    if (!this.isCurrent()) return { state: next, dailyPlans };
+    this.dependencies.applyWorkingState(next, dailyPlans);
+    return { state: next, dailyPlans };
   }
 
   private async queueEconomicCommands(
@@ -736,7 +794,10 @@ export class MobileSyncRuntime {
         latestPending.state,
       );
       if (!this.isCurrent()) return;
-      this.dependencies.applyWorkingState(latestPending.state);
+      this.dependencies.applyWorkingState(
+        latestPending.state,
+        latestPending.dailyPlans,
+      );
       this.workingReady = true;
       return;
     }

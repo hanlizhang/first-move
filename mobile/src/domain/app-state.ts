@@ -127,6 +127,21 @@ export function createPendingIntent(
   };
 }
 
+export function replacePendingIntent(
+  state: AppState,
+  input: CreateIntentInput,
+  clock: Clock = now,
+  idFactory: IdFactory = createUuidV4,
+): AppState {
+  const withoutPending = {
+    ...state,
+    activityIntents: state.activityIntents.filter(
+      (intent) => intent.status !== "pending",
+    ),
+  };
+  return createPendingIntent(withoutPending, input, clock, idFactory);
+}
+
 export function cancelPendingIntent(
   state: AppState,
   intentId: string,

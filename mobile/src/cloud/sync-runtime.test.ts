@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createPendingIntent } from "../domain/app-state.ts";
+import { applyPlanningReview } from "../domain/day-planning.ts";
+import { completeMorningCheck } from "../domain/morning.ts";
 import { createEmptyState, type AppState, type DailyPlanRecord } from "../domain/models.ts";
 import { deleteReflection, saveReflection } from "../domain/reflections.ts";
 import {
@@ -245,6 +247,22 @@ class FakeCloud {
         );
       }
     }
+    const morningChecks = state.morningChecks.map((check, index) => {
+      if (!this.rewards.has(`morning:${check.dateKey}`)) {
+        this.rewards.set(
+          `morning:${check.dateKey}`,
+          rewardRow(check.dateKey, "morning", 50, check.dateKey),
+        );
+      }
+      return {
+        id: stableUuid(0xf1, index),
+        local_date: check.dateKey,
+        timezone: "Europe/Zurich",
+        verified_at: check.verifiedAt,
+        capture_method: check.captureMethod,
+        verifier_mode: check.verifierMode,
+      };
+    });
     const rewards = [...this.rewards.values()];
 
     return emptyCanonical({
@@ -302,6 +320,13 @@ class FakeCloud {
           deleted_at: null,
         })),
       ),
+      morning_checks: morningChecks,
+      morning_attempts: state.morningAttempts.map((attempt, index) => ({
+        id: stableUuid(0xf2, index),
+        local_date: attempt.dateKey,
+        timezone: "Europe/Zurich",
+        attempt_count: attempt.count,
+      })),
       journal_entries: [...this.journalRows.values()],
       reward_ledger: rewards,
       points_tenths: rewards.reduce(
@@ -337,7 +362,7 @@ function completionRow(
 
 function rewardRow(
   sourceId: string,
-  sourceType: "task" | "habit" | "session" | "reflection",
+  sourceType: "task" | "habit" | "session" | "morning" | "reflection",
   pointsTenths: number,
   date: string,
 ) {
@@ -349,7 +374,9 @@ function rewardRow(
           ? 0xb1
           : sourceType === "session"
             ? 0xc1
-            : 0xe1,
+            : sourceType === "morning"
+              ? 0xd1
+              : 0xe1,
       sourceId.charCodeAt(0),
     ),
     source_type: sourceType,
@@ -685,6 +712,93 @@ test("scoped Mobile writes pass canonical daily plans through unchanged", async 
       ],
     },
   ]);
+});
+
+test("daily-plan confirmation queues the plan and safely replaces the pending Intent", async () => {
+  const fixture = harness();
+  await fixture.runtime.start();
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    createPendingIntent(
+      state,
+      {
+        stuckState: "needs intentional rest",
+        direction: "Rest",
+        moveText: "Old pending move",
+        intendedDurationMinutes: 5,
+      },
+      () => NOW,
+      () => INTENT_ID,
+    ),
+  );
+  const reviewedIntentId = "30000000-0000-4000-8000-000000000031";
+  const planItemId = "91000000-0000-4000-8000-000000000001";
+  const plan = {
+    dateKey: TODAY,
+    items: [
+      {
+        id: planItemId,
+        group: "first-move" as const,
+        title: "Reviewed move",
+        firstStep: "Open the reviewed document.",
+        category: "Work & Study" as const,
+        durationMinutes: 2 as const,
+      },
+    ],
+  };
+  const saved = await fixture.runtime.saveDailyPlan(plan, (state) =>
+    applyPlanningReview(state, plan.items, () => NOW, () => reviewedIntentId),
+  );
+
+  assert.equal(saved?.dailyPlans[0]?.dateKey, TODAY);
+  assert.deepEqual(
+    saved?.state.activityIntents.map((intent) => [intent.id, intent.moveText]),
+    [[reviewedIntentId, "Open the reviewed document."]],
+  );
+  const queued = await fixture.queue.load(USER_A);
+  assert.equal(queued.pending.length, 2);
+  assert.equal(queued.pending[1]?.dailyPlans[0]?.items[0]?.id, planItemId);
+  assert.deepEqual(
+    queued.pending[1]?.state.activityIntents.map((intent) => intent.id),
+    [reviewedIntentId],
+  );
+
+  fixture.online(true);
+  await fixture.runtime.retry();
+  assert.equal((await fixture.queue.load(USER_A)).pending.length, 0);
+  assert.equal(
+    (fixture.cloud.raw.activity_intents as { id: string; status: string }[])
+      .find((intent) => intent.id === INTENT_ID)?.status,
+    "cancelled",
+  );
+  assert.equal(
+    (fixture.cloud.raw.activity_intents as { id: string; status: string }[])
+      .find((intent) => intent.id === reviewedIntentId)?.status,
+    "pending",
+  );
+});
+
+test("a verified toothbrush check receives the existing server-derived Morning reward", async () => {
+  const fixture = harness();
+  await fixture.runtime.start();
+  fixture.online(false);
+  const local = await fixture.runtime.mutate((state) =>
+    completeMorningCheck(state, TODAY, "camera", "live", {
+      clock: () => NOW,
+    }),
+  );
+  assert.equal(local?.morningChecks.length, 1);
+  assert.equal(local?.rewardEvents.length, 0);
+
+  fixture.online(true);
+  await fixture.runtime.retry();
+  const canonical = await fixture.repository.loadLocalWorkspace({
+    kind: "account",
+    userId: USER_A,
+  });
+  assert.equal(canonical.morningChecks.length, 1);
+  assert.equal(canonical.rewardEvents[0]?.source, "morning");
+  assert.equal(canonical.progress.points, 5);
 });
 
 test("pending Intent and complete Session lifecycle/review changes are queued parent-first", async () => {

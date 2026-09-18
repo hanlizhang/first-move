@@ -1,6 +1,6 @@
 # First Move Mobile v1 handoff
 
-Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-15 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization. AI Access R1 migration `20260915120000_ai_access_r1.sql` is remotely applied; production Web deployment/configuration is not complete.
+Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-15 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization. AI Access R1 migration `20260915120000_ai_access_r1.sql` is remotely applied; Mobile AI Access R2 presentation is implemented and automated-tested locally, but production deployment/configuration and device acceptance are not complete.
 
 Status vocabulary used here:
 
@@ -77,6 +77,8 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 - Mobile Today includes editable private Reflection / Mini Journal. Guest entries remain in Guest-local persistence; authenticated Journal changes use the existing owner-scoped durable full-snapshot queue, while first-save rewards and the authenticated point balance remain server-authoritative.
 - Today selects historical activity through captured local-date and IANA-timezone facts rather than reassigning it with the viewer's current timezone.
 - Mobile Cat v1A is implemented with the Web-aligned 16-row catalog, symbolic active-day progression, existing Cat Room interactions, the five visible Food/Treats/Toys/Furniture/Tricks store categories, Guest-local purchasing/consumption, and authenticated server-authoritative purchase/consumption plus selected-furniture persistence through the existing sync RPC. Purchase unlocks are milk day 1, yarn day 3, wand day 7, mouse day 14, wet food and scratching post day 21, kibble day 35, treats/high-five/bed day 50, perch day 70, tree day 75, and paw shake/garden/butterfly day 100; ownership, not the current purchase threshold, controls use of durable items.
+- Mobile AI Access R2 is integrated into Today/Morning and Settings without a new tab. Guest never calls live AI; authenticated status, day planning, and toothbrush verification use the current Supabase bearer against the existing Web server routes, while Free/Pro and remaining counts stay server-authoritative.
+- Mobile Plan my day supports the bounded brain dump, AI/manual structured review, canonical DailyPlan persistence, and safe replacement of the single pending First Move visible in Focus. Morning Start uses transient maximum-768-pixel JPEG files, never persists image bytes, and preserves server-derived reward semantics; Skip advances to planning without a check, reward, or AI request.
 
 ### Manually verified where known
 
@@ -87,7 +89,7 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 ### Intentionally deferred
 
 - Cat v1B interactions are implemented on Web and Mobile with aligned captions, phase timings, ownership gates, room targets, reduced-motion behavior, and idle scheduling. Their transient pose, scene, and position state remains local and is never added to durable sync or Supabase payloads.
-- Mobile Trends/Calendar history parity, Today's Hearts, Total Hearts / Bond, Little Finds, celebration UI, Mobile AI/Morning UI, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented. RevenueCat purchase/paywall behavior remains the existing Mobile R1/R2 implementation; AI Access R1 adds server verification/quota authority without adding Mobile AI interfaces.
+- Mobile Trends/Calendar history parity, Today's Hearts, Total Hearts / Bond, Little Finds, celebration UI, Make Smaller AI, release UI polish, true-device iOS/Android testing, and App Store/Google Play release requirements are not implemented. RevenueCat purchase/paywall behavior remains the existing Mobile R1/R2 implementation; Mobile Plan my day and toothbrush AI are local working-tree implementations, not a production rollout claim.
 - A later presentation pass may label user-facing points as `Coins` and use one shared coin icon across Web and Mobile. This does not rename or alter stored points, `reward_ledger.points_tenths`, reward values, RPC contracts, or economy semantics.
 - The existing Active Day system remains unchanged and is the sole Cat growth and milestone day counter.
 - Future Today's Hearts starts each local date at `♡♡♡`. Feeding, playing, tricks, and other meaningful direct Cat interactions earn `+1` heart up to three per local date; interactions stay fully available after that cap. Hearts are never lost, missed days have no penalty, and no streak is required.
@@ -95,7 +97,7 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 - Little Finds remain deferred. Later eligibility may use Active Day milestones, cumulative Total Hearts, or bounded daily-heart activity; future authenticated selection must remain deterministic, idempotent, and server-authoritative.
 - Celebration UI remains designed only: compact Coin gain, larger `Active Day +1`, daily `Heart +1`, full Cat milestone unlock, and Little Find reveal. Simultaneous rewards must use one ordered or combined celebration queue rather than stacked blocking moments.
 - Cat v1B implements no Hearts, Little Finds, or celebration code or database schema.
-- Mobile empty-account setup/import, post-session choices, Morning Start, AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
+- Mobile empty-account setup/import, post-session choices, Make Smaller AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
 
 ## 6. Migration list and recorded state
 
@@ -155,6 +157,7 @@ Imported inventory uses documented opening correction events because schema v8 d
 | `NEXT_PUBLIC_SUPABASE_URL` | Public client configuration | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public client configuration | Publishable/anon client key; safe only with RLS and minimum privileges. |
 | `NEXT_PUBLIC_CLOUD_SETUP_ENABLED` | Public build-time flag | Enables Phase B2 and continuous Web sync only when exactly `true`. |
+| `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` | Public Mobile configuration | Absolute origin of the trusted First Move Web/server routes; contains no secret and has no hardcoded fallback. |
 | `OPENAI_API_KEY` | Server only | Optional live AI credential. Never expose to mobile/web clients. |
 | `OPENAI_LIVE_VISION` | Server only | Enables explicit live toothbrush verification when exactly `true`. |
 | `OPENAI_LIVE_PLANNING` | Server only | Enables explicit live planner requests when exactly `true`. |
@@ -197,7 +200,7 @@ Remaining manual checks are known verification items and do not block the curren
 - Continuous sync remains feature-gated for controlled rollout. Its migration is remotely applied and core task/habit convergence is manually verified; the documented smoke tests remain pending.
 - Guest data, immutable IndexedDB backups, Web runtime metadata, the Mobile AsyncStorage retry queue, transient planning drafts, local First Move templates, toothbrush image previews, and development-only controls remain device-local by design.
 - Toothbrush photos are transient only; they are never synchronized or stored.
-- RevenueCat webhooks/read models and production storefront configuration, region allowlisting, server abuse/rate limits, Mobile AI/Morning UI, Mobile Trends/Calendar history parity, Today's Hearts, Total Hearts / Bond, Little Finds, celebration UI, Mobile release UI polish, true-device testing, and store release work remain deferred.
+- RevenueCat webhooks/read models and production storefront configuration, region allowlisting, server abuse/rate limits, Mobile Make Smaller AI, Mobile Trends/Calendar history parity, Today's Hearts, Total Hearts / Bond, Little Finds, celebration UI, Mobile release UI polish, true-device testing, and store release work remain deferred.
 - The existing optional Web live AI routes are now the authenticated AI Access R1 gateway. They retain mock/manual fallback and no automatic retries; a provider failure after reservation stays consumed because provider cost may already have occurred.
 - The architecture documents describe a more complete B5 conflict/outbox design than the implemented MVP.
 
@@ -249,15 +252,15 @@ M1E reuses `cloud_workspace_status`, `get_cloud_workspace_v2`, and `sync_cloud_w
 
 M1E deliberately enables writes only for an already-initialized account that has successfully hydrated. Empty-account Start fresh / Import this device / Use cloud progress setup choices remain unimplemented on Mobile and write-disabled. Guest is still fully local. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance is the remaining release gate; `/mobile/README.md` contains the exact checklist.
 
-Other remaining M1 work includes post-session choices, Mobile Trends/Calendar history parity, daily plans, Morning metadata, and any later server-authoritative economy commands beyond the implemented Cat purchase/consumption and selected-furniture paths.
+Other remaining M1 work includes post-session choices, Mobile Trends/Calendar history parity, and any later server-authoritative economy commands beyond the implemented Cat purchase/consumption and selected-furniture paths. Daily plans and verified Morning metadata now use the existing canonical Mobile sync architecture.
 
 ### M2 — Native capabilities
 
-Status: **not started**. Add camera/photo-picker permission flows with memory-only toothbrush images, haptics, optional local notifications where platform rules permit, background/foreground lifecycle hardening, accessibility, reduced motion, secure storage recovery, deep-link hardening, and offline lifecycle tests. Do not promise guaranteed background alarms or app blocking.
+Status: **partially implemented**. AI Access R2 adds the narrow toothbrush camera/photo-picker permission flow and transient maximum-768-pixel image preparation with `expo-image-picker` and `expo-image-manipulator`; image bytes are not written to AsyncStorage, Supabase, object storage, logs, or the sync queue. The development client must be rebuilt for these native modules. Haptics, optional local notifications where platform rules permit, broader background/foreground lifecycle hardening, secure-storage recovery, deep-link hardening, and true-device lifecycle tests remain. Do not promise guaranteed background alarms or app blocking.
 
 ### M3 — RevenueCat and AI access
 
-Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat with the Supabase Auth UUID and implements manually accepted Test Store presentation/purchase/restore behavior. AI Access R1 validates Supabase bearer tokens in the Web server routes, verifies authoritative `pro` Customer Info through RevenueCat REST API v1, and atomically enforces authenticated Free lifetime and Pro feature/day quotas before one `gpt-5.6-luna` dispatch. Web Settings recognizes the same entitlement and reads presentation-safe remaining counts without reserving usage. It does not add Web Billing or Mobile daily-plan/toothbrush UI. Supported-region gating, server abuse/rate limits, webhooks/read models, production storefront/configuration work, and deployment remain unresolved TASK-10/TASK-11 work.
+Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat with the Supabase Auth UUID and implements manually accepted Test Store presentation/purchase/restore behavior. AI Access R1 validates Supabase bearer tokens in the Web server routes, verifies authoritative `pro` Customer Info through RevenueCat REST API v1, and atomically enforces authenticated Free lifetime and Pro feature/day quotas before one `gpt-5.6-luna` dispatch. Mobile AI Access R2 now reads the server status and calls Plan my day and toothbrush verification with the current Supabase access token; it never sends `user_id`, `isPro`, or local RevenueCat authorization. Manual planning and Skip remain available through quota/service/provider denials. Make Smaller AI, Web Billing, supported-region gating, server abuse/rate limits, webhooks/read models, production storefront/configuration work, deployment, and device acceptance remain unresolved TASK-10/TASK-11/TASK-12 work.
 
 ### M4 — Store release
 
@@ -271,7 +274,7 @@ Status: **not started**. Complete privacy disclosures, data export/deletion, sub
 - Pro allows one AI daily-plan request, three toothbrush-verification attempts, and five Make this smaller requests per local day.
 - Pro may add advanced history and premium cat content without degrading or removing Free/earned core content.
 - RevenueCat is authoritative for the `pro` entitlement; the Supabase Auth UUID is the RevenueCat App User ID.
-- Client entitlement/counter claims are never authoritative. AI Access R1 checks bearer identity, RevenueCat entitlement, and feature quota on the server before dispatch. Production region allowlisting and server abuse/rate limits remain required later controls.
+- Client entitlement/counter claims are never authoritative. AI Access R1 checks bearer identity, RevenueCat entitlement, and feature quota on the server before dispatch; Mobile renders the returned remaining values and never resets or computes quota locally. Production region allowlisting and server abuse/rate limits remain required later controls.
 - OpenAI-backed features launch only in supported international markets; Mainland China is excluded initially.
 
 ## 16. Monetization decisions still open
@@ -281,7 +284,7 @@ Status: **not started**. Complete privacy disclosures, data export/deletion, sub
 - RevenueCat account-transfer/alias policy, webhook retention, grace period, refund, family-sharing, and outage behavior.
 - Whether introductory credits survive account deletion/recreation and the abuse-prevention policy.
 - Supported-country allowlist, legal/privacy review, tax/storefront availability, and any future region-specific AI provider.
-- Upgrade timing/copy, Web Billing, manage-subscription UX, and customer-support/refund process; basic Web plan/allowance display is implemented.
+- Upgrade timing/copy, Web Billing, manage-subscription UX, and customer-support/refund process; basic Web and Mobile plan/allowance display is implemented.
 - Cost budgets, model-change policy, and production rate-limit values.
 
 ## 17. Files a new Codex session must read first

@@ -138,16 +138,42 @@ test("quota and RevenueCat failures reject planning before OpenAI dispatch", asy
 });
 
 test("provider failure consumes one authorization but never retries OpenAI", async () => {
-  let authorizations = 0; let providerCalls = 0;
-  const response = await handleOrganizeDay(jsonRequest("work"), {
-    environment: { OPENAI_LIVE_PLANNING: "true", OPENAI_API_KEY: "test-only" },
+  let authorizations = 0; let providerCalls = 0; const diagnostics: unknown[] = [];
+  const brainDump = "private brain dump text";
+  const response = await handleOrganizeDay(jsonRequest(brainDump), {
+    environment: { OPENAI_LIVE_PLANNING: "true", OPENAI_API_KEY: "sk-test-only-secret" },
     authorize: async (request, input) => { authorizations += 1; return authorize(request, input); },
-    createClient: () => ({ create: async () => { providerCalls += 1; throw new Error("provider failed"); } }) as never,
+    createClient: () => ({ create: async () => {
+      providerCalls += 1;
+      throw {
+        name: "RateLimitError",
+        status: 429,
+        code: "rate_limit_exceeded",
+        type: "rate_limit_error",
+        request_id: "req_plan_safe",
+        message: `provider failed for ${brainDump} with sk-test-only-secret`,
+        headers: { authorization: "Bearer supabase-secret-token" },
+        error: { message: "raw provider response body" },
+        user_id: "00000000-0000-4000-8000-000000000001",
+        email: "private@example.com",
+      };
+    } }) as never,
+    logProviderFailure: (diagnostic) => { diagnostics.push(diagnostic); },
   });
   assert.equal(response.status, 502);
-  assert.equal((await response.json() as { code: string }).code, "openai_provider_failure");
+  assert.deepEqual(await response.json(), { code: "openai_provider_failure", error: "Planning failed without retrying." });
   assert.equal(authorizations, 1);
   assert.equal(providerCalls, 1);
+  assert.deepEqual(diagnostics, [{
+    route: "/api/organize-day",
+    feature: "daily_plan",
+    errorName: "RateLimitError",
+    httpStatus: 429,
+    providerErrorCode: "rate_limit_exceeded",
+    providerErrorType: "rate_limit_error",
+    providerRequestId: "req_plan_safe",
+  }]);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /private brain dump|sk-test|supabase|provider response|00000000|private@example/);
 });
 
 function jsonRequest(brainDump: string): Request { return new Request("http://local/api/organize-day", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brainDump }) }); }

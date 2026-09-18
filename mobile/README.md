@@ -1,8 +1,8 @@
-# First Move Mobile — M0 through RevenueCat R2
+# First Move Mobile — M0 through AI Access R2
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
-Current status: M0 through M1E plus RevenueCat R1 identity/entitlement reads and R2 Test Store purchase/restore presentation are implemented. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, canonical initialized-workspace hydration, and RevenueCat Test Store purchase/restore are manually verified on iOS Simulator. The shared Web server now authorizes authenticated AI independently of Mobile presentation state. RevenueCat production-store products, feature gates beyond AI access, webhooks, Web Billing, and Mobile AI UI remain deferred.
+Current status: M0 through M1E, RevenueCat R1/R2, and Mobile AI Access R2 are implemented in the working tree. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, canonical initialized-workspace hydration, and RevenueCat Test Store purchase/restore are manually verified on iOS Simulator. Mobile Plan my day, server-derived AI allowance presentation, and transient toothbrush verification are automated-tested but still require configured-server and rebuilt-development-client device acceptance. RevenueCat production-store products, Make Smaller AI, webhooks, Web Billing, production AI rollout, and store release remain deferred.
 
 The M0–M1D sections below preserve each increment’s historical boundary. M1E supersedes their authenticated read-only/no-business-write constraints for the current app.
 
@@ -86,6 +86,15 @@ At their original milestone boundaries, M1A/M1B/M1C/M1D did not implement authen
 - Guest and signed-out users cannot launch purchase or restore calls. They receive sign-in guidance while Guest Mode and every current core feature remain fully functional.
 - Purchase/restore state is presentation-only. It does not authorize AI or other paid behavior, gate any current feature, add production products, or change Guest/core feature behavior.
 
+## Mobile AI Access R2
+
+- Settings renders only server-returned authenticated Free lifetime or Pro daily Plan my day/toothbrush allowance. Local RevenueCat state remains purchase presentation only and never authorizes AI.
+- Every status, plan, and verification request resolves the current Supabase session and sends its access token as a bearer. Mobile never sends `user_id`, `isPro`, a RevenueCat secret, a Supabase secret/service-role key, or an OpenAI key.
+- Today starts with optional Morning Start and then Plan my day. Guest never calls live AI and can skip directly to the complete manual planner; authenticated quota, service, and provider denials keep manual planning and Skip available.
+- Plan my day accepts at most 2,000 characters, supports AI or manual structured one/three/three review, and saves through Guest-local or the existing account canonical sync path. Confirmation safely replaces the pending First Move and makes it immediately available in Focus.
+- Toothbrush capture/selection prepares a temporary JPEG with maximum dimension 768 pixels and uploads it once as the existing raw-image API body. Temporary picker/manipulator files are explicitly deleted and image bytes never enter AsyncStorage, Supabase, object storage, logs, or the sync queue.
+- A passing authenticated verification saves the existing Morning check; the server derives its reward in the canonical response. Skip saves no check, reward, attempt, or AI request. Make Smaller AI is not implemented.
+
 ## Local setup
 
 ```sh
@@ -100,12 +109,13 @@ Fill `.env.local` with the Supabase values and the RevenueCat keys needed by the
 ```text
 EXPO_PUBLIC_SUPABASE_URL=...
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL=https://your-first-move-server.example
 EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=...
 EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=...
 EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=...
 ```
 
-Development builds use only `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`. Release builds ignore the Test Store key and require the platform-specific iOS or Android key. Missing RevenueCat configuration leaves subscriptions unavailable without blocking Guest Mode or core features. These public SDK keys may be embedded in the app; never place a RevenueCat secret key, service-role key, database password, JWT signing secret, or OpenAI key in the mobile project.
+`EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` is the public absolute origin of the deployed First Move Web/server application and contains no secret; there is intentionally no localhost or production-hostname fallback. Development builds use only `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`. Release builds ignore the Test Store key and require the platform-specific iOS or Android key. Missing RevenueCat configuration leaves subscriptions unavailable without blocking Guest Mode or core features. These public SDK keys may be embedded in the app; never place a RevenueCat secret key, service-role key, database password, JWT signing secret, or OpenAI key in the mobile project.
 
 Press `i` for iOS or `a` for Android from the Expo CLI. Guest navigation can be inspected in Expo Go. The custom `firstmove://` callback needs a native development build:
 
@@ -118,7 +128,7 @@ npx expo run:android
 
 The generated `/mobile/ios` and `/mobile/android` directories are ignored. The simulator development profile does not require committing generated native projects.
 
-`react-native-purchases` and `react-native-purchases-ui` contain native code. After adding or upgrading either package, rebuild the Expo development client with `npx expo run:ios`, `npx expo run:android`, or the corresponding approved EAS development build before runtime acceptance; an existing client binary cannot load the new module.
+`react-native-purchases`, `react-native-purchases-ui`, `expo-image-picker` 57.0.18, `expo-image-manipulator` 57.0.18, and direct `expo-file-system` 57.0.7 contain native code. After adding or upgrading them, rebuild the Expo development client with `npx expo run:ios`, `npx expo run:android`, or the corresponding approved EAS development build before runtime acceptance; an existing client binary cannot load the new modules.
 
 ## Supabase redirect URL
 
@@ -262,3 +272,15 @@ Prerequisite: rebuild the development client after installing `react-native-purc
 - [ ] Continue as Guest and confirm purchase/restore controls are unavailable, sign-in guidance is shown, and Guest Mode remains fully functional.
 - [ ] Switch from Pro account A to Free account B and confirm A’s Pro state never appears for B, including while B loads.
 - [ ] Simulate purchase/restore failures and confirm Settings remains usable with the last verified plan and no feature gate.
+
+## Manual Mobile AI Access R2 acceptance
+
+Prerequisites: set `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL`, rebuild the development client for the new Expo image modules, and use Web-initialized Free and Pro accounts against the intended server environment.
+
+- [ ] In Guest Mode, confirm AI status performs no request, Morning Start offers no camera/library action, and Skip opens the usable manual Plan my day review without a check or reward.
+- [ ] With authenticated Free, confirm Settings and Today show the same server-derived remaining lifetime actions as Web; consume one action on either client and confirm foreground/refresh reflects it on the other.
+- [ ] With Pro, consume today’s Web daily-plan allowance, foreground Mobile, and confirm Mobile shows zero and keeps manual planning available; repeat for the three toothbrush actions.
+- [ ] Confirm the plan brain dump limit, one/three/three editable review, title/first-step/direction/duration edits, and Confirm plan. Replace an older pending First Move and verify Focus immediately shows only the reviewed replacement.
+- [ ] Capture and select toothbrush images on true-device iOS and Android. Confirm permission copy, maximum-768-pixel preview, one request per tap, pass/fail behavior, temporary-file cleanup, and no image bytes in device persistence, cloud rows/storage, or logs.
+- [ ] On toothbrush success, confirm the canonical Morning check and one existing Morning reward appear. On failure, quota denial, unavailable service, or provider failure, confirm Skip stays available and creates no reward/check/AI request.
+- [ ] Switch account A to B while status is loading and confirm A’s allowance never appears for B. Expire the session and confirm the existing auth lifecycle handles the missing/expired token without exposing server details.
