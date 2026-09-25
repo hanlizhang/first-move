@@ -264,7 +264,7 @@ Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat w
 
 ### M4 — Store release
 
-Status: **not started**. Complete privacy disclosures, data export/deletion, subscription copy, app-store products and review notes, accessibility/device matrix, security review, incident/rollback plan, analytics consent decisions, production migration verification, staged rollout, and App Store/Play Store submission.
+Status: **not started and Apple-side work paused**. The current zero-Apple-membership path uses the Next.js Web app as an iPhone Home Screen web app; Apple Developer enrollment, App Store Connect, TestFlight, production iOS distribution, and live Apple IAP are paused. The Expo app remains available for local development. Web PWA R1 metadata and icons are implemented locally; deploying those changes and real iPhone acceptance are pending. The existing Web deployment serves over HTTPS. The previously listed store-release work remains deferred.
 
 ## 15. Monetization decisions already made
 

@@ -384,6 +384,14 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - Mobile/Web cat-tree and perch alignment still need visual polish.
 - Trick poses remain intentionally simple pixel abstractions.
 
+## Web PWA R1 — iPhone Safari without Apple membership
+
+- [x] Add a same-origin Web manifest, standalone display metadata, theme color, and dedicated Web/Home Screen icons.
+- [x] Keep authenticated pages, API responses, tokens, and personal data out of service-worker or offline caches; no service worker was added.
+- [ ] Complete manual iPhone Safari acceptance on the deployed HTTPS origin: Add to Home Screen, standalone layout, Morning camera/photo selection, Plan my day, Focus handoff, and authenticated Supabase sync.
+
+**Release choice:** Apple Developer enrollment, App Store Connect, TestFlight, production iOS distribution, and live Apple IAP are paused. The Expo app remains intact for local development. This Web PWA work is local and has not been deployed or accepted on an iPhone.
+
 ## Release backlog
 
 These items are intentionally deferred and are not implemented:
@@ -406,7 +414,7 @@ These items are intentionally deferred and are not implemented:
 4. Production RevenueCat lifecycle, storefront, webhook/read-model, and account-transfer behavior.
 5. Mobile Make Smaller AI plus production AI region/rate-limit/configuration rollout.
 6. True-device iOS/Android testing.
-7. App Store / Google Play release requirements.
+7. App Store / Google Play release requirements; Apple-side work is paused under Web PWA R1.
 
 ## Explicitly excluded
 
