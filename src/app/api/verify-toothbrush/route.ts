@@ -19,6 +19,17 @@ interface RouteDependencies {
   environment: Record<string, string | undefined>;
   createClient: (apiKey: string) => Pick<OpenAI["responses"], "create">;
   authorize?: AiAuthorizer;
+  logProviderFailure?: (diagnostic: ProviderFailureDiagnostic) => void;
+}
+
+interface ProviderFailureDiagnostic {
+  route: "/api/verify-toothbrush";
+  feature: "toothbrush_verification";
+  errorName?: string;
+  httpStatus?: number;
+  providerErrorCode?: string;
+  providerErrorType?: string;
+  providerRequestId?: string;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -58,10 +69,51 @@ export async function handleVerifyToothbrush(request: Request, dependencies: Rou
   try {
     const result = await verifyWithOpenAI(dependencies.createClient(apiKey), dataUrl, AI_MODEL);
     return json({ ...result, quota: authorization.quota }, 200, "live");
-  } catch {
+  } catch (error) {
+    (dependencies.logProviderFailure ?? defaultProviderFailureLogger)(providerFailureDiagnostic(error));
     return json({ code: "openai_provider_failure", error: "Verification failed without retrying." }, 502);
   }
 }
+
+function providerFailureDiagnostic(error: unknown): ProviderFailureDiagnostic {
+  const diagnostic: ProviderFailureDiagnostic = { route: "/api/verify-toothbrush", feature: "toothbrush_verification" };
+  if (!isRecord(error)) return diagnostic;
+
+  const errorName = safeErrorName(readProperty(error, "name"));
+  const httpStatus = safeHttpStatus(readProperty(error, "status"));
+  const providerErrorCode = safeProviderToken(readProperty(error, "code"));
+  const providerErrorType = safeProviderToken(readProperty(error, "type"));
+  const providerRequestId = safeProviderRequestId(
+    readProperty(error, "requestID") ?? readProperty(error, "request_id") ?? readProperty(error, "requestId"),
+  );
+
+  if (errorName) diagnostic.errorName = errorName;
+  if (httpStatus) diagnostic.httpStatus = httpStatus;
+  if (providerErrorCode) diagnostic.providerErrorCode = providerErrorCode;
+  if (providerErrorType) diagnostic.providerErrorType = providerErrorType;
+  if (providerRequestId) diagnostic.providerRequestId = providerRequestId;
+  return diagnostic;
+}
+
+function defaultProviderFailureLogger(diagnostic: ProviderFailureDiagnostic): void { console.error(diagnostic); }
+function readProperty(value: Record<string, unknown>, key: string): unknown {
+  try { return value[key]; } catch { return undefined; }
+}
+function safeErrorName(value: unknown): string | undefined {
+  return typeof value === "string" && /^(?:Error|[A-Z][A-Za-z0-9]{0,63}Error)$/.test(value) ? value : undefined;
+}
+function safeHttpStatus(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 400 && value <= 599 ? value : undefined;
+}
+function safeProviderToken(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(value)) return undefined;
+  if (/^(?:bearer|eyj|sk[-_]|sb[-_]|rc[-_])/i.test(value) || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) return undefined;
+  return value;
+}
+function safeProviderRequestId(value: unknown): string | undefined {
+  return typeof value === "string" && /^(?:req|request)[_-][A-Za-z0-9_-]{1,120}$/i.test(value) ? value : undefined;
+}
+function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 
 function json(value: unknown, status = 200, mode?: "mock" | "live"): Response { return Response.json(value, { status, headers: { "Cache-Control": "no-store", ...(mode ? { "X-Verification-Mode": mode } : {}) } }); }
 function aiAccessError(code: AiAccessErrorCode, quota?: AiQuotaMetadata): Response {
