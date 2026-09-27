@@ -260,11 +260,11 @@ Status: **partially implemented**. AI Access R2 adds the narrow toothbrush camer
 
 ### M3 — RevenueCat and AI access
 
-Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat with the Supabase Auth UUID and implements manually accepted Test Store presentation/purchase/restore behavior. AI Access R1 validates Supabase bearer tokens in the Web server routes, verifies authoritative `pro` Customer Info through RevenueCat REST API v1, and atomically enforces authenticated Free lifetime and Pro feature/day quotas before one `gpt-5.6-luna` dispatch. Mobile AI Access R2 now reads the server status and calls Plan my day and toothbrush verification with the current Supabase access token; it never sends `user_id`, `isPro`, or local RevenueCat authorization. Manual planning and Skip remain available through quota/service/provider denials. Make Smaller AI, Web Billing, supported-region gating, server abuse/rate limits, webhooks/read models, production storefront/configuration work, deployment, and device acceptance remain unresolved TASK-10/TASK-11/TASK-12 work.
+Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat with the Supabase Auth UUID and implements manually accepted Test Store presentation/purchase/restore behavior. The confirmed Apple monthly and annual products are imported into the existing RevenueCat project and associated with `pro`; this repository did not remotely inspect or modify them, and neither Apple approval nor production purchase acceptance is claimed. AI Access R1 validates Supabase bearer tokens in the Web server routes, verifies authoritative `pro` Customer Info through RevenueCat REST API v1, and atomically enforces authenticated Free lifetime and Pro feature/day quotas before one `gpt-5.6-luna` dispatch. Mobile AI Access R2 reads the server status and calls Plan my day and toothbrush verification with the current Supabase access token; it never sends `user_id`, `isPro`, or local RevenueCat authorization. Manual planning and Skip remain available through quota/service/provider denials. Make Smaller AI, Web Billing, supported-region gating, server abuse/rate limits, webhooks/read models, production Offering/paywall verification, deployment, and device acceptance remain unresolved TASK-10/TASK-11/TASK-12 work.
 
 ### M4 — Store release
 
-Status: **not started and Apple-side work paused**. The current zero-Apple-membership path uses the Next.js Web app as an iPhone Home Screen web app; Apple Developer enrollment, App Store Connect, TestFlight, production iOS distribution, and live Apple IAP are paused. The Expo app remains available for local development. Web PWA R1 metadata and icons are implemented locally; deploying those changes and real iPhone acceptance are pending. The existing Web deployment serves over HTTPS. The previously listed store-release work remains deferred.
+Status: **local preparation started; no build or submission**. The Expo display name is `First Move: Start Small`, bundle ID remains `app.firstmove.mobile`, version/build is `1.0.0` / `1`, and EAS has a store-distribution `production` build profile plus matching submit profile while `development-simulator` is unchanged. The first Apple monthly/annual products and initial storefront markets are recorded from confirmed external state, not remote re-verification. Account deletion, published Privacy Policy/Terms links, production paywall disclosures and subscription management, approved native icon/screenshots, production environment verification, Mobile-only new-account initialization, true-device/sandbox acceptance, signed EAS build, TestFlight, App Review, and public release remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
 
 ## 15. Monetization decisions already made
 
@@ -274,16 +274,17 @@ Status: **not started and Apple-side work paused**. The current zero-Apple-membe
 - Pro allows one AI daily-plan request, three toothbrush-verification attempts, and five Make this smaller requests per local day.
 - Pro may add advanced history and premium cat content without degrading or removing Free/earned core content.
 - RevenueCat is authoritative for the `pro` entitlement; the Supabase Auth UUID is the RevenueCat App User ID.
+- The first iOS products are single-seat monthly `app.firstmove.mobile.pro.monthly` ($4.99 US) and annual `app.firstmove.mobile.pro.annual` ($39.99 US), both associated with `pro`; initial storefronts are US, CA, UK, CH, AU, NZ, SG, and JP.
 - Client entitlement/counter claims are never authoritative. AI Access R1 checks bearer identity, RevenueCat entitlement, and feature quota on the server before dispatch; Mobile renders the returned remaining values and never resets or computes quota locally. Production region allowlisting and server abuse/rate limits remain required later controls.
 - OpenAI-backed features launch only in supported international markets; Mainland China is excluded initially.
 
 ## 16. Monetization decisions still open
 
-- Subscription prices, billing periods, introductory/trial offers, storefront products, and launch currencies.
+- Storefront localizations, any introductory/trial offers, and final production paywall copy; the first iOS product IDs, billing periods, US prices, and launch markets are decided.
 - Exact advanced-history and premium-cat feature scope.
 - RevenueCat account-transfer/alias policy, webhook retention, grace period, refund, family-sharing, and outage behavior.
 - Whether introductory credits survive account deletion/recreation and the abuse-prevention policy.
-- Supported-country allowlist, legal/privacy review, tax/storefront availability, and any future region-specific AI provider.
+- Legal/privacy review, the separate production AI provider allowlist within the approved storefront markets, tax/storefront verification, and any future region-specific AI provider.
 - Upgrade timing/copy, Web Billing, manage-subscription UX, and customer-support/refund process; basic Web and Mobile plan/allowance display is implemented.
 - Cost budgets, model-change policy, and production rate-limit values.
 

@@ -230,6 +230,8 @@ Mobile now reuses that frozen contract for already-initialized accounts only. We
 
 ## Free and Pro
 
+The first public iOS storefront uses two single-seat auto-renewable products: `app.firstmove.mobile.pro.monthly` at $4.99 in the US storefront and `app.firstmove.mobile.pro.annual` at $39.99 in the US storefront. Both map to the existing RevenueCat `pro` entitlement. App Store storefront localization remains authoritative for the price displayed at purchase time.
+
 | Capability | Free | Pro |
 | --- | --- | --- |
 | Core non-AI productivity | Included | Included |
@@ -250,7 +252,7 @@ Web Settings reads presentation-safe Free/Pro and remaining-quota status from a 
 
 ## Regional AI strategy
 
-Initial production launch targets supported international markets and does not offer OpenAI-backed features in unsupported regions. Mainland China is excluded initially. A common trusted-server provider interface supports OpenAI (`gpt-5.6-luna`) for approved markets, manual/local behavior, and a possible future region-specific provider after legal, privacy, residency, safety, and quality review. Every AI feature retains a manual fallback.
+The first public iOS storefront markets are the United States, Canada, United Kingdom, Switzerland, Australia, New Zealand, Singapore, and Japan. OpenAI-backed features are offered only where the trusted server's separately approved provider allowlist permits them; every market retains manual/local fallbacks, and Mainland China is excluded initially. A common trusted-server provider interface supports OpenAI (`gpt-5.6-luna`) for approved markets, manual/local behavior, and a possible future region-specific provider after legal, privacy, residency, safety, and quality review.
 
 ## Success criteria
 

@@ -246,6 +246,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Configure RevenueCat `pro` entitlement with Supabase Auth UUID as App User ID for the accepted Mobile Test Store flow.
 - [x] Verify the current `pro` entitlement from the trusted AI server using the Supabase Auth UUID and RevenueCat REST API; fail closed without treating an outage as Free.
 - [x] Implement and manually accept RevenueCat Mobile Test Store purchase and restore presentation.
+- [x] Record the confirmed first iOS single-seat products (`app.firstmove.mobile.pro.monthly` at $4.99 US and `app.firstmove.mobile.pro.annual` at $39.99 US), their existing `pro` association, and the eight initial storefront markets without changing Apple or RevenueCat remotely.
 - [ ] Implement purchase, restore, account switch, downgrade/expiry/refund, grace-period, and webhook/read-model behavior.
 - [x] Show trusted server-derived Free/Pro and AI allowance status in Web Settings without adding Web purchase controls.
 - [ ] Add transparent Free/Pro comparison, usage display, manage-subscription flow, and non-destructive feature gates.
@@ -390,7 +391,24 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Keep authenticated pages, API responses, tokens, and personal data out of service-worker or offline caches; no service worker was added.
 - [ ] Complete manual iPhone Safari acceptance on the deployed HTTPS origin: Add to Home Screen, standalone layout, Morning camera/photo selection, Plan my day, Focus handoff, and authenticated Supabase sync.
 
-**Release choice:** Apple Developer enrollment, App Store Connect, TestFlight, production iOS distribution, and live Apple IAP are paused. The Expo app remains intact for local development. This Web PWA work is local and has not been deployed or accepted on an iPhone.
+**Release choice:** This PWA remains an independent fallback. Native iOS release preparation has resumed under the App Store R1 checklist below; no EAS production build, TestFlight upload, App Review submission, or public release has occurred.
+
+## iOS App Store R1 — first public release preparation
+
+- [x] Align the public display name to **First Move: Start Small** while preserving `app.firstmove.mobile`, `first-move-mobile`, `firstmove`, and RevenueCat entitlement `pro`.
+- [x] Set App Store version/build `1.0.0` / `1` and add local EAS production build and submit profiles while preserving `development-simulator` unchanged.
+- [x] Retain and test the release-only RevenueCat Apple public SDK key boundary with no Test Store fallback and no client/server secrets in EAS config.
+- [x] Reconcile the local release audit, confirmed Apple product/storefront state, and exact EAS build/submit sequence without claiming remote acceptance or release.
+- [ ] Supply approved native app icon and App Store screenshots/metadata for required iPhone and supported-iPad sizes.
+- [ ] Add a compliant in-app account-deletion path and trusted server deletion implementation, including active-subscription guidance, without redesigning Auth or cloud storage.
+- [ ] Publish and link a Privacy Policy and Terms of Use from the app; verify the production paywall's localized price, duration, auto-renewal, cancellation, benefits, and legal links.
+- [ ] Add a manage-subscription path and complete production RevenueCat Offering/paywall plus Apple sandbox purchase/restore/lifecycle acceptance.
+- [ ] Resolve or explicitly accept the Mobile-only new-account initialization gap before App Review.
+- [ ] Configure the EAS production public variables and server-only AI/RevenueCat secrets in their proper remote environments; complete production region/rate-limit controls.
+- [ ] Complete true-device iPhone and supported-iPad Auth, sync, camera/photo, AI fallback, subscription, outage, and accessibility acceptance.
+- [ ] Build and upload with EAS, accept the exact TestFlight build, attach both first subscriptions to app version `1.0.0`, and submit them together for App Review.
+
+**iOS App Store R1 status:** Local release configuration and documentation are prepared only. Account deletion, legal links/disclosures, approved artwork, production environment verification, true-device/sandbox acceptance, signed build/upload, Apple review, and public release remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
 
 ## Release backlog
 
@@ -414,7 +432,7 @@ These items are intentionally deferred and are not implemented:
 4. Production RevenueCat lifecycle, storefront, webhook/read-model, and account-transfer behavior.
 5. Mobile Make Smaller AI plus production AI region/rate-limit/configuration rollout.
 6. True-device iOS/Android testing.
-7. App Store / Google Play release requirements; Apple-side work is paused under Web PWA R1.
+7. Google Play release requirements and all open iOS App Store R1 gates listed above.
 
 ## Explicitly excluded
 
