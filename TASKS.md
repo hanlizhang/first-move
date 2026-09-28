@@ -246,7 +246,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Configure RevenueCat `pro` entitlement with Supabase Auth UUID as App User ID for the accepted Mobile Test Store flow.
 - [x] Verify the current `pro` entitlement from the trusted AI server using the Supabase Auth UUID and RevenueCat REST API; fail closed without treating an outage as Free.
 - [x] Implement and manually accept RevenueCat Mobile Test Store purchase and restore presentation.
-- [x] Record the confirmed first iOS single-seat products (`app.firstmove.mobile.pro.monthly` at $4.99 US and `app.firstmove.mobile.pro.annual` at $39.99 US), their existing `pro` association, and the eight initial storefront markets without changing Apple or RevenueCat remotely.
+- [x] Record the confirmed first iOS single-seat products (`app.firstmove.mobile.pro.monthly` at $4.99 US and `app.firstmove.mobile.pro.annual` at $39.99 US), their existing `pro` association, and the six R1 storefront markets without changing Apple or RevenueCat remotely.
 - [ ] Implement purchase, restore, account switch, downgrade/expiry/refund, grace-period, and webhook/read-model behavior.
 - [x] Show trusted server-derived Free/Pro and AI allowance status in Web Settings without adding Web purchase controls.
 - [ ] Add transparent Free/Pro comparison, usage display, manage-subscription flow, and non-destructive feature gates.
@@ -406,16 +406,16 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Recreate the full migration chain in a disposable local Supabase environment and pass pgTAP `0001`–`0012`, including deletion tests `0009`–`0012`, without touching the regular development database.
 - [x] Add the explicit Mobile empty-account Start fresh path through `initialize_cloud_workspace_v2`, canonical validation, idempotent recovery, and existing runtime activation while preserving Guest data and deferring Import this device.
 - [x] Add one target-free once-daily Vercel Cron declaration for the existing bounded worker route, protected by server-only `CRON_SECRET`; configuration and deployment remain remote work.
-- [ ] Supply approved native app icon and App Store screenshots/metadata for required iPhone sizes.
-- [ ] Remotely migrate, deploy, configure, and manually accept the complete account-deletion path with disposable accounts, including RevenueCat delete permission and reliable retry invocation.
-- [ ] Publish and link a Privacy Policy and Terms of Use from the app; verify the production paywall's localized price, duration, auto-renewal, cancellation, benefits, and legal links.
+- [x] Integrate the approved final native app icon for the iPhone-only R1; App Store screenshots/metadata remain required.
+- [x] Complete production disposable-account acceptance for the account-deletion path.
+- [x] Implement public Privacy Policy, Terms of Use, and Support routes and link all three from Guest and authenticated Mobile Settings. Production deployment remains pending.
 - [ ] Add a manage-subscription path and complete production RevenueCat Offering/paywall plus Apple sandbox purchase/restore/lifecycle acceptance.
 - [x] Resolve the local Mobile-only new-account initialization gap with explicit empty Start fresh; complete true-device acceptance before App Review.
 - [ ] Configure the EAS production public variables and server-only AI/RevenueCat secrets in their proper remote environments; complete production region/rate-limit controls.
 - [ ] Complete true-device iPhone Auth, sync, account deletion, camera/photo, AI fallback, subscription, outage, and accessibility acceptance.
 - [ ] Build and upload with EAS, accept the exact TestFlight build, attach both first subscriptions to app version `1.0.0`, and submit them together for App Review.
 
-**iOS App Store R1 status:** Local release configuration, account-deletion Phases 1B–1E, the disposable full-database gate, explicit Mobile Start fresh, and a once-daily protected retry schedule are implemented and automated-tested locally only. None of the three deletion migrations is remotely applied; the initiation gate remains disabled; the server routes and cron are not deployed; and production `CRON_SECRET`, monitoring, and RevenueCat delete permission remain unverified. The Mobile UI/local cleanup exists, while Web UI/local cleanup remains open. Legal links/disclosures, approved iPhone artwork, server configuration, true-device/sandbox acceptance, signed build/upload, Apple review, and public release also remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
+**iOS App Store R1 status:** The iPhone-only local release configuration, final icon, production Resend SMTP, production account-deletion acceptance, explicit Mobile Start fresh, and public legal/support routes plus Mobile links are complete. The R1 storefronts are US, CA, CH, AU, NZ, and SG; the UK and Japan are deferred. Production deployment of this legal-page integration, the EAS production build, TestFlight acceptance, App Review, and public release remain incomplete. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
 
 ## Release backlog
 
