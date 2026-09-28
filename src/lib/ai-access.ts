@@ -30,6 +30,7 @@ export type AiAccessErrorCode =
   | "unauthenticated"
   | "invalid_request_id"
   | "duplicate_request"
+  | "account_deletion_pending"
   | "introductory_quota_exhausted"
   | "pro_feature_quota_exhausted"
   | "revenuecat_unavailable"
@@ -61,6 +62,7 @@ export type AiAccessStatusResult =
       outcome: "denied";
       code:
         | "unauthenticated"
+        | "account_deletion_pending"
         | "revenuecat_unavailable"
         | "quota_service_unavailable";
     };
@@ -73,12 +75,14 @@ export interface AiAuthorizationInput {
 
 interface AiAccessDependencies {
   authenticate(accessToken: string): Promise<string | null>;
+  ensureWriteAllowed(userId: string): Promise<boolean>;
   verifyProEntitlement(userId: string): Promise<boolean>;
   reserve(input: AiReservationInput): Promise<AiReservationResult>;
 }
 
 interface AiAccessStatusDependencies {
   authenticate(accessToken: string): Promise<string | null>;
+  ensureWriteAllowed(userId: string): Promise<boolean>;
   verifyProEntitlement(userId: string): Promise<boolean>;
   readStatus(
     userId: string,
@@ -141,6 +145,14 @@ export async function readAiAccessStatus(
     return { outcome: "denied", code: "quota_service_unavailable" };
   }
   if (!userId) return { outcome: "denied", code: "unauthenticated" };
+
+  try {
+    if (!(await dependencies.ensureWriteAllowed(userId))) {
+      return { outcome: "denied", code: "account_deletion_pending" };
+    }
+  } catch {
+    return { outcome: "denied", code: "quota_service_unavailable" };
+  }
 
   let pro: boolean;
   try {
@@ -232,6 +244,14 @@ export async function authorizePaidAiRequest(
   }
   if (!userId) return { outcome: "denied", code: "unauthenticated" };
 
+  try {
+    if (!(await dependencies.ensureWriteAllowed(userId))) {
+      return { outcome: "denied", code: "account_deletion_pending" };
+    }
+  } catch {
+    return { outcome: "denied", code: "quota_service_unavailable" };
+  }
+
   let pro: boolean;
   try {
     pro = await dependencies.verifyProEntitlement(userId);
@@ -246,7 +266,10 @@ export async function authorizePaidAiRequest(
       accessBasis: pro ? "pro" : "introductory",
       userId,
     });
-  } catch {
+  } catch (error) {
+    if (isAccountDeletionPendingError(error)) {
+      return { outcome: "denied", code: "account_deletion_pending" };
+    }
     return { outcome: "denied", code: "quota_service_unavailable" };
   }
 
@@ -359,6 +382,8 @@ function createDefaultDependencies(
   return {
     authenticate: (accessToken) =>
       validateSupabaseAccessToken(accessToken, environment),
+    ensureWriteAllowed: (userId) =>
+      accountAcceptsAiWrites(userId, environment),
     verifyProEntitlement: (userId) =>
       verifyRevenueCatProEntitlement(userId, environment),
     reserve: (input) => reservePaidAiUsage(input, environment),
@@ -371,6 +396,8 @@ function createDefaultStatusDependencies(
   return {
     authenticate: (accessToken) =>
       validateSupabaseAccessToken(accessToken, environment),
+    ensureWriteAllowed: (userId) =>
+      accountAcceptsAiWrites(userId, environment),
     verifyProEntitlement: (userId) =>
       verifyRevenueCatProEntitlement(userId, environment),
     readStatus: (userId, accessBasis, accessToken) =>
@@ -431,6 +458,34 @@ async function reservePaidAiUsage(
   return parseReservationResult(data, input.feature);
 }
 
+async function accountAcceptsAiWrites(
+  userId: string,
+  environment: Record<string, string | undefined>,
+): Promise<boolean> {
+  const { url } = validateSupabasePublicConfig(
+    environment.NEXT_PUBLIC_SUPABASE_URL,
+    environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  );
+  const serviceRoleKey = environment.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceRoleKey) throw new Error("AI write gate is not configured.");
+
+  const supabase = createSupabaseClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+  const { data, error } = await supabase.rpc("account_accepts_writes", {
+    p_user_id: userId,
+  });
+  if (error) throw error;
+  if (typeof data !== "boolean") {
+    throw new Error("Invalid AI write gate response.");
+  }
+  return data;
+}
+
 export async function readPaidAiStatus(
   userId: string,
   accessBasis: AiAccessBasis,
@@ -484,7 +539,7 @@ function createAuthenticatedReadClient(
   request: typeof fetch,
 ) {
   // Status reads use the validated owner session and existing RLS. The service
-  // role is intentionally limited to the SECURITY DEFINER reservation RPC.
+  // role is limited to narrow write-gate/reservation RPCs, not table reads.
   const { url, publishableKey } = validateSupabasePublicConfig(
     environment.NEXT_PUBLIC_SUPABASE_URL,
     environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
@@ -524,6 +579,14 @@ function parseReservationResult(
     throw new Error("Invalid quota denial.");
   }
   return { outcome: "denied", code: value.code, quota };
+}
+
+function isAccountDeletionPendingError(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.code === "55000" &&
+    value.message === "account_deletion_pending"
+  );
 }
 
 function parseQuotaMetadata(

@@ -35,6 +35,7 @@ import { canonicalPayload } from "../test-fixtures/canonical.ts";
 import { createMobileSyncQueue } from "./sync-queue.ts";
 import {
   formatMobileSyncDiagnostic,
+  INITIALIZE_CLOUD_WORKSPACE_RPC,
   MobileSyncRuntime,
   SYNC_CLOUD_WORKSPACE_RPC,
   type MobileSyncClient,
@@ -100,6 +101,8 @@ class FakeCloud {
   calls: { name: string; parameters?: Record<string, unknown> }[] = [];
   receipts = new Set<string>();
   failWrites = false;
+  failInitialization = false;
+  initializationCommitsThenFails = false;
   invalidWriteResponseOnce = false;
   invalidReads = false;
   private taskParents = new Map<string, Record<string, unknown>>();
@@ -118,6 +121,18 @@ class FakeCloud {
         data: this.invalidReads ? { private_payload: "never-apply-this" } : this.raw,
         error: null,
       };
+    }
+    if (name === INITIALIZE_CLOUD_WORKSPACE_RPC) {
+      if (this.failInitialization) {
+        return { data: null, error: { message: "Failed to fetch" } };
+      }
+      this.initialized = true;
+      this.raw = emptyCanonical();
+      if (this.initializationCommitsThenFails) {
+        this.initializationCommitsThenFails = false;
+        return { data: null, error: { message: "Failed to fetch" } };
+      }
+      return { data: this.raw, error: null };
     }
     assert.equal(name, SYNC_CLOUD_WORKSPACE_RPC);
     if (this.failWrites) {
@@ -407,9 +422,9 @@ function harness(options: {
   const cloudStates: unknown[] = [];
   const client: MobileSyncClient = {
     auth: {
-      async getSession() {
+      async getUser() {
         return {
-          data: { session: authUser ? { user: { id: authUser } } : null },
+          data: { user: authUser ? { id: authUser } : null },
           error: null,
         };
       },
@@ -465,6 +480,12 @@ function harness(options: {
 
 function syncCalls(cloud: FakeCloud) {
   return cloud.calls.filter((call) => call.name === SYNC_CLOUD_WORKSPACE_RPC);
+}
+
+function initializationCalls(cloud: FakeCloud) {
+  return cloud.calls.filter(
+    (call) => call.name === INITIALIZE_CLOUD_WORKSPACE_RPC,
+  );
 }
 
 test("initialized hydration replaces an unreconciled account-local array with an editable canonical working copy", async () => {
@@ -1013,15 +1034,12 @@ test("the current Supabase UUID is revalidated before every queued dispatch", as
   await fixture.runtime.mutate((state) =>
     editTask(state, TASK_ID, { title: "Second", direction: "Rest" }, () => NOW),
   );
-  let sessionChecks = 0;
-  fixture.client.auth.getSession = async () => {
-    sessionChecks += 1;
+  let identityChecks = 0;
+  fixture.client.auth.getUser = async () => {
+    identityChecks += 1;
     return {
       data: {
-        session:
-          sessionChecks <= 2
-            ? { user: { id: USER_A } }
-            : { user: { id: USER_B } },
+        user: identityChecks <= 2 ? { id: USER_A } : { id: USER_B },
       },
       error: null,
     };
@@ -1037,6 +1055,30 @@ test("the current Supabase UUID is revalidated before every queued dispatch", as
   });
 });
 
+test("a deleted Auth identity is rejected before any queued write can replay", async () => {
+  const fixture = harness();
+  await fixture.runtime.start();
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    addTask(state, { title: "Never replay", direction: "Rest" }, () => NOW, () => TASK_ID),
+  );
+  fixture.client.auth.getUser = async () => ({
+    data: { user: null },
+    error: { status: 403, code: "user_not_found" },
+  });
+
+  fixture.online(true);
+  await fixture.runtime.retry();
+
+  assert.equal(syncCalls(fixture.cloud).length, 0);
+  assert.equal((await fixture.queue.load(USER_A)).pending.length, 1);
+  assert.deepEqual(fixture.runtime.getSnapshot().diagnostic, {
+    failureClass: "auth-session",
+    safeErrorCode: "SESSION_MISMATCH",
+    safeMessageClass: "authenticated-owner-session-mismatch",
+  });
+});
+
 test("a session change after an RPC response leaves the mutation queued and reports auth", async () => {
   const fixture = harness();
   await fixture.runtime.start();
@@ -1044,15 +1086,12 @@ test("a session change after an RPC response leaves the mutation queued and repo
   await fixture.runtime.mutate((state) =>
     addTask(state, { title: "Stay queued", direction: "Rest" }, () => NOW, () => TASK_ID),
   );
-  let sessionChecks = 0;
-  fixture.client.auth.getSession = async () => {
-    sessionChecks += 1;
+  let identityChecks = 0;
+  fixture.client.auth.getUser = async () => {
+    identityChecks += 1;
     return {
       data: {
-        session:
-          sessionChecks === 1
-            ? { user: { id: USER_A } }
-            : { user: { id: USER_B } },
+        user: identityChecks === 1 ? { id: USER_A } : { id: USER_B },
       },
       error: null,
     };
@@ -1114,6 +1153,124 @@ test("uninitialized account remains write-disabled and never dispatches a mutati
   assert.equal(fixture.runtime.getSnapshot().status, "write-disabled");
   assert.equal(result, undefined);
   assert.equal(syncCalls(fixture.cloud).length, 0);
+});
+
+test("explicit Start fresh creates an empty canonical account without reading or uploading Guest progress", async () => {
+  const fixture = harness();
+  fixture.cloud.initialized = false;
+  await fixture.repository.updateGuestWorkspace((state) =>
+    addTask(
+      state,
+      { title: "Keep this Guest task", direction: "Rest" },
+      () => NOW,
+      () => TASK_ID,
+    ),
+  );
+  const unreconciledAccount = createEmptyState();
+  unreconciledAccount.tasks = [
+    {
+      id: TASK_ID,
+      title: "Do not upload account-local data",
+      direction: "Rest",
+      order: 0,
+      createdAt: NOW,
+      updatedAt: NOW,
+      completedOn: [],
+    },
+  ];
+  await fixture.repository.saveLocalWorkspace(
+    { kind: "account", userId: USER_A },
+    unreconciledAccount,
+  );
+
+  await fixture.runtime.start();
+  const result = await fixture.runtime.startFresh();
+
+  assert.equal(result.outcome, "initialized");
+  assert.equal(fixture.runtime.canWrite(), true);
+  assert.equal(fixture.runtime.getSnapshot().status, "synced");
+  assert.equal(initializationCalls(fixture.cloud).length, 1);
+  assert.deepEqual(initializationCalls(fixture.cloud)[0]?.parameters?.p_payload, {});
+  assert.equal(
+    JSON.stringify(initializationCalls(fixture.cloud)[0]?.parameters).includes(
+      "Keep this Guest task",
+    ),
+    false,
+  );
+  assert.equal(
+    (await fixture.repository.loadGuestWorkspace()).tasks[0]?.title,
+    "Keep this Guest task",
+  );
+  assert.equal(
+    (await fixture.repository.loadLocalWorkspace({ kind: "account", userId: USER_A }))
+      .tasks.length,
+    0,
+  );
+  assert.equal(fixture.canonicalStates.at(-1)?.tasks.length, 0);
+});
+
+test("Start fresh is idempotent and recovers a committed initialization after a lost response", async () => {
+  const fixture = harness();
+  fixture.cloud.initialized = false;
+  fixture.cloud.initializationCommitsThenFails = true;
+  await fixture.runtime.start();
+
+  const recovered = await fixture.runtime.startFresh();
+  const repeated = await fixture.runtime.startFresh();
+
+  assert.equal(recovered.outcome, "initialized");
+  assert.equal(repeated.outcome, "already-initialized");
+  assert.equal(initializationCalls(fixture.cloud).length, 1);
+  assert.equal(fixture.runtime.canWrite(), true);
+});
+
+test("failed Start fresh retry preserves Guest and account-local data until canonical success", async () => {
+  const fixture = harness();
+  fixture.cloud.initialized = false;
+  fixture.cloud.failInitialization = true;
+  const guest = addTask(
+    createEmptyState(),
+    { title: "Guest stays", direction: "Rest" },
+    () => NOW,
+    () => TASK_ID,
+  );
+  const accountLocal = addTask(
+    createEmptyState(),
+    { title: "Account cache stays until success", direction: "Rest" },
+    () => NOW,
+    () => TASK_ID,
+  );
+  await fixture.repository.saveGuestWorkspace(guest);
+  await fixture.repository.saveLocalWorkspace(
+    { kind: "account", userId: USER_A },
+    accountLocal,
+  );
+  await fixture.runtime.start();
+
+  const failed = await fixture.runtime.startFresh();
+  assert.equal(failed.outcome, "failed");
+  assert.equal(
+    (await fixture.repository.loadGuestWorkspace()).tasks[0]?.title,
+    "Guest stays",
+  );
+  assert.equal(
+    (await fixture.repository.loadLocalWorkspace({ kind: "account", userId: USER_A }))
+      .tasks[0]?.title,
+    "Account cache stays until success",
+  );
+
+  fixture.cloud.failInitialization = false;
+  const retried = await fixture.runtime.startFresh();
+  assert.equal(retried.outcome, "initialized");
+  assert.equal(
+    (await fixture.repository.loadGuestWorkspace()).tasks[0]?.title,
+    "Guest stays",
+  );
+  assert.equal(
+    (await fixture.repository.loadLocalWorkspace({ kind: "account", userId: USER_A }))
+      .tasks.length,
+    0,
+  );
 });
 
 test("invalid canonical refresh never replaces a valid local working copy", async () => {

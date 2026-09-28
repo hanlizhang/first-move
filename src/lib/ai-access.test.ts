@@ -21,6 +21,7 @@ test("missing bearer authentication is rejected before entitlement or quota chec
   let authenticationCalls = 0; let revenueCatCalls = 0; let reservations = 0;
   const result = await authorizePaidAiRequest(new Request("http://local"), INPUT, {
     authenticate: async () => { authenticationCalls += 1; return USER_ID; },
+    ensureWriteAllowed: async () => true,
     verifyProEntitlement: async () => { revenueCatCalls += 1; return false; },
     reserve: async () => { reservations += 1; return { outcome: "already_reserved" as const }; },
   });
@@ -42,6 +43,10 @@ test("the validated Supabase user alone becomes the RevenueCat and quota identit
       assert.equal(accessToken, "valid-access-token");
       return USER_ID;
     },
+    ensureWriteAllowed: async (userId) => {
+      assert.equal(userId, USER_ID);
+      return true;
+    },
     verifyProEntitlement: async (userId) => { revenueCatUser = userId; return false; },
     reserve: async (input) => {
       reservedUser = input.userId;
@@ -59,6 +64,7 @@ test("active Pro selects Pro reservation without changing introductory history",
   let accessBasis = "";
   const result = await authorizePaidAiRequest(authenticatedRequest(), INPUT, {
     authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => true,
     verifyProEntitlement: async () => true,
     reserve: async (input) => {
       accessBasis = input.accessBasis;
@@ -73,6 +79,7 @@ test("RevenueCat failure fails closed before quota reservation", async () => {
   let reservations = 0;
   const result = await authorizePaidAiRequest(authenticatedRequest(), INPUT, {
     authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => true,
     verifyProEntitlement: async () => { throw new Error("timeout"); },
     reserve: async () => { reservations += 1; return { outcome: "already_reserved" as const }; },
   });
@@ -80,9 +87,53 @@ test("RevenueCat failure fails closed before quota reservation", async () => {
   assert.equal(reservations, 0);
 });
 
+test("pending deletion blocks RevenueCat and provider-dispatch reservation", async () => {
+  let revenueCatCalls = 0;
+  let reservations = 0;
+  const result = await authorizePaidAiRequest(authenticatedRequest(), INPUT, {
+    authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => false,
+    verifyProEntitlement: async () => {
+      revenueCatCalls += 1;
+      return true;
+    },
+    reserve: async () => {
+      reservations += 1;
+      return { outcome: "already_reserved" as const };
+    },
+  });
+  assert.deepEqual(result, {
+    outcome: "denied",
+    code: "account_deletion_pending",
+  });
+  assert.equal(revenueCatCalls, 0);
+  assert.equal(reservations, 0);
+});
+
+test("write-gate failure fails closed before RevenueCat", async () => {
+  let revenueCatCalls = 0;
+  const result = await authorizePaidAiRequest(authenticatedRequest(), INPUT, {
+    authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => {
+      throw new Error("database unavailable");
+    },
+    verifyProEntitlement: async () => {
+      revenueCatCalls += 1;
+      return false;
+    },
+    reserve: async () => ({ outcome: "already_reserved" as const }),
+  });
+  assert.deepEqual(result, {
+    outcome: "denied",
+    code: "quota_service_unavailable",
+  });
+  assert.equal(revenueCatCalls, 0);
+});
+
 test("quota database failure fails closed", async () => {
   const result = await authorizePaidAiRequest(authenticatedRequest(), INPUT, {
     authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => true,
     verifyProEntitlement: async () => false,
     reserve: async () => { throw new Error("database unavailable"); },
   });
@@ -92,6 +143,7 @@ test("quota database failure fails closed", async () => {
 test("an existing request reservation is never authorized for a second dispatch", async () => {
   const result = await authorizePaidAiRequest(authenticatedRequest(), INPUT, {
     authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => true,
     verifyProEntitlement: async () => false,
     reserve: async () => ({ outcome: "already_reserved" as const }),
   });

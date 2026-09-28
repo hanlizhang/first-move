@@ -1,6 +1,6 @@
 # First Move Mobile v1 handoff
 
-Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-15 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization. AI Access R1 migration `20260915120000_ai_access_r1.sql` is remotely applied; Mobile AI Access R2 presentation is implemented and automated-tested locally, but production deployment/configuration and device acceptance are not complete.
+Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-28 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization. AI Access R1 migration `20260915120000_ai_access_r1.sql` is remotely applied. Mobile empty-account Start fresh, AI Access R2 presentation, and account-deletion release work are implemented and automated-tested locally, but their required remote rollout/configuration and device acceptance are not complete.
 
 Status vocabulary used here:
 
@@ -68,7 +68,7 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 - Web and Mobile use the same Supabase Auth UUID.
 - Mobile authenticated business writes are enabled for the implemented Task, Habit/check-in, ActivityIntent, and ActivitySession mutations.
 - Web and Mobile treat Tasks as one-shot items: no completion history means active, while any completion history means completed on every later date. Habits remain recurring scheduled items.
-- Mobile writes only after an already-initialized account has successfully hydrated; empty-account Start fresh and Import this device remain deferred and write-disabled on Mobile.
+- Mobile writes only after a canonical workspace has successfully hydrated. An empty authenticated account now offers explicit Start fresh through the existing v2 initialization contract; it submits `{}` only, validates canonical state, and activates the existing runtime. Import this device remains deferred for iOS 1.0.
 - Mobile reuses the existing Web Sync v1 backend, RPCs, schema-v8 snapshot, and canonical-response contract; no new SQL, RPC, RLS, or Auth architecture was introduced for Mobile sync.
 - Guest Mode remains local-only. Mobile queue, canonical cache, and editable working workspace are owner-scoped by Supabase Auth UUID; Guest and other accounts are never merged.
 - Authenticated writes queue ordered full snapshots in AsyncStorage, flush pending writes before reads, revalidate the current session UUID, and replace the working/cache state only after canonical responses pass validation.
@@ -97,7 +97,7 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 - Little Finds remain deferred. Later eligibility may use Active Day milestones, cumulative Total Hearts, or bounded daily-heart activity; future authenticated selection must remain deterministic, idempotent, and server-authoritative.
 - Celebration UI remains designed only: compact Coin gain, larger `Active Day +1`, daily `Heart +1`, full Cat milestone unlock, and Little Find reveal. Simultaneous rewards must use one ordered or combined celebration queue rather than stacked blocking moments.
 - Cat v1B implements no Hearts, Little Finds, or celebration code or database schema.
-- Mobile empty-account setup/import, post-session choices, Make Smaller AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
+- Mobile Import this device, post-session choices, Make Smaller AI, notifications, and background services remain outside this handoff’s implemented Mobile scope.
 
 ## 6. Migration list and recorded state
 
@@ -112,12 +112,15 @@ The repository contains these migrations in order:
 | `20260731180000_continuous_cloud_sync.sql` | Atomic continuous full-workspace sync and economic commands | Applied locally and remotely; automated tests passed; core two-browser behavior manually verified. |
 | `20260907082222_cat_v1_catalog.sql` | Approved 16-row Cat v1 catalog and future day-21 wet-food milestone grant | Staged locally only; not remotely applied. The current task report records the linked-project dry-run result. |
 | `20260915120000_ai_access_r1.sql` | Service-role-only, idempotent Free/Pro AI quota reservation with server-time/profile-timezone local dates | Remotely applied; local migration and database coverage remain the repository source. |
+| `20260927120000_account_deletion_requests.sql` | Server-only persistent deletion request/outbox state with separate RevenueCat/Auth progress, retry scheduling, and expiring leases | Phase 1B implemented and tested locally only; not remotely applied. This migration alone adds no endpoint, worker, write gate, or UI. |
+| `20260927130000_account_deletion_initiation.sql` | Service-only idempotent initiation and per-account pending-deletion write gates across all owner-scoped tables and AI reservation | Phase 1C implemented locally only; not remotely applied. The route release gate remains disabled and no destructive worker or UI exists. |
+| `20260928120000_account_deletion_worker.sql` | Service-only atomic worker claim/progress/retry/completion transitions and read-only Storage ownership preflight | Phase 1D corrected locally and included in a successful fresh disposable migration plus complete pgTAP `0001`–`0012` run. It is not remotely applied. The worker has a verified-user initiation attempt and protected one-attempt retry route; one once-daily Vercel Cron is declared locally, but neither route nor cron is deployed and no real provider/Auth execution exists. |
 
-Manual `npx supabase migration list` verification shows `20260731180000_continuous_cloud_sync.sql` in both Local and Remote. Cloud setup, import, hydration, refresh, retry, and continuous-sync RPCs are deployed. AI Access R1 migration `20260915120000_ai_access_r1.sql` is also recorded as remotely applied. The Cat catalog migration remains intentionally unapplied until a separately approved remote push.
+Manual `npx supabase migration list` verification shows `20260731180000_continuous_cloud_sync.sql` in both Local and Remote. Cloud setup, import, hydration, refresh, retry, and continuous-sync RPCs are deployed. AI Access R1 migration `20260915120000_ai_access_r1.sql` is also recorded as remotely applied. The Cat catalog and all three account-deletion migrations remain intentionally unapplied until separately approved remote actions.
 
 ## 7. Web cloud lifecycle
 
-The setup/import lifecycle in this section is implemented on Web. Mobile currently reuses the resulting initialized account and does not offer empty-account Start fresh or Import this device.
+The full setup/import lifecycle in this section is implemented on Web. Mobile reuses initialized accounts and, for iOS 1.0, offers only empty-account Start fresh. Mobile uses `initialize_cloud_workspace_v2` with the current Supabase UUID, its existing owner-scoped device UUID, schema version 8, timezone, the stable digest of the intentionally empty `{}` payload, and `p_payload: {}`. It validates canonical state before activation, recovers a committed initialization after an interrupted response through status/readback, and never reads or uploads Guest data. Import this device remains deferred.
 
 - Feature flag absent/false: authenticated users remain local; setup choices and continuous sync are hidden; the UI never says Synced.
 - Empty account: **Set up sync** → Preparing backup → Importing → Verifying → Cloud copy ready.
@@ -195,7 +198,7 @@ Remaining manual checks are known verification items and do not block the curren
 - Conflict handling is server-receipt-time last-write-wins; there is no long-offline conflict UI, field merge, or monotonic change cursor.
 - There is no realtime subscription. Startup, focus, online retry, and manual refresh trigger convergence.
 - There is no automatic merge of guest data from a second initialized device.
-- Logout does not yet offer a cache keep/remove choice. Export, account deletion, backup management, and recovery UI are not implemented.
+- Logout does not yet offer a cache keep/remove choice. Account deletion Phases 1B–1E locally provide persistent state, secure server initiation, pending-write gates, a callable trusted worker, Mobile UUID-scoped queue/cache cleanup and quarantine, and a once-daily retry invocation, but none of the three migrations, server components, or cron configuration is remotely deployed/enabled. Export, real provider/Auth deletion, Web deletion/local cleanup, backup management, and operational recovery UI remain open.
 - A running timer has no realtime cross-device takeover workflow; it remains owned by the device that started it and persisted Session state converges through normal sync.
 - Continuous sync remains feature-gated for controlled rollout. Its migration is remotely applied and core task/habit convergence is manually verified; the documented smoke tests remain pending.
 - Guest data, immutable IndexedDB backups, Web runtime metadata, the Mobile AsyncStorage retry queue, transient planning drafts, local First Move templates, toothbrush image previews, and development-only controls remain device-local by design.
@@ -250,7 +253,7 @@ M1E preserves ordered start-before-close mutations. The existing snapshot RPC tr
 
 M1E reuses `cloud_workspace_status`, `get_cloud_workspace_v2`, and `sync_cloud_workspace_v1` unchanged. A per-Supabase-UUID AsyncStorage record holds one stable device UUID, the last successful cloud time, and ordered full schema-v8 snapshot mutations. Local UI state is saved only after the snapshot is durably queued; every dispatch revalidates the current authenticated UUID; failed or invalid responses keep the queue; startup, foreground, and manual refresh flush before reading; and only a validated canonical response replaces the working/cache state. Canonical daily plans and all untouched schema-v8 fields pass through unchanged. Mobile Cat v1A now supplies the existing narrow purchase and food-consumption economic commands plus selected-furniture settings; reward, point, milestone, and inventory authority remains server-side for authenticated users.
 
-M1E deliberately enables writes only for an already-initialized account that has successfully hydrated. Empty-account Start fresh / Import this device / Use cloud progress setup choices remain unimplemented on Mobile and write-disabled. Guest is still fully local. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance is the remaining release gate; `/mobile/README.md` contains the exact checklist.
+M1E still enables writes only after an initialized account has successfully hydrated. The iOS R1 release gate now supplies an explicit empty-account Start fresh action using the existing v2 initialization contract, canonical validation, and the existing authenticated runtime. Start fresh creates no Tasks, Intents, Sessions, rewards, points, or inventory; it never reads, merges, uploads, or deletes Guest progress. Continue as guest remains available, and Import this device is clearly deferred for iOS 1.0. Manual new-account, same-account Mobile↔Web, offline/restart, and account-switch acceptance remains required.
 
 Other remaining M1 work includes post-session choices, Mobile Trends/Calendar history parity, and any later server-authoritative economy commands beyond the implemented Cat purchase/consumption and selected-furniture paths. Daily plans and verified Morning metadata now use the existing canonical Mobile sync architecture.
 
@@ -260,11 +263,11 @@ Status: **partially implemented**. AI Access R2 adds the narrow toothbrush camer
 
 ### M3 — RevenueCat and AI access
 
-Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat with the Supabase Auth UUID and implements manually accepted Test Store presentation/purchase/restore behavior. AI Access R1 validates Supabase bearer tokens in the Web server routes, verifies authoritative `pro` Customer Info through RevenueCat REST API v1, and atomically enforces authenticated Free lifetime and Pro feature/day quotas before one `gpt-5.6-luna` dispatch. Mobile AI Access R2 now reads the server status and calls Plan my day and toothbrush verification with the current Supabase access token; it never sends `user_id`, `isPro`, or local RevenueCat authorization. Manual planning and Skip remain available through quota/service/provider denials. Make Smaller AI, Web Billing, supported-region gating, server abuse/rate limits, webhooks/read models, production storefront/configuration work, deployment, and device acceptance remain unresolved TASK-10/TASK-11/TASK-12 work.
+Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat with the Supabase Auth UUID and implements manually accepted Test Store presentation/purchase/restore behavior. The confirmed Apple monthly and annual products are imported into the existing RevenueCat project and associated with `pro`; this repository did not remotely inspect or modify them, and neither Apple approval nor production purchase acceptance is claimed. AI Access R1 validates Supabase bearer tokens in the Web server routes, verifies authoritative `pro` Customer Info through RevenueCat REST API v1, and atomically enforces authenticated Free lifetime and Pro feature/day quotas before one `gpt-5.6-luna` dispatch. Mobile AI Access R2 reads the server status and calls Plan my day and toothbrush verification with the current Supabase access token; it never sends `user_id`, `isPro`, or local RevenueCat authorization. Manual planning and Skip remain available through quota/service/provider denials. Make Smaller AI, Web Billing, supported-region gating, server abuse/rate limits, webhooks/read models, production Offering/paywall verification, deployment, and device acceptance remain unresolved TASK-10/TASK-11/TASK-12 work.
 
 ### M4 — Store release
 
-Status: **not started and Apple-side work paused**. The current zero-Apple-membership path uses the Next.js Web app as an iPhone Home Screen web app; Apple Developer enrollment, App Store Connect, TestFlight, production iOS distribution, and live Apple IAP are paused. The Expo app remains available for local development. Web PWA R1 metadata and icons are implemented locally; deploying those changes and real iPhone acceptance are pending. The existing Web deployment serves over HTTPS. The previously listed store-release work remains deferred.
+Status: **local preparation and account-deletion Phases 1B–1E implemented; no build or submission**. The Expo display name is `First Move: Start Small`, bundle ID remains `app.firstmove.mobile`, version/build is `1.0.0` / `1`, and R1 is iPhone-only with `ios.supportsTablet: false`. EAS has a store-distribution `production` build profile plus matching submit profile while `development-simulator` is unchanged. The first Apple monthly/annual products and initial storefront markets are recorded from confirmed external state, not remote re-verification. Mobile Settings supplies the authenticated deletion path, Apple billing warning/manage action, accepted-request cleanup, and stale-session gates; Mobile now also supplies explicit empty-account Start fresh without Guest import. The complete migration chain and pgTAP `0001`–`0012` pass in a disposable local environment, and a once-daily `CRON_SECRET`-protected Vercel Cron is declared. All three deletion migrations and server worker routes remain local-only; the initiation gate is disabled, the cron is not deployed or remotely configured, and RevenueCat delete permission/production behavior plus real provider/Auth deletion remain unverified. Web deletion/local cleanup, published Privacy Policy/Terms links, production paywall disclosures, approved iPhone icon/screenshots, server configuration, true-device/sandbox acceptance, signed EAS build, TestFlight, App Review, and public release also remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
 
 ## 15. Monetization decisions already made
 
@@ -274,16 +277,17 @@ Status: **not started and Apple-side work paused**. The current zero-Apple-membe
 - Pro allows one AI daily-plan request, three toothbrush-verification attempts, and five Make this smaller requests per local day.
 - Pro may add advanced history and premium cat content without degrading or removing Free/earned core content.
 - RevenueCat is authoritative for the `pro` entitlement; the Supabase Auth UUID is the RevenueCat App User ID.
+- The first iOS products are single-seat monthly `app.firstmove.mobile.pro.monthly` ($4.99 US) and annual `app.firstmove.mobile.pro.annual` ($39.99 US), both associated with `pro`; initial storefronts are US, CA, UK, CH, AU, NZ, SG, and JP.
 - Client entitlement/counter claims are never authoritative. AI Access R1 checks bearer identity, RevenueCat entitlement, and feature quota on the server before dispatch; Mobile renders the returned remaining values and never resets or computes quota locally. Production region allowlisting and server abuse/rate limits remain required later controls.
 - OpenAI-backed features launch only in supported international markets; Mainland China is excluded initially.
 
 ## 16. Monetization decisions still open
 
-- Subscription prices, billing periods, introductory/trial offers, storefront products, and launch currencies.
+- Storefront localizations, any introductory/trial offers, and final production paywall copy; the first iOS product IDs, billing periods, US prices, and launch markets are decided.
 - Exact advanced-history and premium-cat feature scope.
 - RevenueCat account-transfer/alias policy, webhook retention, grace period, refund, family-sharing, and outage behavior.
 - Whether introductory credits survive account deletion/recreation and the abuse-prevention policy.
-- Supported-country allowlist, legal/privacy review, tax/storefront availability, and any future region-specific AI provider.
+- Legal/privacy review, the separate production AI provider allowlist within the approved storefront markets, tax/storefront verification, and any future region-specific AI provider.
 - Upgrade timing/copy, Web Billing, manage-subscription UX, and customer-support/refund process; basic Web and Mobile plan/allowance display is implemented.
 - Cost budgets, model-change policy, and production rate-limit values.
 

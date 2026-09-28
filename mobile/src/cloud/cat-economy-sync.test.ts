@@ -192,8 +192,8 @@ function harness(
   let online = true;
   const client: MobileSyncClient = {
     auth: {
-      async getSession() {
-        return { data: { session: { user: { id: USER_ID } } }, error: null };
+      async getUser() {
+        return { data: { user: { id: USER_ID } }, error: null };
       },
     },
     rpc: (name, parameters) => cloud.rpc(name, parameters),

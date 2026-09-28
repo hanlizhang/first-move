@@ -1,4 +1,7 @@
 {
+  "cli": {
+    "appVersionSource": "local"
+  },
   "build": {
     "development-simulator": {
       "developmentClient": true,
@@ -6,6 +9,16 @@
       "ios": {
         "simulator": true
       }
+    },
+    "production": {
+      "distribution": "store",
+      "environment": "production",
+      "ios": {
+        "simulator": false
+      }
     }
+  },
+  "submit": {
+    "production": {}
   }
 }

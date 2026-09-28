@@ -2,7 +2,7 @@
 
 This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
 
-Current status: M0 through M1E, RevenueCat R1/R2, and Mobile AI Access R2 are implemented in the working tree. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, canonical initialized-workspace hydration, and RevenueCat Test Store purchase/restore are manually verified on iOS Simulator. Mobile Plan my day, server-derived AI allowance presentation, and transient toothbrush verification are automated-tested but still require configured-server and rebuilt-development-client device acceptance. RevenueCat production-store products, Make Smaller AI, webhooks, Web Billing, production AI rollout, and store release remain deferred.
+Current status: M0 through M1E, RevenueCat R1/R2, and Mobile AI Access R2 are implemented in the working tree. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, canonical initialized-workspace hydration, and RevenueCat Test Store purchase/restore are manually verified on iOS Simulator. The first public iOS release identity and local EAS production/submit profiles are prepared, but no production build has been run or submitted. Mobile Plan my day, server-derived AI allowance presentation, transient toothbrush verification, Apple sandbox purchases, and the remaining App Review paths still require true-device acceptance. See `../docs/IOS_APPSTORE_R1_RELEASE.md` for the release audit and blockers.
 
 The M0–M1D sections below preserve each increment’s historical boundary. M1E supersedes their authenticated read-only/no-business-write constraints for the current app.
 
@@ -85,6 +85,7 @@ At their original milestone boundaries, M1A/M1B/M1C/M1D did not implement authen
 - Authenticated users can restore through `Purchases.restorePurchases()`. Purchase, dismissal, and restore paths refresh CustomerInfo, and only the exact active `pro` entitlement changes Settings to Pro.
 - Guest and signed-out users cannot launch purchase or restore calls. They receive sign-in guidance while Guest Mode and every current core feature remain fully functional.
 - Purchase/restore state is presentation-only. It does not authorize AI or other paid behavior, gate any current feature, add production products, or change Guest/core feature behavior.
+- The confirmed first iOS products are the single-seat monthly `app.firstmove.mobile.pro.monthly` ($4.99 US) and annual `app.firstmove.mobile.pro.annual` ($39.99 US). Both are associated with the existing `pro` entitlement. This repository records that supplied state but does not modify or re-verify Apple or RevenueCat remotely.
 
 ## Mobile AI Access R2
 
@@ -116,6 +117,25 @@ EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=...
 ```
 
 `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` is the public absolute origin of the deployed First Move Web/server application and contains no secret; there is intentionally no localhost or production-hostname fallback. Development builds use only `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`. Release builds ignore the Test Store key and require the platform-specific iOS or Android key. Missing RevenueCat configuration leaves subscriptions unavailable without blocking Guest Mode or core features. These public SDK keys may be embedded in the app; never place a RevenueCat secret key, service-role key, database password, JWT signing secret, or OpenAI key in the mobile project.
+
+## First public iOS release
+
+- Public display name: `First Move: Start Small`.
+- Bundle identifier: `app.firstmove.mobile` (unchanged).
+- App Store version/build: `1.0.0` / `1`, controlled locally in `app.json`.
+- `development-simulator` remains unchanged. `production` creates a non-simulator store build using the named EAS `production` environment, and the matching submit profile intentionally contains no Apple account identifiers or credentials.
+- The EAS `production` environment must provide `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL`, and the production Apple public SDK key as `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`. Do not set `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` for the production profile.
+- `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `REVENUECAT_SECRET_API_KEY` remain protected variables on the First Move server deployment and must never be added to EAS Mobile environments.
+
+After every App Review blocker in `../docs/IOS_APPSTORE_R1_RELEASE.md` is resolved and the EAS production variables are verified, build and upload in two reviewable steps:
+
+```sh
+cd mobile
+npx eas-cli@latest build --platform ios --profile production
+npx eas-cli@latest submit --platform ios --profile production --id BUILD_ID_FROM_THE_PREVIOUS_COMMAND
+```
+
+The upload reaches App Store Connect/TestFlight; it does not submit the app for public App Review. For this first subscription release, select the processed build and both subscriptions on the app version before submitting that version for review.
 
 Press `i` for iOS or `a` for Android from the Expo CLI. Guest navigation can be inspected in Expo Go. The custom `firstmove://` callback needs a native development build:
 

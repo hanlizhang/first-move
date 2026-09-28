@@ -22,6 +22,12 @@ import {
 } from "./sync-queue.ts";
 
 export const SYNC_CLOUD_WORKSPACE_RPC = "sync_cloud_workspace_v1" as const;
+export const INITIALIZE_CLOUD_WORKSPACE_RPC =
+  "initialize_cloud_workspace_v2" as const;
+
+const EMPTY_START_FRESH_PAYLOAD_SHA256 =
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
+const MOBILE_SOURCE_SCHEMA_VERSION = 8;
 
 export type MobileSyncStatus =
   | "loading"
@@ -72,6 +78,11 @@ export interface MobileSyncSnapshot {
   diagnostic?: MobileSyncDiagnostic;
 }
 
+export interface MobileStartFreshResult {
+  outcome: "initialized" | "already-initialized" | "failed";
+  message: string;
+}
+
 export type AuthenticatedCatEconomyOutcome =
   | "applied"
   | "queued"
@@ -91,8 +102,8 @@ export interface AuthenticatedCatEconomyResult {
 
 export interface MobileSyncClient {
   auth: {
-    getSession(): Promise<{
-      data: { session: { user: { id: string } } | null };
+    getUser(): Promise<{
+      data: { user: { id: string } | null };
       error: unknown | null;
     }>;
   };
@@ -100,6 +111,7 @@ export interface MobileSyncClient {
     name:
       | typeof CLOUD_WORKSPACE_STATUS_RPC
       | typeof GET_CLOUD_WORKSPACE_RPC
+      | typeof INITIALIZE_CLOUD_WORKSPACE_RPC
       | typeof SYNC_CLOUD_WORKSPACE_RPC,
     parameters?: Record<string, unknown>,
   ): Promise<{ data: unknown; error: unknown | null }>;
@@ -124,7 +136,9 @@ export interface MobileSyncRuntimeDependencies {
 }
 
 const SETUP_MESSAGE =
-  "This account has no cloud workspace yet. Start fresh and Import this device are not available in Mobile M1E.";
+  "This account has no cloud workspace yet. Start fresh creates an empty synced account without uploading Guest progress.";
+const START_FRESH_ERROR_MESSAGE =
+  "Start fresh could not be completed or verified. Guest progress remains unchanged, no unverified cloud response is applied, and it is safe to retry.";
 const HYDRATION_ERROR_MESSAGE =
   "Cloud progress could not be loaded or verified. Local data and pending changes were not replaced.";
 const SYNC_ERROR_MESSAGE =
@@ -397,6 +411,112 @@ export class MobileSyncRuntime {
       return;
     }
     await this.refresh();
+  }
+
+  async startFresh(): Promise<MobileStartFreshResult> {
+    if (!this.isCurrent()) return startFreshFailureResult();
+    await this.mutationTail;
+    if (!this.isCurrent()) return startFreshFailureResult();
+
+    if (!this.record) {
+      await this.start();
+      if (!this.isCurrent() || !this.record) return startFreshFailureResult();
+    }
+
+    if (this.initialized && this.record.active) {
+      await this.refresh();
+      return this.canWrite()
+        ? {
+            outcome: "already-initialized",
+            message: "This account already has a verified synced workspace.",
+          }
+        : startFreshFailureResult();
+    }
+
+    if (!this.dependencies.online()) {
+      this.hydrationFailure(true, offlineDiagnostic());
+      return startFreshFailureResult();
+    }
+    if (this.record.pending.length > 0) {
+      this.startFreshFailure({
+        failureClass: "local-runtime",
+        safeErrorCode: "UNINITIALIZED_QUEUE_NOT_EMPTY",
+        safeMessageClass: "start-fresh-local-queue-not-empty",
+      });
+      return startFreshFailureResult();
+    }
+
+    this.setSnapshot({
+      status: "syncing",
+      pendingCount: 0,
+      lastSuccessfulSyncAt: this.record.lastSuccessfulSyncAt,
+    });
+    this.dependencies.setCloudState({ status: "loading" });
+
+    let response: { data: unknown; error: unknown | null } | undefined;
+    let diagnostic: MobileSyncDiagnostic | undefined;
+    try {
+      response = await this.authorizedRpc(INITIALIZE_CLOUD_WORKSPACE_RPC, {
+        p_choice: "start_fresh",
+        p_device_id: this.record.deviceId,
+        // This digest represents the intentionally empty `{}` payload. It is
+        // stable for idempotent retries and contains no Guest data.
+        p_snapshot_sha256: EMPTY_START_FRESH_PAYLOAD_SHA256,
+        p_source_schema_version: MOBILE_SOURCE_SCHEMA_VERSION,
+        p_timezone: this.dependencies.timezone(),
+        p_payload: {},
+      });
+    } catch (error) {
+      diagnostic = safeRpcDiagnostic(error);
+    }
+    if (!this.isCurrent()) return startFreshFailureResult();
+
+    if (response && !response.error) {
+      const workspace = validatedWorkspace(response.data);
+      if (workspace && (await this.activateInitializedWorkspace(workspace))) {
+        return {
+          outcome: "initialized",
+          message: "Your empty synced account is ready. Guest progress remains separate on this device.",
+        };
+      }
+      diagnostic = workspace
+        ? {
+            failureClass: "local-runtime",
+            safeErrorCode: "INITIALIZATION_ACTIVATION_FAILED",
+            safeMessageClass: "start-fresh-local-activation-failed",
+          }
+        : {
+            failureClass: "canonical-validation",
+            safeErrorCode: "INITIALIZATION_CANONICAL_INVALID",
+            safeMessageClass: "start-fresh-canonical-response-invalid",
+          };
+    } else if (response?.error) {
+      diagnostic = safeRpcDiagnostic(response.error);
+    }
+
+    // The initialization transaction may have committed even if its response
+    // was interrupted. Recover through the existing status + canonical read
+    // before offering the same idempotent request again.
+    const recovered = await this.recoverInitializedWorkspace();
+    if (recovered) {
+      if (await this.activateInitializedWorkspace(recovered)) {
+        return {
+          outcome: "initialized",
+          message: "Your empty synced account is ready. Guest progress remains separate on this device.",
+        };
+      }
+      diagnostic = {
+        failureClass: "local-runtime",
+        safeErrorCode: "INITIALIZATION_ACTIVATION_FAILED",
+        safeMessageClass: "start-fresh-local-activation-failed",
+      };
+    }
+    if (!this.isCurrent()) return startFreshFailureResult();
+    if (this.snapshot.diagnostic?.failureClass === "auth-session") {
+      return startFreshFailureResult();
+    }
+    this.startFreshFailure(diagnostic);
+    return startFreshFailureResult();
   }
 
   private async persistMutation(
@@ -688,6 +808,46 @@ export class MobileSyncRuntime {
     await this.markSuccess();
   }
 
+  private async recoverInitializedWorkspace(): Promise<CanonicalWorkspace | undefined> {
+    try {
+      const statusResponse = await this.authorizedRpc(CLOUD_WORKSPACE_STATUS_RPC);
+      if (
+        !statusResponse ||
+        statusResponse.error ||
+        !isRecord(statusResponse.data) ||
+        statusResponse.data.initialized !== true ||
+        !this.isCurrent()
+      ) {
+        return undefined;
+      }
+      const workspaceResponse = await this.authorizedRpc(GET_CLOUD_WORKSPACE_RPC);
+      if (!workspaceResponse || workspaceResponse.error || !this.isCurrent()) {
+        return undefined;
+      }
+      return validatedWorkspace(workspaceResponse.data);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async activateInitializedWorkspace(
+    workspace: CanonicalWorkspace,
+  ): Promise<boolean> {
+    if (!this.record || !this.isCurrent()) return false;
+    try {
+      await this.applyValidatedWorkspace(workspace);
+      if (!this.isCurrent()) return false;
+      this.initialized = true;
+      this.record.active = true;
+      await this.markSuccess();
+    } catch {
+      this.initialized = false;
+      this.record.active = false;
+      return false;
+    }
+    return this.canWrite();
+  }
+
   private async readCanonical(): Promise<CanonicalWorkspace | undefined> {
     let response: { data: unknown; error: unknown | null } | undefined;
     try {
@@ -739,6 +899,7 @@ export class MobileSyncRuntime {
     name:
       | typeof CLOUD_WORKSPACE_STATUS_RPC
       | typeof GET_CLOUD_WORKSPACE_RPC
+      | typeof INITIALIZE_CLOUD_WORKSPACE_RPC
       | typeof SYNC_CLOUD_WORKSPACE_RPC,
     parameters?: Record<string, unknown>,
   ): Promise<{ data: unknown; error: unknown | null } | undefined> {
@@ -751,8 +912,8 @@ export class MobileSyncRuntime {
 
   private async currentSessionMatches(): Promise<boolean> {
     try {
-      const { data, error } = await this.dependencies.client.auth.getSession();
-      return !error && data.session?.user.id === this.dependencies.userId;
+      const { data, error } = await this.dependencies.client.auth.getUser();
+      return !error && data.user?.id === this.dependencies.userId;
     } catch {
       return false;
     }
@@ -834,6 +995,26 @@ export class MobileSyncRuntime {
             safeErrorCode: "HYDRATION_FAILED",
             safeMessageClass: "canonical-hydration-failed",
           },
+    });
+  }
+
+  private startFreshFailure(diagnostic?: MobileSyncDiagnostic): void {
+    if (!this.isCurrent()) return;
+    this.initialized = false;
+    if (this.record) this.record.active = false;
+    this.dependencies.setCloudState({
+      status: "setup-unavailable",
+      message: START_FRESH_ERROR_MESSAGE,
+    });
+    this.setSnapshot({
+      status: "write-disabled",
+      pendingCount: this.record?.pending.length ?? 0,
+      message: START_FRESH_ERROR_MESSAGE,
+      diagnostic: diagnostic ?? {
+        failureClass: "rpc-server",
+        safeErrorCode: "START_FRESH_FAILED",
+        safeMessageClass: "start-fresh-failed",
+      },
     });
   }
 
@@ -1052,6 +1233,21 @@ function economicOutcomeForError(
     return "invalid";
   }
   return undefined;
+}
+
+function validatedWorkspace(value: unknown): CanonicalWorkspace | undefined {
+  try {
+    return validateCanonicalWorkspace(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function startFreshFailureResult(): MobileStartFreshResult {
+  return {
+    outcome: "failed",
+    message: START_FRESH_ERROR_MESSAGE,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

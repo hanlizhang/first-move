@@ -18,7 +18,7 @@ export async function loadMorningSkipFrom(
   ownerKey: string,
 ): Promise<string | undefined> {
   try {
-    const value = await store.getItem(storageKey(ownerKey));
+    const value = await store.getItem(morningSkipStorageKey(ownerKey));
     return value && isLocalDateKey(value) ? value : undefined;
   } catch {
     return undefined;
@@ -32,12 +32,12 @@ export async function markMorningSkippedIn(
 ): Promise<void> {
   if (!isLocalDateKey(dateKey)) return;
   try {
-    await store.setItem(storageKey(ownerKey), dateKey);
+    await store.setItem(morningSkipStorageKey(ownerKey), dateKey);
   } catch {
     // In-memory presentation can still advance if device storage is unavailable.
   }
 }
 
-function storageKey(ownerKey: string): string {
+export function morningSkipStorageKey(ownerKey: string): string {
   return `${MOBILE_MORNING_SKIP_KEY_PREFIX}${ownerKey}`;
 }

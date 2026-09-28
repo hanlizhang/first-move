@@ -121,6 +121,7 @@ function aiAccessError(code: AiAccessErrorCode, quota?: AiQuotaMetadata): Respon
     unauthenticated: { message: "A valid signed-in session is required for live AI verification.", status: 401 },
     invalid_request_id: { message: "The AI request identifier is invalid.", status: 400 },
     duplicate_request: { message: "This AI request was already dispatched and was not repeated.", status: 409 },
+    account_deletion_pending: { message: "AI verification is unavailable while account deletion is pending.", status: 409 },
     introductory_quota_exhausted: { message: "The introductory AI quota is exhausted.", status: 429 },
     pro_feature_quota_exhausted: { message: "Today’s Pro toothbrush-verification quota is exhausted.", status: 429 },
     revenuecat_unavailable: { message: "Subscription status could not be verified.", status: 503 },

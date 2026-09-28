@@ -18,6 +18,7 @@ export type AuthEvent =
   | { type: "MAGIC_LINK_SENT" }
   | { type: "AUTHENTICATED"; user: AuthenticatedUser }
   | { type: "SIGNED_OUT" }
+  | { type: "ACCOUNT_DELETION_ACCEPTED" }
   | { type: "FAILED"; message: string; recoverTo?: "signed-out" | "guest" };
 
 export const initialAuthState: AuthState = { status: "loading" };
@@ -47,6 +48,12 @@ export function reduceAuthState(state: AuthState, event: AuthEvent): AuthState {
         status: "signed-out",
         message: "Signed out. Guest and cached local data are still on this device.",
       };
+    case "ACCOUNT_DELETION_ACCEPTED":
+      return {
+        status: "signed-out",
+        message:
+          "Account deletion is in progress. This account’s local data and session were removed from this device.",
+      };
     case "FAILED":
       return {
         status: "error",
@@ -60,14 +67,28 @@ export interface SessionReader {
   getSession(): Promise<{
     data: {
       session: {
+        access_token: string;
         user: { id: string; email?: string };
       } | null;
     };
     error: unknown | null;
   }>;
+  getUser(accessToken: string): Promise<{
+    data: { user: { id: string; email?: string } | null };
+    error: { code?: string; status?: number } | null;
+  }>;
 }
 
-export async function restoreAuthSession(auth: SessionReader): Promise<AuthEvent> {
+export interface AuthRestoreSafety {
+  isAccountBlocked?(userId: string): Promise<boolean>;
+  onRejectedAccount?(userId: string): Promise<void>;
+  onInvalidSession?(userId: string): Promise<void>;
+}
+
+export async function restoreAuthSession(
+  auth: SessionReader,
+  safety: AuthRestoreSafety = {},
+): Promise<AuthEvent> {
   try {
     const { data, error } = await auth.getSession();
     if (error) {
@@ -76,16 +97,85 @@ export async function restoreAuthSession(auth: SessionReader): Promise<AuthEvent
         message: "We could not restore the secure session. Guest Mode is still available.",
       };
     }
+    const session = data.session;
+    if (!session) return { type: "SESSION_RESTORED", user: null };
+    const storedUserId = session.user.id;
+    if (await safety.isAccountBlocked?.(storedUserId)) {
+      await rejectAccount(safety, storedUserId);
+      return { type: "SESSION_RESTORED", user: null };
+    }
+
+    const live = await auth.getUser(session.access_token);
+    if (live.error) {
+      if (isDefinitivelyMissingAuthIdentity(live.error)) {
+        await rejectAccount(safety, storedUserId);
+        return { type: "SESSION_RESTORED", user: null };
+      }
+      if (isDefinitivelyInvalidAuthSession(live.error)) {
+        await rejectSession(safety, storedUserId);
+        return { type: "SESSION_RESTORED", user: null };
+      }
+      return authRestoreFailure();
+    }
+    if (!live.data.user || live.data.user.id !== storedUserId) {
+      await rejectSession(safety, storedUserId);
+      return { type: "SESSION_RESTORED", user: null };
+    }
     return {
       type: "SESSION_RESTORED",
-      user: data.session
-        ? { id: data.session.user.id, email: data.session.user.email }
-        : null,
+      user: { id: live.data.user.id, email: live.data.user.email },
     };
   } catch {
-    return {
-      type: "FAILED",
-      message: "We could not restore the secure session. Guest Mode is still available.",
-    };
+    return authRestoreFailure();
   }
+}
+
+async function rejectAccount(
+  safety: AuthRestoreSafety,
+  userId: string,
+): Promise<void> {
+  try {
+    await safety.onRejectedAccount?.(userId);
+  } catch {
+    // Authentication remains rejected even if local cleanup needs a later retry.
+  }
+}
+
+async function rejectSession(
+  safety: AuthRestoreSafety,
+  userId: string,
+): Promise<void> {
+  try {
+    await safety.onInvalidSession?.(userId);
+  } catch {
+    // The session stays rejected even if local credential cleanup must retry.
+  }
+}
+
+export function isDefinitivelyMissingAuthIdentity(error: {
+  code?: string;
+  status?: number;
+}): boolean {
+  return error.code === "user_not_found";
+}
+
+export function isDefinitivelyInvalidAuthSession(error: {
+  code?: string;
+  status?: number;
+}): boolean {
+  return (
+    error.status === 401 ||
+    error.status === 403 ||
+    error.code === "session_not_found" ||
+    error.code === "session_expired" ||
+    error.code === "bad_jwt" ||
+    error.code === "no_authorization"
+  );
+}
+
+function authRestoreFailure(): AuthEvent {
+  return {
+    type: "FAILED",
+    message: "We could not validate the secure session. Guest Mode is still available.",
+  };
 }

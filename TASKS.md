@@ -246,6 +246,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Configure RevenueCat `pro` entitlement with Supabase Auth UUID as App User ID for the accepted Mobile Test Store flow.
 - [x] Verify the current `pro` entitlement from the trusted AI server using the Supabase Auth UUID and RevenueCat REST API; fail closed without treating an outage as Free.
 - [x] Implement and manually accept RevenueCat Mobile Test Store purchase and restore presentation.
+- [x] Record the confirmed first iOS single-seat products (`app.firstmove.mobile.pro.monthly` at $4.99 US and `app.firstmove.mobile.pro.annual` at $39.99 US), their existing `pro` association, and the eight initial storefront markets without changing Apple or RevenueCat remotely.
 - [ ] Implement purchase, restore, account switch, downgrade/expiry/refund, grace-period, and webhook/read-model behavior.
 - [x] Show trusted server-derived Free/Pro and AI allowance status in Web Settings without adding Web purchase controls.
 - [ ] Add transparent Free/Pro comparison, usage display, manage-subscription flow, and non-destructive feature gates.
@@ -390,7 +391,31 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Keep authenticated pages, API responses, tokens, and personal data out of service-worker or offline caches; no service worker was added.
 - [ ] Complete manual iPhone Safari acceptance on the deployed HTTPS origin: Add to Home Screen, standalone layout, Morning camera/photo selection, Plan my day, Focus handoff, and authenticated Supabase sync.
 
-**Release choice:** Apple Developer enrollment, App Store Connect, TestFlight, production iOS distribution, and live Apple IAP are paused. The Expo app remains intact for local development. This Web PWA work is local and has not been deployed or accepted on an iPhone.
+**Release choice:** This PWA remains an independent fallback. Native iOS release preparation has resumed under the App Store R1 checklist below; no EAS production build, TestFlight upload, App Review submission, or public release has occurred.
+
+## iOS App Store R1 — first public release preparation
+
+- [x] Align the public display name to **First Move: Start Small** while preserving `app.firstmove.mobile`, `first-move-mobile`, `firstmove`, and RevenueCat entitlement `pro`.
+- [x] Set App Store version/build `1.0.0` / `1` and add local EAS production build and submit profiles while preserving `development-simulator` unchanged.
+- [x] Retain and test the release-only RevenueCat Apple public SDK key boundary with no Test Store fallback and no client/server secrets in EAS config.
+- [x] Reconcile the local release audit, confirmed Apple product/storefront state, and exact EAS build/submit sequence without claiming remote acceptance or release.
+- [x] Add the local-only Phase 1B server-controlled account-deletion outbox migration and isolated database coverage for defaults, constraints, retry/lease state, client denial, owner isolation, Auth-user survival, application-data cascades, and shared catalogs.
+- [x] Add local-only Phase 1C recent-auth/exact-confirmation initiation, a disabled-by-default server release gate, idempotent outbox initiation, and race-safe pending-deletion write gates for sync/setup/economics/AI; keep both deletion migrations unapplied remotely.
+- [x] Add the local-only Phase 1D trusted deletion worker/state machine with atomic claim/lease transitions, bounded retries, mocked RevenueCat/Auth behavior, read-only Storage ownership preflight, one verified-user attempt after initiation, and a disabled-by-default protected retry boundary; keep all destructive behavior uninvoked and unapplied remotely.
+- [x] Add the local-only Phase 1E authenticated Mobile deletion UI, fresh email-link guidance, exact confirmation, Apple billing warning/manage link, UUID-scoped cleanup/quarantine, stale-session protection, and iPhone-only R1 configuration.
+- [x] Recreate the full migration chain in a disposable local Supabase environment and pass pgTAP `0001`–`0012`, including deletion tests `0009`–`0012`, without touching the regular development database.
+- [x] Add the explicit Mobile empty-account Start fresh path through `initialize_cloud_workspace_v2`, canonical validation, idempotent recovery, and existing runtime activation while preserving Guest data and deferring Import this device.
+- [x] Add one target-free once-daily Vercel Cron declaration for the existing bounded worker route, protected by server-only `CRON_SECRET`; configuration and deployment remain remote work.
+- [ ] Supply approved native app icon and App Store screenshots/metadata for required iPhone sizes.
+- [ ] Remotely migrate, deploy, configure, and manually accept the complete account-deletion path with disposable accounts, including RevenueCat delete permission and reliable retry invocation.
+- [ ] Publish and link a Privacy Policy and Terms of Use from the app; verify the production paywall's localized price, duration, auto-renewal, cancellation, benefits, and legal links.
+- [ ] Add a manage-subscription path and complete production RevenueCat Offering/paywall plus Apple sandbox purchase/restore/lifecycle acceptance.
+- [x] Resolve the local Mobile-only new-account initialization gap with explicit empty Start fresh; complete true-device acceptance before App Review.
+- [ ] Configure the EAS production public variables and server-only AI/RevenueCat secrets in their proper remote environments; complete production region/rate-limit controls.
+- [ ] Complete true-device iPhone Auth, sync, account deletion, camera/photo, AI fallback, subscription, outage, and accessibility acceptance.
+- [ ] Build and upload with EAS, accept the exact TestFlight build, attach both first subscriptions to app version `1.0.0`, and submit them together for App Review.
+
+**iOS App Store R1 status:** Local release configuration, account-deletion Phases 1B–1E, the disposable full-database gate, explicit Mobile Start fresh, and a once-daily protected retry schedule are implemented and automated-tested locally only. None of the three deletion migrations is remotely applied; the initiation gate remains disabled; the server routes and cron are not deployed; and production `CRON_SECRET`, monitoring, and RevenueCat delete permission remain unverified. The Mobile UI/local cleanup exists, while Web UI/local cleanup remains open. Legal links/disclosures, approved iPhone artwork, server configuration, true-device/sandbox acceptance, signed build/upload, Apple review, and public release also remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
 
 ## Release backlog
 
@@ -414,7 +439,7 @@ These items are intentionally deferred and are not implemented:
 4. Production RevenueCat lifecycle, storefront, webhook/read-model, and account-transfer behavior.
 5. Mobile Make Smaller AI plus production AI region/rate-limit/configuration rollout.
 6. True-device iOS/Android testing.
-7. App Store / Google Play release requirements; Apple-side work is paused under Web PWA R1.
+7. Google Play release requirements and all open iOS App Store R1 gates listed above.
 
 ## Explicitly excluded
 

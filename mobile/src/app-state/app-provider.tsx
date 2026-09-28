@@ -32,12 +32,23 @@ import {
 
 import {
   initialAuthState,
+  isDefinitivelyInvalidAuthSession,
+  isDefinitivelyMissingAuthIdentity,
   reduceAuthState,
   restoreAuthSession,
   type AuthState,
 } from "../auth/auth-state.ts";
-import { requestMagicLink } from "../auth/magic-link.ts";
+import {
+  requestMagicLink,
+  type AuthActionResult,
+} from "../auth/magic-link.ts";
 import { signOutWithoutDeletingLocalData } from "../auth/sign-out.ts";
+import {
+  finalizeAcceptedMobileAccountDeletion,
+  initiateMobileAccountDeletion,
+  isAccountDeletionQuarantined,
+  type MobileAccountDeletionOutcome,
+} from "../account-deletion/account-deletion.ts";
 import {
   cloudHydrationForUser,
   type CloudHydrationState,
@@ -49,6 +60,7 @@ import {
   type AuthenticatedCatEconomyResult,
   type MobileSyncClient,
   type MobileSyncSnapshot,
+  type MobileStartFreshResult,
 } from "../cloud/sync-runtime.ts";
 import { createMobileSyncQueue } from "../cloud/sync-queue.ts";
 import {
@@ -110,9 +122,12 @@ interface AppContextValue {
   continueAsGuest(): void;
   openSignIn(): void;
   sendMagicLink(email: string): Promise<void>;
+  sendDeletionReauthenticationLink(): Promise<AuthActionResult>;
+  deleteAccount(confirmation: string): Promise<MobileAccountDeletionOutcome>;
   signOut(): Promise<void>;
   retryAuthRestore(): Promise<void>;
   refreshCloud(): Promise<void>;
+  startFreshCloudWorkspace(): Promise<MobileStartFreshResult>;
   refreshAiAccess(): Promise<void>;
   organizeDay(brainDump: string): Promise<DayPlanRequestResult>;
   verifyToothbrush(image: Blob): Promise<ToothbrushRequestResult>;
@@ -188,6 +203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<SupabaseClient | undefined>(undefined);
   const syncRuntimeRef = useRef<MobileSyncRuntime | undefined>(undefined);
   const hydrationRequestRef = useRef(0);
+  const sessionValidationRef = useRef(0);
   const aiAccessRequestRef = useRef(0);
   const accountBootstrapEnabledRef = useRef(false);
   const authenticatedUserId =
@@ -264,6 +280,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return client;
   }, []);
 
+  const clearAccountRuntimeState = useCallback(() => {
+    authenticatedUserIdRef.current = undefined;
+    activeLocalOwnerKeyRef.current = undefined;
+    hydrationRequestRef.current += 1;
+    aiAccessRequestRef.current += 1;
+    syncRuntimeRef.current?.dispose();
+    syncRuntimeRef.current = undefined;
+    setCloud({ status: "idle" });
+    setSync({ status: "local", pendingCount: 0 });
+    setAiAccess({ status: "guest" });
+    setLocalWorkspace(createEmptyState());
+    setDailyPlanSnapshot({ plans: [] });
+    setLoadedLocalOwnerKey(undefined);
+    setLocalWorkspaceStatus("loading");
+    setLocalWorkspaceMessage(undefined);
+  }, []);
+
+  const rejectAccountOnDevice = useCallback(
+    async (client: SupabaseClient, userId: string) => {
+      await finalizeAcceptedMobileAccountDeletion({
+        userId,
+        store: AsyncStorage,
+        auth: client.auth,
+        stopAccountActivity: clearAccountRuntimeState,
+        removeRevenueCatIdentity: (accountUserId) =>
+          revenueCatSubscription.removeIdentityForAccountDeletion(
+            accountUserId,
+          ),
+      });
+    },
+    [clearAccountRuntimeState],
+  );
+
+  const rejectSessionOnDevice = useCallback(
+    async (client: SupabaseClient) => {
+      clearAccountRuntimeState();
+      await Promise.allSettled([
+        revenueCatSubscription.updateIdentity(undefined),
+        client.auth.signOut({ scope: "local" }),
+      ]);
+    },
+    [clearAccountRuntimeState],
+  );
+
   const refreshAiAccess = useCallback(async () => {
     const userId = authenticatedUserIdRef.current;
     if (!userId) {
@@ -299,14 +359,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const restoreAccountAuth = useCallback(async () => {
     try {
       const client = resolveClient();
-      return await restoreAuthSession(client.auth);
+      return await restoreAuthSession(client.auth, {
+        isAccountBlocked: (userId) =>
+          isAccountDeletionQuarantined(AsyncStorage, userId),
+        onRejectedAccount: (userId) => rejectAccountOnDevice(client, userId),
+        onInvalidSession: () => rejectSessionOnDevice(client),
+      });
     } catch {
       return {
         type: "FAILED" as const,
         message: "Account services are not configured. Guest Mode is still available.",
       };
     }
-  }, [resolveClient]);
+  }, [rejectAccountOnDevice, rejectSessionOnDevice, resolveClient]);
 
   const enterGuestBoundary = useCallback(() => {
     accountBootstrapEnabledRef.current = false;
@@ -354,9 +419,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (session: Session | null) => {
       if (!accountBootstrapEnabledRef.current) return;
       workspaceStartup.selectAccount();
+      const requestId = sessionValidationRef.current + 1;
+      sessionValidationRef.current = requestId;
       hydrationRequestRef.current += 1;
-      authenticatedUserIdRef.current = session?.user.id;
       if (!session) {
+        authenticatedUserIdRef.current = undefined;
         syncRuntimeRef.current?.dispose();
         syncRuntimeRef.current = undefined;
         setCloud({ status: "idle" });
@@ -364,12 +431,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SIGNED_OUT" });
         return;
       }
-      dispatch({
-        type: "AUTHENTICATED",
-        user: { id: session.user.id, email: session.user.email },
-      });
+      const candidateUserId = session.user.id;
+      const candidateAccessToken = session.access_token;
+      void validateSession();
+
+      async function validateSession() {
+        let client: SupabaseClient;
+        try {
+          client = resolveClient();
+          if (
+            await isAccountDeletionQuarantined(
+              AsyncStorage,
+              candidateUserId,
+            )
+          ) {
+            await rejectAccountOnDevice(client, candidateUserId);
+            if (sessionValidationRef.current === requestId) {
+              dispatch({ type: "SIGNED_OUT" });
+            }
+            return;
+          }
+          const { data, error } = await client.auth.getUser(
+            candidateAccessToken,
+          );
+          if (sessionValidationRef.current !== requestId) return;
+          if (error && isDefinitivelyMissingAuthIdentity(error)) {
+            if (sessionValidationRef.current === requestId) {
+              await rejectAccountOnDevice(client, candidateUserId);
+              dispatch({ type: "SIGNED_OUT" });
+            }
+            return;
+          }
+          if (error && !isDefinitivelyInvalidAuthSession(error)) {
+            clearAccountRuntimeState();
+            dispatch({
+              type: "FAILED",
+              message:
+                "We could not validate the secure session. Guest Mode is still available.",
+            });
+            return;
+          }
+          if (error || data.user?.id !== candidateUserId) {
+            if (sessionValidationRef.current === requestId) {
+              await rejectSessionOnDevice(client);
+              dispatch({ type: "SIGNED_OUT" });
+            }
+            return;
+          }
+          authenticatedUserIdRef.current = candidateUserId;
+          dispatch({
+            type: "AUTHENTICATED",
+            user: { id: data.user.id, email: data.user.email },
+          });
+        } catch {
+          if (sessionValidationRef.current === requestId) {
+            clearAccountRuntimeState();
+            dispatch({
+              type: "FAILED",
+              message:
+                "We could not validate the secure session. Guest Mode is still available.",
+            });
+          }
+        }
+      }
     },
-    [workspaceStartup],
+    [clearAccountRuntimeState, rejectAccountOnDevice, rejectSessionOnDevice, resolveClient, workspaceStartup],
   );
 
   useEffect(() => {
@@ -615,6 +741,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [resolveClient],
   );
 
+  const sendDeletionReauthenticationLink = useCallback(async () => {
+    if (auth.status !== "authenticated" || !auth.user.email) {
+      return {
+        ok: false,
+        message: "A verified account email is required to continue.",
+      };
+    }
+    try {
+      return await requestMagicLink(resolveClient().auth, auth.user.email);
+    } catch {
+      return {
+        ok: false,
+        message: "We could not send the secure link. Please try again.",
+      };
+    }
+  }, [auth, resolveClient]);
+
+  const deleteAccount = useCallback(
+    async (confirmation: string): Promise<MobileAccountDeletionOutcome> => {
+      if (auth.status !== "authenticated") return "denied";
+      const userId = auth.user.id;
+      let client: SupabaseClient;
+      let outcome: MobileAccountDeletionOutcome;
+      try {
+        client = resolveClient();
+        outcome = await initiateMobileAccountDeletion({
+          apiBaseUrl: getFirstMoveApiBaseUrl(),
+          auth: client.auth,
+          expectedUserId: userId,
+          confirmation,
+        });
+      } catch {
+        return "unavailable";
+      }
+      if (outcome !== "accepted") return outcome;
+
+      sessionValidationRef.current += 1;
+      await finalizeAcceptedMobileAccountDeletion({
+        userId,
+        store: AsyncStorage,
+        auth: client.auth,
+        stopAccountActivity: clearAccountRuntimeState,
+        removeRevenueCatIdentity: (accountUserId) =>
+          revenueCatSubscription.removeIdentityForAccountDeletion(
+            accountUserId,
+          ),
+      });
+      dispatch({ type: "ACCOUNT_DELETION_ACCEPTED" });
+      return "accepted";
+    },
+    [auth, clearAccountRuntimeState, resolveClient],
+  );
+
   const signOut = useCallback(async () => {
     syncRuntimeRef.current?.dispose();
     syncRuntimeRef.current = undefined;
@@ -644,6 +823,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (auth.status === "authenticated") {
       await syncRuntimeRef.current?.retry();
     }
+  }, [auth]);
+
+  const startFreshCloudWorkspace = useCallback(async (): Promise<MobileStartFreshResult> => {
+    if (auth.status !== "authenticated") {
+      return {
+        outcome: "failed",
+        message: "Sign in before creating a synced account.",
+      };
+    }
+    const runtime = syncRuntimeRef.current;
+    if (!runtime) {
+      return {
+        outcome: "failed",
+        message: "Cloud setup is not ready. Guest progress remains safe; try again.",
+      };
+    }
+    return runtime.startFresh();
   }, [auth]);
 
   const organizeDay = useCallback(
@@ -886,9 +1082,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       continueAsGuest,
       openSignIn,
       sendMagicLink,
+      sendDeletionReauthenticationLink,
+      deleteAccount,
       signOut,
       retryAuthRestore: restore,
       refreshCloud,
+      startFreshCloudWorkspace,
       refreshAiAccess,
       organizeDay,
       verifyToothbrush,
@@ -913,9 +1112,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       continueAsGuest,
       openSignIn,
       sendMagicLink,
+      sendDeletionReauthenticationLink,
+      deleteAccount,
       signOut,
       restore,
       refreshCloud,
+      startFreshCloudWorkspace,
       refreshAiAccess,
       organizeDay,
       verifyToothbrush,

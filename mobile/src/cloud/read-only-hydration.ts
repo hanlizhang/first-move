@@ -50,7 +50,7 @@ export async function hydrateInitializedWorkspace(
       return {
         status: "setup-unavailable",
         message:
-          "This account has no cloud workspace yet. Mobile cannot initialize or import it; keep using Guest Mode or initialize it on Web.",
+          "This account has no cloud workspace yet. Choose Start fresh to create an empty synced account, or continue in Guest Mode. Import this device is deferred for iOS 1.0.",
       };
     }
 

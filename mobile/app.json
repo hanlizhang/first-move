@@ -1,14 +1,15 @@
 {
   "expo": {
-    "name": "First Move",
+    "name": "First Move: Start Small",
     "slug": "first-move-mobile",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "firstmove",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "app.firstmove.mobile",
+      "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -27,8 +28,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow First Move to select one toothbrush photo for a check. The app does not keep the photo.",
-          "cameraPermission": "Allow First Move to take one toothbrush photo for a check. The app does not keep the photo.",
+          "photosPermission": "Allow First Move: Start Small to select one toothbrush photo for a check. The app does not keep the photo.",
+          "cameraPermission": "Allow First Move: Start Small to take one toothbrush photo for a check. The app does not keep the photo.",
           "microphonePermission": false
         }
       ],

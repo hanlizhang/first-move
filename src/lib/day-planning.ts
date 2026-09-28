@@ -134,6 +134,7 @@ function planningFailureMessage(value: unknown, status: number): string {
   if (code === "introductory_quota_exhausted") return "Your five introductory AI actions are used. Manual planning remains available.";
   if (code === "pro_feature_quota_exhausted") return "Today’s Pro AI planning action is used. Manual planning remains available.";
   if (code === "duplicate_request") return "That AI request was already sent and was not repeated. Your text is still here.";
+  if (code === "account_deletion_pending") return "AI planning is unavailable while account deletion is pending. You can keep planning manually.";
   if (code === "revenuecat_unavailable" || code === "quota_service_unavailable" || status === 503) return "AI planning is temporarily unavailable. You can keep planning manually.";
   if (code === "openai_provider_failure") return "The AI planning request failed. Your text is still here, and manual planning remains available.";
   return "The plan could not be organized. Your text is still here, and manual planning remains available.";

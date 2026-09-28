@@ -34,12 +34,13 @@ test("trusted AI denial messages keep Morning Start optional", async () => {
     ["unauthenticated", /Sign in to use live AI verification/],
     ["introductory_quota_exhausted", /five introductory AI actions are used/],
     ["pro_feature_quota_exhausted", /today’s three Pro AI verification actions/],
+    ["account_deletion_pending", /account deletion is pending/],
     ["revenuecat_unavailable", /temporarily unavailable/],
     ["quota_service_unavailable", /temporarily unavailable/],
     ["openai_provider_failure", /AI verification request failed/],
   ] as const;
   for (const [code, expected] of cases) {
-    const status = code === "unauthenticated" ? 401 : code === "openai_provider_failure" ? 502 : code.includes("quota_exhausted") ? 429 : 503;
+    const status = code === "unauthenticated" ? 401 : code === "account_deletion_pending" ? 409 : code === "openai_provider_failure" ? 502 : code.includes("quota_exhausted") ? 429 : 503;
     const result = await verifyToothbrushPhoto(
       new Blob(["photo"]),
       "pass",

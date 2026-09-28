@@ -19,6 +19,7 @@ const sdk: RevenueCatSdk = {
     const result = await Purchases.logIn(appUserID);
     return { customerInfo: asCustomerInfo(result.customerInfo) };
   },
+  logOut: async () => asCustomerInfo(await Purchases.logOut()),
   getCustomerInfo: async () => asCustomerInfo(await Purchases.getCustomerInfo()),
   restorePurchases: async () =>
     asCustomerInfo(await Purchases.restorePurchases()),

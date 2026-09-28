@@ -90,6 +90,7 @@ function verificationFailureMessage(value: unknown, status: number): string {
   if (code === "introductory_quota_exhausted") return "Your five introductory AI actions are used. You can skip without a reward.";
   if (code === "pro_feature_quota_exhausted") return "You have used today’s three Pro AI verification actions. You can skip without a reward.";
   if (code === "duplicate_request") return "That AI request was already sent and was not repeated. You can try a new photo or skip.";
+  if (code === "account_deletion_pending") return "AI verification is unavailable while account deletion is pending. You can skip without a reward.";
   if (code === "revenuecat_unavailable" || code === "quota_service_unavailable" || status === 503) return "AI verification is temporarily unavailable. You can skip without a reward.";
   if (code === "openai_provider_failure") return "The AI verification request failed. You can try a new photo or skip without a reward.";
   if (status === 429) return "The AI verification quota is exhausted. You can skip without a reward.";
