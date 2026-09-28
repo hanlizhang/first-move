@@ -165,9 +165,7 @@ function OptionGroup({
       {options.length ? (
         options.map((option) => (
           <PickerOption
-            detail={`${option.direction} · ${
-              option.source === "canonical" ? "Canonical item" : "Working item"
-            }`}
+            detail={option.direction}
             key={option.key}
             label={option.title}
             onPress={() => onSelect(option.key)}

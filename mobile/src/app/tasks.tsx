@@ -40,7 +40,6 @@ export default function TasksScreen() {
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
-    sync,
     updateLocalWorkspace,
     workspaceEditable,
   } = useFirstMoveApp();
@@ -100,7 +99,7 @@ export default function TasksScreen() {
         <Card tone="warning">
           <Label>Editing unavailable</Label>
           <Body>
-            Finish loading a verified initialized cloud workspace in Settings before changing Tasks.
+            Finish loading your account in Settings before changing Tasks.
           </Body>
         </Card>
       ) : null}
@@ -159,16 +158,6 @@ export default function TasksScreen() {
         ))
       )}
 
-      <Card tone={auth.status === "authenticated" ? "warning" : "default"}>
-        <Label>Storage boundary</Label>
-        <Body muted>
-          {auth.status === "authenticated"
-            ? sync.status === "write-disabled"
-              ? "This uninitialized account remains write-disabled. Its local cache is never merged with Guest or another account."
-              : "This initialized Supabase UUID uses one immediate local working copy and an owner-scoped retry queue; validated server responses remain canonical."
-            : "Guest Tasks stay only in the separate Guest workspace on this device."}
-        </Body>
-      </Card>
     </Screen>
   );
 

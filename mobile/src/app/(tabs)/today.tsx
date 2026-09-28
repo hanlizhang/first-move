@@ -103,103 +103,113 @@ export default function TodayScreen() {
         totalFocusedMs={view.totalFocusedMs}
       />
 
-      <SectionHeader
-        count={view.tasks.length}
-        onPress={() => router.push("/tasks")}
-        title="Tasks"
-      />
-      <Card>
-        {view.tasks.length === 0 ? (
-          <EmptyRow message="No active Tasks. Add one small next step." />
-        ) : (
-          view.tasks.map((task, index) => (
-            <TaskRow
-              completed={!isTaskActive(task)}
-              disabled={Boolean(savingId) || !workspaceEditable}
-              first={index === 0}
-              key={task.id}
-              onOpen={() =>
-                router.push({ pathname: "/tasks", params: { edit: task.id } })
-              }
-              onToggle={() =>
-                void saveToggle(
-                  task.id,
-                  (state) => toggleTaskCompletion(state, task.id, today),
-                  isTaskActive(task)
-                    ? "Task completed."
-                    : "Task marked incomplete.",
-                )
-              }
-              task={task}
-            />
-          ))
-        )}
-      </Card>
+      <View style={styles.section}>
+        <SectionHeader
+          count={view.tasks.length}
+          onPress={() => router.push("/tasks")}
+          title="Tasks"
+        />
+        <View style={styles.compactCard}>
+          {view.tasks.length === 0 ? (
+            <EmptyRow message="No active Tasks. Add one small next step." />
+          ) : (
+            view.tasks.map((task, index) => (
+              <TaskRow
+                completed={!isTaskActive(task)}
+                disabled={Boolean(savingId) || !workspaceEditable}
+                first={index === 0}
+                key={task.id}
+                onOpen={() =>
+                  router.push({ pathname: "/tasks", params: { edit: task.id } })
+                }
+                onToggle={() =>
+                  void saveToggle(
+                    task.id,
+                    (state) => toggleTaskCompletion(state, task.id, today),
+                    isTaskActive(task)
+                      ? "Task completed."
+                      : "Task marked incomplete.",
+                  )
+                }
+                task={task}
+              />
+            ))
+          )}
+        </View>
+      </View>
 
-      <SectionHeader
-        count={view.habits.length}
-        onPress={() => router.push("/habits")}
-        title="Habits"
-      />
-      <Card>
-        {view.habits.length === 0 ? (
-          <EmptyRow message="No Habits are scheduled for today." />
-        ) : (
-          view.habits.map((habit, index) => (
-            <HabitRow
-              checked={!isHabitActive(habit, today)}
-              disabled={Boolean(savingId) || !workspaceEditable}
-              first={index === 0}
-              habit={habit}
-              key={habit.id}
-              onToggle={() =>
-                void saveToggle(
-                  habit.id,
-                  (state) => toggleHabitCompletion(state, habit.id, today),
-                  isHabitActive(habit, today)
-                    ? "Habit checked for today."
-                    : "Habit check-in removed for today.",
-                )
-              }
-            />
-          ))
-        )}
-      </Card>
+      <View style={styles.section}>
+        <SectionHeader
+          count={view.habits.length}
+          onPress={() => router.push("/habits")}
+          title="Habits"
+        />
+        <View style={styles.compactCard}>
+          {view.habits.length === 0 ? (
+            <EmptyRow message="No Habits are scheduled for today." />
+          ) : (
+            view.habits.map((habit, index) => (
+              <HabitRow
+                checked={!isHabitActive(habit, today)}
+                disabled={Boolean(savingId) || !workspaceEditable}
+                first={index === 0}
+                habit={habit}
+                key={habit.id}
+                onToggle={() =>
+                  void saveToggle(
+                    habit.id,
+                    (state) => toggleHabitCompletion(state, habit.id, today),
+                    isHabitActive(habit, today)
+                      ? "Habit checked for today."
+                      : "Habit check-in removed for today.",
+                  )
+                }
+              />
+            ))
+          )}
+        </View>
+      </View>
 
-      <SectionHeader
-        detail={formatFocusedDuration(view.totalFocusedMs)}
-        onPress={() => router.push("/(tabs)/focus")}
-        title="Focus today"
-      />
-      <Card>
-        {view.focusItems.length === 0 ? (
-          <EmptyRow message="No completed or intentionally stopped Focus Sessions yet." />
-        ) : (
-          view.focusItems.map((item, index) => (
-            <FocusRow first={index === 0} item={item} key={item.id} />
-          ))
-        )}
-      </Card>
+      <View style={styles.section}>
+        <SectionHeader
+          detail={formatFocusedDuration(view.totalFocusedMs)}
+          onPress={() => router.push("/(tabs)/focus")}
+          title="Focus today"
+        />
+        <View style={styles.compactCard}>
+          {view.focusItems.length === 0 ? (
+            <EmptyRow message="No completed or intentionally stopped Focus Sessions yet." />
+          ) : (
+            view.focusItems.map((item, index) => (
+              <FocusRow first={index === 0} item={item} key={item.id} />
+            ))
+          )}
+        </View>
+      </View>
 
-      <StaticSectionHeader detail={`${view.timeline.length}`} title="Activity timeline" />
-      <Card>
-        {view.timeline.length === 0 ? (
-          <EmptyRow message="Your completed Tasks, Habit check-ins, and closed Focus Sessions will appear here." />
-        ) : (
-          view.timeline.map((item, index) => (
-            <TimelineRow first={index === 0} item={item} key={item.id} />
-          ))
-        )}
-      </Card>
+      <View style={styles.section}>
+        <StaticSectionHeader detail={`${view.timeline.length}`} title="Activity timeline" />
+        <View style={styles.compactCard}>
+          {view.timeline.length === 0 ? (
+            <EmptyRow message="Your completed Tasks, Habit check-ins, and closed Focus Sessions will appear here." />
+          ) : (
+            view.timeline.map((item, index) => (
+              <TimelineRow first={index === 0} item={item} key={item.id} />
+            ))
+          )}
+        </View>
+      </View>
 
-      <StaticSectionHeader title="Reflection" />
-      <ReflectionEditor
-        disabled={Boolean(savingId) || !workspaceEditable}
-        existing={view.reflection}
-        key={today}
-        onDelete={removeTodayReflection}
-        onSave={saveTodayReflection}
-      />
+      <View style={styles.section}>
+        <StaticSectionHeader title="Reflection" />
+        <ReflectionEditor
+          disabled={Boolean(savingId) || !workspaceEditable}
+          existing={view.reflection}
+          key={today}
+          onDelete={removeTodayReflection}
+          onSave={saveTodayReflection}
+        />
+      </View>
     </Screen>
   );
 
@@ -271,7 +281,7 @@ function TodaySummary({
   totalFocusedMs: number;
 }) {
   return (
-    <Card tone="primary">
+    <View style={styles.summaryCard}>
       <View style={styles.metricsRow}>
         <View style={styles.metric}>
           <Text style={styles.metricLabel}>Current points</Text>
@@ -301,7 +311,7 @@ function TodaySummary({
           );
         })}
       </View>
-    </Card>
+    </View>
   );
 }
 
@@ -561,6 +571,23 @@ function formatPointChange(points: number): string {
 }
 
 const styles = StyleSheet.create({
+  section: { gap: spacing.xs },
+  compactCard: {
+    backgroundColor: "#FFFCF6",
+    borderColor: "#E4D3BE",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: spacing.xs,
+  },
+  summaryCard: {
+    backgroundColor: "#FFFCF6",
+    borderColor: "#E4D3BE",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: 12,
+  },
   topRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -587,31 +614,30 @@ const styles = StyleSheet.create({
     fontSize: typography.small,
     padding: spacing.sm,
   },
-  metricsRow: { flexDirection: "row", gap: spacing.md },
+  metricsRow: { flexDirection: "row", gap: 12 },
   metric: { flex: 1 },
-  metricLabel: { color: colors.primary, fontSize: typography.small, fontWeight: "800" },
-  metricValue: { color: colors.text, fontSize: 26, fontWeight: "900", marginTop: 2 },
-  directionList: { gap: spacing.sm, marginTop: spacing.xs },
-  directionRow: { gap: spacing.xs },
+  metricLabel: { color: "#8B5A35", fontSize: typography.small, fontWeight: "800" },
+  metricValue: { color: "#4A2F21", fontSize: 24, fontWeight: "900", marginTop: 1 },
+  directionList: { gap: 6 },
+  directionRow: { gap: 3 },
   directionHeading: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
-  directionLabel: { color: colors.text, flex: 1, fontSize: typography.small },
+  directionLabel: { color: "#4A2F21", flex: 1, fontSize: typography.small },
   directionDuration: { color: colors.textMuted, fontSize: typography.small, fontWeight: "800" },
   directionTrack: {
-    backgroundColor: "#D9D0F7",
+    backgroundColor: "#EFCBA2",
     borderRadius: radii.pill,
     height: 6,
     overflow: "hidden",
   },
-  directionFill: { backgroundColor: colors.primary, borderRadius: radii.pill, height: 6 },
+  directionFill: { backgroundColor: "#C6864F", borderRadius: radii.pill, height: 6 },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: spacing.sm,
   },
   sectionTitleRow: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
   sectionTitle: {
-    color: colors.text,
+    color: "#4A2F21",
     fontSize: typography.heading,
     fontWeight: "800",
   },
@@ -634,7 +660,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     minHeight: touchTarget,
-    paddingVertical: spacing.xs,
   },
   itemBorder: { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
   checkboxTouch: {
@@ -655,23 +680,23 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: colors.success, borderColor: colors.success },
   checkmark: { color: "#FFFFFF", fontSize: typography.body, fontWeight: "900" },
-  itemCopy: { flex: 1, justifyContent: "center", minHeight: touchTarget, paddingVertical: spacing.xs },
-  itemTitle: { color: colors.text, fontSize: typography.body, fontWeight: "800", lineHeight: 22 },
+  itemCopy: { flex: 1, justifyContent: "center", minHeight: touchTarget, paddingVertical: 2 },
+  itemTitle: { color: "#4A2F21", fontSize: typography.body, fontWeight: "800", lineHeight: 21 },
   completedText: { color: colors.textMuted, textDecorationLine: "line-through" },
-  itemMeta: { color: colors.textMuted, fontSize: typography.small, lineHeight: 20, marginTop: 2 },
+  itemMeta: { color: colors.textMuted, fontSize: typography.small, lineHeight: 18, marginTop: 1 },
   chevron: { color: colors.textMuted, fontSize: 28, paddingLeft: spacing.sm },
-  focusRow: { paddingVertical: spacing.sm },
+  focusRow: { paddingVertical: 6 },
   focusHeading: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, justifyContent: "space-between" },
   focusTitle: { flex: 1 },
-  duration: { color: colors.text, fontSize: typography.body, fontWeight: "800" },
-  linkedLabel: { color: colors.primary, fontSize: typography.small, lineHeight: 20, marginTop: spacing.xs },
-  timelineRow: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, paddingVertical: spacing.sm },
-  timelineTimeColumn: { width: 64 },
-  timelineTime: { color: colors.text, fontSize: typography.small, fontWeight: "800" },
-  timelineKind: { color: colors.textMuted, fontSize: typography.label, marginTop: 2 },
+  duration: { color: "#4A2F21", fontSize: typography.body, fontWeight: "800" },
+  linkedLabel: { color: colors.primary, fontSize: typography.small, lineHeight: 18, marginTop: 2 },
+  timelineRow: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, paddingVertical: 6 },
+  timelineTimeColumn: { width: 58 },
+  timelineTime: { color: "#4A2F21", fontSize: typography.small, fontWeight: "800" },
+  timelineKind: { color: colors.textMuted, fontSize: typography.label, marginTop: 1 },
   timelineCopy: { flex: 1 },
   pointChange: { color: colors.success, fontSize: typography.small, fontWeight: "800" },
-  emptyText: { color: colors.textMuted, fontSize: typography.body, lineHeight: 23, paddingVertical: spacing.sm },
+  emptyText: { color: colors.textMuted, fontSize: typography.body, lineHeight: 22, paddingVertical: spacing.sm },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.5 },
 });

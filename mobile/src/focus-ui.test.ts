@@ -29,11 +29,11 @@ test("Mobile Focus makes persistence automatic and review optional", () => {
   assert.doesNotMatch(source, /Save session/);
 });
 
-test("Focus links use the current owner authoritative working copy", () => {
+test("Focus links use the current owner workspace without exposing sync internals", () => {
   assert.match(source, /buildFocusLinkOptions\(localWorkspace, today\)/);
   assert.doesNotMatch(source, /canonicalState/);
-  assert.match(pickerSource, /Working item/);
-  assert.match(source, /owner-scoped retry queue|queue in order/);
+  assert.doesNotMatch(source, /Storage boundary|UUID|canonical responses|queue in order/);
+  assert.doesNotMatch(pickerSource, /Canonical item|Working item/);
 });
 
 test("Focus uses one compact searchable linked-item field", () => {

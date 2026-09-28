@@ -34,7 +34,7 @@ test("Mobile exposes honest authenticated sync states and manual retry", () => {
   assert.match(accountPanel, /Retry and refresh/);
   assert.match(accountPanel, /Start fresh/);
   assert.match(accountPanel, /does not upload or merge Guest progress/);
-  assert.match(accountPanel, /Import this device is deferred for iOS 1\.0/);
+  assert.doesNotMatch(accountPanel, /deferred for iOS|canonical workspace|Web Sync v1/);
   assert.match(accountPanel, /Continue as guest/);
   assert.match(provider, /syncRuntimeRef\.current\?\.retry\(\)/);
   assert.match(provider, /runtime\.startFresh\(\)/);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 
 import { useFirstMoveApp } from "../../app-state/app-provider.tsx";
 import {
@@ -13,6 +14,7 @@ import {
   SecondaryButton,
 } from "../../components/ui.tsx";
 import { FocusLinkPicker } from "../../components/focus-link-picker.tsx";
+import { PixelKitten } from "../../components/pixel-kitten.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import { getPendingIntent } from "../../domain/app-state.ts";
 import {
@@ -59,11 +61,9 @@ import {
 
 export default function FocusScreen() {
   const {
-    auth,
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
-    sync,
     updateLocalWorkspace,
     workspaceEditable,
   } = useFirstMoveApp();
@@ -138,7 +138,11 @@ export default function FocusScreen() {
     <Screen
       eyebrow="Focus"
       title={focusTitle(openSession?.status, latestClosedSession?.status)}
-      description="Start a countdown or stopwatch directly, or use a pending First Move. Every mode uses the same saved local Session engine."
+      description={
+        openSession
+          ? undefined
+          : "Start a countdown or stopwatch directly, or use a pending First Move. Every mode uses the same saved local Session engine."
+      }
     >
       {localWorkspaceMessage ? (
         <Card tone="danger">
@@ -153,7 +157,6 @@ export default function FocusScreen() {
 
       {openSession ? (
         <ActiveSessionCard
-          linkOptions={linkOptions}
           nowMs={nowMs}
           onCancel={() => {
             const assisted = Boolean(openSession.linkedIntentId);
@@ -192,7 +195,6 @@ export default function FocusScreen() {
           }
           saving={saving || !workspaceEditable}
           session={openSession}
-          state={localWorkspace}
         />
       ) : (
         <>
@@ -250,16 +252,6 @@ export default function FocusScreen() {
         </>
       )}
 
-      <Card>
-        <Label>Storage boundary</Label>
-        <Body muted>
-          {auth.status === "authenticated"
-            ? sync.status === "write-disabled"
-              ? "This uninitialized account remains write-disabled. Guest and account data are not merged."
-              : "Sessions and pending First Moves update this UUID’s local working copy immediately, queue in order, and accept only validated canonical responses."
-            : "Guest Mode keeps Sessions and relationships only in the separate Guest workspace on this device."}
-        </Body>
-      </Card>
     </Screen>
   );
 
@@ -290,7 +282,6 @@ export default function FocusScreen() {
 }
 
 function ActiveSessionCard({
-  linkOptions,
   nowMs,
   onCancel,
   onPause,
@@ -298,9 +289,7 @@ function ActiveSessionCard({
   onStop,
   saving,
   session,
-  state,
 }: {
-  linkOptions: readonly FocusLinkOption[];
   nowMs: number;
   onCancel(): void;
   onPause(): void;
@@ -308,55 +297,146 @@ function ActiveSessionCard({
   onStop(): void;
   saving: boolean;
   session: ActivitySession;
-  state: AppState;
 }) {
   const displayMs =
     session.mode === "countdown"
       ? remainingMs(session, nowMs) ?? 0
       : elapsedMs(session, nowMs);
-  const relationship = sessionRelationshipLabel(session, state, linkOptions);
+  const progress =
+    session.mode === "countdown"
+      ? countdownProgress(session.targetDurationMinutes, displayMs)
+      : undefined;
 
   return (
-    <Card tone="primary">
-      <Label>
-        {session.mode === "countdown" ? "Countdown" : "Stopwatch"} · {session.status}
-      </Label>
-      <Text
-        accessibilityLabel={`${formatDuration(displayMs)} ${
-          session.mode === "countdown" ? "remaining" : "elapsed"
-        }`}
-        accessibilityLiveRegion="polite"
-        style={styles.timer}
-      >
-        {formatDuration(displayMs)}
-      </Text>
-      <Heading>{session.label}</Heading>
-      <View style={styles.details}>
-        <Detail label="Direction" value={session.direction} />
-        {session.mode === "countdown" ? (
-          <Detail
-            label="Duration"
-            value={`${session.targetDurationMinutes ?? 0} minutes`}
-          />
-        ) : null}
-        <Detail label="Relationship" value={relationship} />
+    <View style={styles.activeSessionCard}>
+      <View style={styles.timerPresentation}>
+        <FocusRing progress={progress} />
+        <View style={styles.timerContent}>
+          <Text style={styles.timerStatus}>
+            {session.mode === "countdown" ? "Countdown" : "Stopwatch"} · {session.status}
+          </Text>
+          <Text
+            adjustsFontSizeToFit
+            accessibilityLabel={`${formatDuration(displayMs)} ${
+              session.mode === "countdown" ? "remaining" : "elapsed"
+            }`}
+            accessibilityLiveRegion="polite"
+            minimumFontScale={0.8}
+            numberOfLines={1}
+            style={styles.timer}
+          >
+            {formatDuration(displayMs)}
+          </Text>
+        </View>
       </View>
-      {session.status === "running" ? (
-        <PrimaryButton disabled={saving} title="Pause" onPress={onPause} />
-      ) : (
-        <PrimaryButton disabled={saving} title="Resume" onPress={onResume} />
-      )}
-      <SecondaryButton
-        disabled={saving}
-        title="Stop and save"
-        onPress={onStop}
+      <View style={styles.sleepingKitten}>
+        <PixelKitten
+          accessibilityLabel="Sleeping pixel kitten resting beneath the Focus timer"
+          pose="sleeping"
+          showFloor={false}
+        />
+      </View>
+      <View style={styles.activeSessionInfo}>
+        <Text style={styles.activeSessionTitle}>{session.label}</Text>
+        <Text style={styles.activeSessionMeta}>
+          {session.direction}
+          {session.mode === "countdown"
+            ? ` · ${session.targetDurationMinutes ?? 0} min`
+            : " · Stopwatch"}
+        </Text>
+      </View>
+      <View style={styles.focusActions}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={saving}
+          onPress={session.status === "running" ? onPause : onResume}
+          style={({ pressed }) => [
+            styles.focusPrimaryButton,
+            pressed && styles.focusPrimaryButtonPressed,
+            saving && styles.focusActionDisabled,
+          ]}
+        >
+          <Text style={styles.focusPrimaryButtonText}>
+            {session.status === "running" ? "Pause" : "Resume"}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={saving}
+          onPress={onStop}
+          style={({ pressed }) => [
+            styles.focusSecondaryButton,
+            pressed && styles.focusSecondaryButtonPressed,
+            saving && styles.focusActionDisabled,
+          ]}
+        >
+          <Text style={styles.focusSecondaryButtonText}>Stop and save</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={saving}
+          onPress={onCancel}
+          style={({ pressed }) => [
+            styles.focusCancelButton,
+            pressed && styles.focusCancelButtonPressed,
+            saving && styles.focusActionDisabled,
+          ]}
+        >
+          <Text style={styles.focusCancelButtonText}>Cancel this session</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const FOCUS_RING_SIZE = 232;
+const FOCUS_RING_STROKE = 12;
+const FOCUS_RING_RADIUS = (FOCUS_RING_SIZE - FOCUS_RING_STROKE) / 2;
+const FOCUS_RING_CIRCUMFERENCE = 2 * Math.PI * FOCUS_RING_RADIUS;
+
+function FocusRing({ progress }: { progress?: number }) {
+  return (
+    <Svg
+      accessible={false}
+      height={FOCUS_RING_SIZE}
+      viewBox={`0 0 ${FOCUS_RING_SIZE} ${FOCUS_RING_SIZE}`}
+      width={FOCUS_RING_SIZE}
+    >
+      <Circle
+        cx={FOCUS_RING_SIZE / 2}
+        cy={FOCUS_RING_SIZE / 2}
+        fill="none"
+        r={FOCUS_RING_RADIUS}
+        stroke="#EFCBA2"
+        strokeWidth={FOCUS_RING_STROKE}
       />
-      <SecondaryButton
-        disabled={saving}
-        title="Cancel this session"
-        onPress={onCancel}
-      />
-    </Card>
+      {progress !== undefined && progress > 0 ? (
+        <Circle
+          cx={FOCUS_RING_SIZE / 2}
+          cy={FOCUS_RING_SIZE / 2}
+          fill="none"
+          r={FOCUS_RING_RADIUS}
+          stroke="#8B5A35"
+          strokeDasharray={`${FOCUS_RING_CIRCUMFERENCE} ${FOCUS_RING_CIRCUMFERENCE}`}
+          strokeDashoffset={FOCUS_RING_CIRCUMFERENCE * (1 - progress)}
+          strokeLinecap="round"
+          strokeWidth={FOCUS_RING_STROKE}
+          transform={`rotate(-90 ${FOCUS_RING_SIZE / 2} ${FOCUS_RING_SIZE / 2})`}
+        />
+      ) : null}
+    </Svg>
+  );
+}
+
+function countdownProgress(
+  targetDurationMinutes: number | undefined,
+  remainingMilliseconds: number,
+): number {
+  const totalMilliseconds = (targetDurationMinutes ?? 0) * 60_000;
+  if (totalMilliseconds <= 0) return 0;
+  return Math.min(
+    1,
+    Math.max(0, (totalMilliseconds - remainingMilliseconds) / totalMilliseconds),
   );
 }
 
@@ -847,14 +927,121 @@ function formatDuration(milliseconds: number): string {
 }
 
 const styles = StyleSheet.create({
+  activeSessionCard: {
+    alignItems: "stretch",
+    backgroundColor: "#FFFCF6",
+    borderColor: "#E4D3BE",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+  },
+  timerPresentation: {
+    alignItems: "center",
+    alignSelf: "center",
+    height: FOCUS_RING_SIZE,
+    justifyContent: "center",
+    position: "relative",
+    width: FOCUS_RING_SIZE,
+  },
+  timerContent: {
+    alignItems: "center",
+    bottom: 0,
+    justifyContent: "center",
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  timerStatus: {
+    color: "#7A6354",
+    fontSize: typography.label,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    marginBottom: spacing.sm,
+    textTransform: "uppercase",
+  },
   timer: {
-    color: colors.text,
-    fontSize: 54,
+    color: "#4A2F21",
+    fontSize: 56,
     fontVariant: ["tabular-nums"],
     fontWeight: "800",
     letterSpacing: -1,
     textAlign: "center",
   },
+  sleepingKitten: {
+    alignSelf: "center",
+    height: 128,
+    marginTop: -84,
+    width: 186,
+  },
+  activeSessionInfo: {
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  activeSessionTitle: {
+    color: "#4A2F21",
+    fontSize: typography.heading,
+    fontWeight: "800",
+    lineHeight: 28,
+    textAlign: "center",
+  },
+  activeSessionMeta: {
+    color: "#7A6354",
+    fontSize: typography.small,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  focusActions: { gap: spacing.sm, marginTop: spacing.sm },
+  focusPrimaryButton: {
+    alignItems: "center",
+    backgroundColor: "#8B5A35",
+    borderRadius: radii.sm,
+    justifyContent: "center",
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  focusPrimaryButtonPressed: { backgroundColor: "#70452B" },
+  focusPrimaryButtonText: {
+    color: "#FFF9F0",
+    fontSize: typography.body,
+    fontWeight: "800",
+  },
+  focusSecondaryButton: {
+    alignItems: "center",
+    backgroundColor: "#FFFCF6",
+    borderColor: "#CFAF8D",
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  focusSecondaryButtonPressed: { backgroundColor: "#F6EBDD" },
+  focusSecondaryButtonText: {
+    color: "#5C3B29",
+    fontSize: typography.body,
+    fontWeight: "800",
+  },
+  focusCancelButton: {
+    alignItems: "center",
+    alignSelf: "center",
+    justifyContent: "center",
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.md,
+  },
+  focusCancelButtonPressed: { opacity: 0.65 },
+  focusCancelButtonText: {
+    color: "#7A6354",
+    fontSize: typography.small,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+  focusActionDisabled: { opacity: 0.55 },
   details: { gap: spacing.sm },
   detail: { gap: spacing.xs },
   detailLabel: {

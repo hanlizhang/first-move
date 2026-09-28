@@ -51,7 +51,7 @@ export function AccountPanel() {
         <Label>Guest Mode</Label>
         <Heading>Local and account data stay separate</Heading>
         <Body>
-          Guest progress and each account use separate device storage. Signing in never uploads or merges Guest data; an initialized account loads its canonical working copy.
+          Guest progress and each account stay separate. Signing in never uploads or merges Guest data.
         </Body>
         <PrimaryButton title="Sync across devices" onPress={openSignIn} />
       </Card>
@@ -154,7 +154,7 @@ export function AccountPanel() {
       return (
         <Card>
           <Label>Loading cloud progress</Label>
-          <Body>Checking this account and validating its canonical workspace…</Body>
+          <Body>Checking this account and loading its synced progress…</Body>
         </Card>
       );
     }
@@ -174,7 +174,6 @@ export function AccountPanel() {
           />
           <SecondaryButton title="Check cloud setup again" onPress={onRefresh} />
           <SecondaryButton title="Continue as guest" onPress={continueAsGuest} />
-          <Body muted>Import this device is deferred for iOS 1.0.</Body>
           {setupMessage ? <Body>{setupMessage}</Body> : null}
         </Card>
       );
@@ -197,7 +196,7 @@ export function AccountPanel() {
       return (
         <Card tone="warning">
           <Label>Offline · retry pending</Label>
-          <Heading>Your local working copy is safe</Heading>
+          <Heading>Your saved changes are safe</Heading>
           <Body>{sync.message}</Body>
           <SecondaryButton title="Retry and refresh" onPress={onRefresh} />
         </Card>
@@ -217,7 +216,7 @@ export function AccountPanel() {
       return (
         <Card tone="success">
           <Label>Synced</Label>
-          <Heading>Canonical workspace verified and editable</Heading>
+          <Heading>Your progress is synced</Heading>
           <View style={styles.metrics}>
             <Metric label="Tasks" value={state.tasks.length} />
             <Metric label="Habits" value={state.habits.length} />
@@ -225,7 +224,7 @@ export function AccountPanel() {
             <Metric label="Points" value={state.progress.points} />
           </View>
           <Body muted>
-            Tasks, Habits, pending First Moves, and Focus Sessions use the existing authenticated Web Sync v1 contract. Rewards remain server-authoritative.
+            Tasks, Habits, First Moves, and Focus Sessions are available across your signed-in devices.
           </Body>
           <SecondaryButton title="Refresh cloud data" onPress={onRefresh} />
         </Card>

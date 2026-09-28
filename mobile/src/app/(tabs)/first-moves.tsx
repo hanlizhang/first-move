@@ -50,11 +50,9 @@ type FlowStep = "stuck-state" | "direction" | "move";
 export default function FirstMovesScreen() {
   const router = useRouter();
   const {
-    auth,
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
-    sync,
     updateLocalWorkspace,
     workspaceEditable,
   } = useFirstMoveApp();
@@ -190,10 +188,6 @@ export default function FirstMovesScreen() {
             </>
           ) : null}
         </Card>
-        <LocalBoundary
-          authenticated={auth.status === "authenticated"}
-          syncStatus={sync.status}
-        />
       </Screen>
     );
   }
@@ -343,10 +337,6 @@ export default function FirstMovesScreen() {
           {notice}
         </Text>
       ) : null}
-      <LocalBoundary
-        authenticated={auth.status === "authenticated"}
-        syncStatus={sync.status}
-      />
     </Screen>
   );
 }
@@ -387,27 +377,6 @@ function Detail({ label, value }: { label: string; value: string }) {
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
     </View>
-  );
-}
-
-function LocalBoundary({
-  authenticated,
-  syncStatus,
-}: {
-  authenticated: boolean;
-  syncStatus: string;
-}) {
-  return (
-    <Card>
-      <Label>Storage boundary</Label>
-      <Body muted>
-        {authenticated
-          ? syncStatus === "write-disabled"
-            ? "This uninitialized account cannot save a First Move. Guest and account workspaces remain separate."
-            : "This First Move saves immediately to the account working copy and queues through Web Sync v1. Only the pending Intent view is sent."
-          : "Guest Mode stores this First Move in its separate local AsyncStorage workspace. No account or network is required."}
-      </Body>
-    </Card>
   );
 }
 

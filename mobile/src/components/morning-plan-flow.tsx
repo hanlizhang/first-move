@@ -61,7 +61,7 @@ export function MorningPlanFlow({ dateKey }: { dateKey: string }) {
           <Heading>{complete ? "The kitten enjoyed breakfast" : "Skipped for today"}</Heading>
           <Body muted>
             {complete
-              ? "Your successful check was saved with the existing Morning reward semantics."
+              ? "Your morning check was saved."
               : "No Morning check, reward, or AI request was created."}
           </Body>
         </Card>
@@ -113,7 +113,7 @@ function MorningStart({ dateKey, onSkip }: { dateKey: string; onSkip(): void }) 
       <Label>Morning Start · Optional daily check</Label>
       <Heading>Take a current photo with your toothbrush</Heading>
       <Body muted>
-        First Move resizes it to a maximum of 768 px, uploads it only when you tap Verify photo, and deletes the temporary copy. It is a routine check, not dental analysis.
+        First Move uploads it only when you tap Verify photo and deletes the temporary copy. It is a routine check, not dental analysis.
       </Body>
       {quotaCopy ? <Body muted>{quotaCopy}</Body> : null}
       {!signedIn ? (
@@ -127,7 +127,6 @@ function MorningStart({ dateKey, onSkip }: { dateKey: string; onSkip(): void }) 
             source={{ uri: photo.uri }}
             style={styles.preview}
           />
-          <Body muted>{photo.width} × {photo.height}px temporary JPEG</Body>
           <PrimaryButton
             disabled={verifying || exhausted || !workspaceEditable}
             onPress={() => void verify()}

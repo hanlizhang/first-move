@@ -10,7 +10,7 @@ export default function SettingsScreen() {
     <Screen
       eyebrow="Settings"
       title="Account and local data"
-      description="Authentication is optional. Initialized accounts can sync core Mobile work; Guest Mode stays completely local."
+      description="An account is optional. Sign in to sync across devices, or keep using Guest Mode locally."
     >
       <AccountPanel />
       <LegalLinksPanel />
@@ -19,9 +19,9 @@ export default function SettingsScreen() {
       <AiAccessPanel />
       <Card>
         <Label>Privacy</Label>
-        <Heading>Secrets stay out of the app</Heading>
+        <Heading>Your private data stays private</Heading>
         <Body>
-          The mobile client accepts only the public Supabase URL and publishable key. Sessions use encrypted platform storage; emails, tokens, journal text, and cloud payloads are never logged.
+          Sign-in sessions use secure platform storage. Emails, journal text, and synced content are never written to diagnostic logs.
         </Body>
       </Card>
     </Screen>
