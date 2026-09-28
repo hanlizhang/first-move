@@ -1,9 +1,22 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { handleAccountDeletionWorkerInvocation } from "./account-deletion-worker-boundary.ts";
 
 const SECRET = "local-worker-secret-with-enough-entropy";
+const vercelConfiguration = JSON.parse(
+  readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"),
+) as { crons?: { path?: string; schedule?: string }[] };
+
+test("production declares one plan-compatible daily retry invocation", () => {
+  assert.deepEqual(vercelConfiguration.crons, [
+    {
+      path: "/api/internal/account-deletion-worker",
+      schedule: "0 3 * * *",
+    },
+  ]);
+});
 
 test("the retry boundary is disabled without its server secret", async () => {
   let calls = 0;
@@ -53,6 +66,26 @@ test("an authorized invocation makes exactly one bounded queue attempt", async (
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "attempted" });
+  assert.equal(calls, 1);
+});
+
+test("Vercel CRON_SECRET authorizes the same single target-free attempt", async () => {
+  let calls = 0;
+  const response = await handleAccountDeletionWorkerInvocation(
+    workerRequest(`Bearer ${SECRET}`),
+    {
+      environment: {
+        CRON_SECRET: SECRET,
+        ACCOUNT_DELETION_WORKER_SECRET: "legacy-secret-is-not-used",
+      },
+      runWorker: async () => {
+        calls += 1;
+        return { outcome: "idle" };
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "idle" });
   assert.equal(calls, 1);
 });
 

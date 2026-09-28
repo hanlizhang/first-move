@@ -303,6 +303,12 @@ select is(
   'an unrelated account passes the trusted write check'
 );
 
+-- Fresh disposable Supabase projects do not always install the platform's
+-- default service-role table grants. Keep that harness accommodation inside
+-- this rollback-scoped test rather than changing an applied migration.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.tasks to service_role;
+
 set local role service_role;
 select set_config('request.jwt.claim.role', 'service_role', true);
 select lives_ok(
@@ -333,8 +339,8 @@ create temporary table deletion_write_race_result (
 do $$
 declare
   connection_string text := pg_catalog.format(
-    'host=supabase_db_first-move port=5432 dbname=%s user=postgres password=postgres application_name=phase1c_race',
-    current_database()
+    'hostaddr=%s port=%s dbname=%s user=postgres password=postgres application_name=phase1c_race',
+    pg_catalog.inet_server_addr(), pg_catalog.inet_server_port(), current_database()
   );
   ignored jsonb;
   saw_wait boolean;
@@ -466,8 +472,8 @@ create temporary table concurrent_initiation_results (outcome text not null) on 
 do $$
 declare
   connection_string text := pg_catalog.format(
-    'host=supabase_db_first-move port=5432 dbname=%s user=postgres password=postgres application_name=phase1c_initiation',
-    current_database()
+    'hostaddr=%s port=%s dbname=%s user=postgres password=postgres application_name=phase1c_initiation',
+    pg_catalog.inet_server_addr(), pg_catalog.inet_server_port(), current_database()
   );
 begin
   perform extensions.dblink_connect('phase1c_init_blocker', connection_string);

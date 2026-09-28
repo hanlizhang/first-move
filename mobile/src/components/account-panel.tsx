@@ -24,9 +24,12 @@ export function AccountPanel() {
     signOut,
     retryAuthRestore,
     refreshCloud,
+    startFreshCloudWorkspace,
   } = useFirstMoveApp();
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
+  const [setupPending, setSetupPending] = useState(false);
+  const [setupMessage, setSetupMessage] = useState<string | undefined>();
 
   if (auth.status === "loading") return <LoadingState label="Restoring secure session…" />;
 
@@ -73,7 +76,10 @@ export function AccountPanel() {
           />
           <Body muted>Signing out does not delete guest data or account-scoped local cache data.</Body>
         </Card>
-        <CloudStatusCard onRefresh={() => void refreshCloud()} />
+        <CloudStatusCard
+          onRefresh={() => void refreshCloud()}
+          onStartFresh={() => void runStartFresh()}
+        />
       </View>
     );
   }
@@ -121,7 +127,28 @@ export function AccountPanel() {
     }
   }
 
-  function CloudStatusCard({ onRefresh }: { onRefresh: () => void }) {
+  async function runStartFresh() {
+    setSetupPending(true);
+    setSetupMessage(undefined);
+    try {
+      const result = await startFreshCloudWorkspace();
+      setSetupMessage(result.message);
+    } catch {
+      setSetupMessage(
+        "Start fresh could not be completed. Guest progress remains safe; try again.",
+      );
+    } finally {
+      setSetupPending(false);
+    }
+  }
+
+  function CloudStatusCard({
+    onRefresh,
+    onStartFresh,
+  }: {
+    onRefresh: () => void;
+    onStartFresh: () => void;
+  }) {
     if (sync.status === "local") return null;
     if (sync.status === "loading") {
       return (
@@ -134,10 +161,21 @@ export function AccountPanel() {
     if (sync.status === "write-disabled") {
       return (
         <Card tone="warning">
-          <Label>Cloud writes disabled</Label>
-          <Heading>This account is not initialized</Heading>
+          <Label>Set up sync</Label>
+          <Heading>Start with an empty synced account</Heading>
           <Body>{sync.message}</Body>
+          <Body>
+            Start fresh does not upload or merge Guest progress. Your existing Guest progress stays separately stored on this device.
+          </Body>
+          <PrimaryButton
+            disabled={setupPending}
+            title={setupPending ? "Starting fresh…" : "Start fresh"}
+            onPress={onStartFresh}
+          />
           <SecondaryButton title="Check cloud setup again" onPress={onRefresh} />
+          <SecondaryButton title="Continue as guest" onPress={continueAsGuest} />
+          <Body muted>Import this device is deferred for iOS 1.0.</Body>
+          {setupMessage ? <Body>{setupMessage}</Body> : null}
         </Card>
       );
     }

@@ -22,7 +22,7 @@ const hydration = readFileSync(
 test("Mobile exposes honest authenticated sync states and manual retry", () => {
   for (const label of [
     "Loading cloud progress",
-    "Cloud writes disabled",
+    "Set up sync",
     "Pending sync",
     "Syncing",
     "Synced",
@@ -32,7 +32,12 @@ test("Mobile exposes honest authenticated sync states and manual retry", () => {
     assert.match(accountPanel, new RegExp(label.replace("·", "\\·")));
   }
   assert.match(accountPanel, /Retry and refresh/);
+  assert.match(accountPanel, /Start fresh/);
+  assert.match(accountPanel, /does not upload or merge Guest progress/);
+  assert.match(accountPanel, /Import this device is deferred for iOS 1\.0/);
+  assert.match(accountPanel, /Continue as guest/);
   assert.match(provider, /syncRuntimeRef\.current\?\.retry\(\)/);
+  assert.match(provider, /runtime\.startFresh\(\)/);
   assert.match(provider, /owner\.kind === "guest"/);
   assert.match(provider, /syncRuntimeRef\.current\?\.mutate\(recipe\)/);
   assert.match(provider, /useNetworkState\(\)/);
@@ -41,10 +46,12 @@ test("Mobile exposes honest authenticated sync states and manual retry", () => {
   assert.match(provider, /wasOffline && !networkKnownOffline/);
 });
 
-test("Mobile reuses only the frozen Web Sync v1 RPC names", () => {
+test("Mobile reuses the frozen cloud contracts, including explicit empty initialization", () => {
   assert.match(hydration, /cloud_workspace_status/);
   assert.match(hydration, /get_cloud_workspace_v2/);
   assert.match(runtime, /sync_cloud_workspace_v1/);
-  assert.doesNotMatch(runtime, /initialize_cloud_workspace/);
+  assert.match(runtime, /initialize_cloud_workspace_v2/);
+  assert.match(runtime, /p_choice: "start_fresh"/);
+  assert.match(runtime, /p_payload: \{\}/);
   assert.doesNotMatch(runtime, /console\.(log|warn|error)/);
 });

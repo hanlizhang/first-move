@@ -17,6 +17,7 @@ export async function handleAccountDeletionWorkerInvocation(
   dependencies: WorkerBoundaryDependencies,
 ): Promise<Response> {
   const configuredSecret =
+    dependencies.environment.CRON_SECRET?.trim() ||
     dependencies.environment.ACCOUNT_DELETION_WORKER_SECRET?.trim();
   const presentedSecret = bearerAccessToken(
     request.headers.get("authorization"),

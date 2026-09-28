@@ -289,8 +289,8 @@ create temporary table concurrent_worker_claims (
 do $$
 declare
   connection_string text := pg_catalog.format(
-    'host=supabase_db_first-move port=5432 dbname=%s user=postgres password=postgres application_name=phase1d_worker',
-    current_database()
+    'hostaddr=%s port=%s dbname=%s user=postgres password=postgres application_name=phase1d_worker',
+    pg_catalog.inet_server_addr(), pg_catalog.inet_server_port(), current_database()
   );
   first_claim jsonb;
   second_claim jsonb;

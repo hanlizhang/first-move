@@ -208,7 +208,10 @@ select ok(
 create temporary table ai_race_results (outcome text not null);
 do $$
 declare
-  connection_string constant text := 'host=supabase_db_first-move port=5432 dbname=postgres user=postgres password=postgres';
+  connection_string text := pg_catalog.format(
+    'hostaddr=%s port=%s dbname=%s user=postgres password=postgres',
+    pg_catalog.inet_server_addr(), pg_catalog.inet_server_port(), current_database()
+  );
 begin
   perform extensions.dblink_connect('ai_race_blocker', connection_string);
   perform extensions.dblink_connect('ai_race_one', connection_string);

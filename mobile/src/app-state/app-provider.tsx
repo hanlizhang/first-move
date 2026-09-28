@@ -60,6 +60,7 @@ import {
   type AuthenticatedCatEconomyResult,
   type MobileSyncClient,
   type MobileSyncSnapshot,
+  type MobileStartFreshResult,
 } from "../cloud/sync-runtime.ts";
 import { createMobileSyncQueue } from "../cloud/sync-queue.ts";
 import {
@@ -126,6 +127,7 @@ interface AppContextValue {
   signOut(): Promise<void>;
   retryAuthRestore(): Promise<void>;
   refreshCloud(): Promise<void>;
+  startFreshCloudWorkspace(): Promise<MobileStartFreshResult>;
   refreshAiAccess(): Promise<void>;
   organizeDay(brainDump: string): Promise<DayPlanRequestResult>;
   verifyToothbrush(image: Blob): Promise<ToothbrushRequestResult>;
@@ -823,6 +825,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [auth]);
 
+  const startFreshCloudWorkspace = useCallback(async (): Promise<MobileStartFreshResult> => {
+    if (auth.status !== "authenticated") {
+      return {
+        outcome: "failed",
+        message: "Sign in before creating a synced account.",
+      };
+    }
+    const runtime = syncRuntimeRef.current;
+    if (!runtime) {
+      return {
+        outcome: "failed",
+        message: "Cloud setup is not ready. Guest progress remains safe; try again.",
+      };
+    }
+    return runtime.startFresh();
+  }, [auth]);
+
   const organizeDay = useCallback(
     async (brainDump: string): Promise<DayPlanRequestResult> => {
       if (auth.status !== "authenticated") {
@@ -1068,6 +1087,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       retryAuthRestore: restore,
       refreshCloud,
+      startFreshCloudWorkspace,
       refreshAiAccess,
       organizeDay,
       verifyToothbrush,
@@ -1097,6 +1117,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       restore,
       refreshCloud,
+      startFreshCloudWorkspace,
       refreshAiAccess,
       organizeDay,
       verifyToothbrush,
