@@ -57,7 +57,6 @@ export default function HabitsScreen() {
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
-    sync,
     updateLocalWorkspace,
     workspaceEditable,
   } = useFirstMoveApp();
@@ -105,7 +104,7 @@ export default function HabitsScreen() {
         <Card tone="warning">
           <Label>Editing unavailable</Label>
           <Body>
-            Finish loading a verified initialized cloud workspace in Settings before changing Habits.
+            Finish loading your account in Settings before changing Habits.
           </Body>
         </Card>
       ) : null}
@@ -217,16 +216,6 @@ export default function HabitsScreen() {
         ))
       )}
 
-      <Card tone={auth.status === "authenticated" ? "warning" : "default"}>
-        <Label>Storage boundary</Label>
-        <Body muted>
-          {auth.status === "authenticated"
-            ? sync.status === "write-disabled"
-              ? "This uninitialized account remains write-disabled. Its local cache is never merged with Guest or another account."
-              : "This initialized Supabase UUID uses one immediate local working copy and an owner-scoped retry queue; validated server responses remain canonical."
-            : "Guest Habits stay only in the separate Guest workspace on this device."}
-        </Body>
-      </Card>
     </Screen>
   );
 

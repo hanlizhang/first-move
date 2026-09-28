@@ -16,11 +16,11 @@ test("Today exposes dedicated Mobile Tasks and Habits screens", () => {
   assert.match(habitsSource, /title="Habits"/);
 });
 
-test("Task and Habit controls use the owner-scoped working and sync boundary", () => {
+test("Task and Habit controls preserve owner-scoped updates without internal UI", () => {
   for (const source of [tasksSource, habitsSource]) {
     assert.match(source, /updateLocalWorkspace/);
     assert.match(source, /workspaceEditable/);
-    assert.match(source, /owner-scoped retry queue/);
+    assert.doesNotMatch(source, /Storage boundary|Supabase UUID|owner-scoped retry queue|canonical/);
     assert.doesNotMatch(source, /Canonical cloud · read-only/);
     assert.doesNotMatch(source, /\.rpc\(/);
   }

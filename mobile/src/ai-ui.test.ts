@@ -24,8 +24,9 @@ test("Mobile AI presentation is integrated without a new tab and keeps manual pa
 });
 
 test("toothbrush UI keeps image state transient and explicitly deletes cache files", () => {
-  assert.match(morning, /maximum of 768 px/);
+  assert.match(morning, /Math\.max\(width, height\) > 768/);
   assert.match(morning, /deleteTransientFile/);
+  assert.doesNotMatch(morning, /temporary JPEG|maximum of 768 px/);
   assert.doesNotMatch(morning, /AsyncStorage|Supabase|object storage|console\./);
   assert.doesNotMatch(morning, /setItem\(|saveCloudWorkspace|saveLocalWorkspace/);
 });

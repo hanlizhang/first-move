@@ -7,7 +7,7 @@ import {
   type ReflectionInput,
 } from "../domain/reflections.ts";
 import { colors, radii, spacing, touchTarget, typography } from "../theme/tokens.ts";
-import { Body, Card, PrimaryButton, SecondaryButton } from "./ui.tsx";
+import { Body, PrimaryButton, SecondaryButton } from "./ui.tsx";
 
 interface ReflectionEditorProps {
   disabled: boolean;
@@ -43,7 +43,7 @@ export function ReflectionEditor({
 
   if (!editing) {
     return (
-      <Card tone={existing ? "primary" : "default"}>
+      <View style={styles.editorCard}>
         {existing ? <ReflectionPreview reflection={existing} /> : (
           <Body muted>A few private words can help close the day gently.</Body>
         )}
@@ -56,12 +56,12 @@ export function ReflectionEditor({
           }}
           title={existing ? "Edit reflection" : "Add reflection"}
         />
-      </Card>
+      </View>
     );
   }
 
   return (
-    <Card tone="primary">
+    <View style={styles.editorCard}>
       <RatingRow
         disabled={disabled || saving}
         label="Mood"
@@ -123,7 +123,7 @@ export function ReflectionEditor({
           </Pressable>
         ) : null}
       </View>
-    </Card>
+    </View>
   );
 
   async function submitSave(): Promise<void> {
@@ -231,10 +231,18 @@ function toInput(entry?: JournalEntry): ReflectionInput {
 }
 
 const styles = StyleSheet.create({
-  preview: { gap: spacing.sm },
+  editorCard: {
+    backgroundColor: "#FFFCF6",
+    borderColor: "#E4D3BE",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: 12,
+  },
+  preview: { gap: spacing.xs },
   saved: { color: colors.success, fontSize: typography.small, fontWeight: "800" },
   previewLabel: { color: colors.primary, fontSize: typography.small, fontWeight: "800" },
-  previewValue: { color: colors.text, fontSize: typography.body, lineHeight: 22, marginTop: 2 },
+  previewValue: { color: "#4A2F21", fontSize: typography.body, lineHeight: 20, marginTop: 1 },
   more: { color: colors.textMuted, fontSize: typography.small },
   privacy: { color: colors.textMuted, fontSize: typography.small, lineHeight: 20 },
   ratingBlock: { gap: spacing.xs },
