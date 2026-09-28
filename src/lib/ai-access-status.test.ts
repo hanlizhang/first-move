@@ -32,6 +32,7 @@ test("trusted status derives Free identity and remaining allowance on the server
         assert.equal(token, "trusted-session");
         return USER_ID;
       },
+      ensureWriteAllowed: async () => true,
       verifyProEntitlement: async (userId) => {
         assert.equal(userId, USER_ID);
         return false;
@@ -55,6 +56,7 @@ test("trusted status derives Free identity and remaining allowance on the server
 test("trusted status returns separate server-derived Pro feature counts", async () => {
   const result = await readAiAccessStatus(authenticatedRequest(), {
     authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => true,
     verifyProEntitlement: async () => true,
     readStatus: async (userId, accessBasis) => {
       assert.equal(userId, USER_ID);
@@ -138,6 +140,7 @@ test("status endpoint is read-only, no-store, and exposes presentation-safe data
 test("status endpoint rejects Guest and fails closed on trusted service errors", async () => {
   for (const [code, expectedStatus] of [
     ["unauthenticated", 401],
+    ["account_deletion_pending", 409],
     ["revenuecat_unavailable", 503],
     ["quota_service_unavailable", 503],
   ] as const) {
@@ -224,6 +227,7 @@ test("signed-out status stops before RevenueCat and quota reads", async () => {
     new Request("http://local/api/ai-access/status"),
     {
       authenticate: async () => { authenticationCalls += 1; return USER_ID; },
+      ensureWriteAllowed: async () => true,
       verifyProEntitlement: async () => { entitlementCalls += 1; return true; },
       readStatus: async () => {
         statusReads += 1;
@@ -233,6 +237,29 @@ test("signed-out status stops before RevenueCat and quota reads", async () => {
   );
   assert.deepEqual(result, { outcome: "denied", code: "unauthenticated" });
   assert.equal(authenticationCalls, 0);
+  assert.equal(entitlementCalls, 0);
+  assert.equal(statusReads, 0);
+});
+
+test("pending deletion status stops before RevenueCat subscriber GET", async () => {
+  let entitlementCalls = 0;
+  let statusReads = 0;
+  const result = await readAiAccessStatus(authenticatedRequest(), {
+    authenticate: async () => USER_ID,
+    ensureWriteAllowed: async () => false,
+    verifyProEntitlement: async () => {
+      entitlementCalls += 1;
+      return true;
+    },
+    readStatus: async () => {
+      statusReads += 1;
+      return proAiAccessStatus([]);
+    },
+  });
+  assert.deepEqual(result, {
+    outcome: "denied",
+    code: "account_deletion_pending",
+  });
   assert.equal(entitlementCalls, 0);
   assert.equal(statusReads, 0);
 });

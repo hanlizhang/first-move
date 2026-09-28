@@ -58,12 +58,13 @@ test("trusted AI planning denial messages preserve the manual path", async () =>
     ["unauthenticated", /Sign in to use live AI planning/],
     ["introductory_quota_exhausted", /five introductory AI actions are used/],
     ["pro_feature_quota_exhausted", /Today’s Pro AI planning action is used/],
+    ["account_deletion_pending", /account deletion is pending/],
     ["revenuecat_unavailable", /temporarily unavailable/],
     ["quota_service_unavailable", /temporarily unavailable/],
     ["openai_provider_failure", /AI planning request failed/],
   ] as const;
   for (const [code, expected] of cases) {
-    const status = code === "unauthenticated" ? 401 : code === "openai_provider_failure" ? 502 : code.includes("quota_exhausted") ? 429 : 503;
+    const status = code === "unauthenticated" ? 401 : code === "account_deletion_pending" ? 409 : code === "openai_provider_failure" ? 502 : code.includes("quota_exhausted") ? 429 : 503;
     const result = await requestDayPlan(
       "write report",
       async () => Response.json({ code }, { status }),
@@ -123,15 +124,15 @@ test("unauthenticated live planning is rejected before OpenAI dispatch", async (
   assert.equal(clients, 0);
 });
 
-test("quota and RevenueCat failures reject planning before OpenAI dispatch", async () => {
-  for (const code of ["revenuecat_unavailable", "quota_service_unavailable"] as const) {
+test("account deletion, quota, and RevenueCat failures reject planning before OpenAI dispatch", async () => {
+  for (const code of ["account_deletion_pending", "revenuecat_unavailable", "quota_service_unavailable"] as const) {
     let clients = 0;
     const response = await handleOrganizeDay(jsonRequest("work"), {
       environment: { OPENAI_LIVE_PLANNING: "true", OPENAI_API_KEY: "test-only" },
       authorize: async () => ({ outcome: "denied", code }),
       createClient: () => { clients += 1; throw new Error("must not run"); },
     });
-    assert.equal(response.status, 503);
+    assert.equal(response.status, code === "account_deletion_pending" ? 409 : 503);
     assert.equal((await response.json() as { code: string }).code, code);
     assert.equal(clients, 0);
   }

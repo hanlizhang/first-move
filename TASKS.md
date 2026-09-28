@@ -399,6 +399,8 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Set App Store version/build `1.0.0` / `1` and add local EAS production build and submit profiles while preserving `development-simulator` unchanged.
 - [x] Retain and test the release-only RevenueCat Apple public SDK key boundary with no Test Store fallback and no client/server secrets in EAS config.
 - [x] Reconcile the local release audit, confirmed Apple product/storefront state, and exact EAS build/submit sequence without claiming remote acceptance or release.
+- [x] Add the local-only Phase 1B server-controlled account-deletion outbox migration and isolated database coverage for defaults, constraints, retry/lease state, client denial, owner isolation, Auth-user survival, application-data cascades, and shared catalogs.
+- [x] Add local-only Phase 1C recent-auth/exact-confirmation initiation, a disabled-by-default server release gate, idempotent outbox initiation, and race-safe pending-deletion write gates for sync/setup/economics/AI; keep both deletion migrations unapplied remotely.
 - [ ] Supply approved native app icon and App Store screenshots/metadata for required iPhone and supported-iPad sizes.
 - [ ] Add a compliant in-app account-deletion path and trusted server deletion implementation, including active-subscription guidance, without redesigning Auth or cloud storage.
 - [ ] Publish and link a Privacy Policy and Terms of Use from the app; verify the production paywall's localized price, duration, auto-renewal, cancellation, benefits, and legal links.
@@ -408,7 +410,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [ ] Complete true-device iPhone and supported-iPad Auth, sync, camera/photo, AI fallback, subscription, outage, and accessibility acceptance.
 - [ ] Build and upload with EAS, accept the exact TestFlight build, attach both first subscriptions to app version `1.0.0`, and submit them together for App Review.
 
-**iOS App Store R1 status:** Local release configuration and documentation are prepared only. Account deletion, legal links/disclosures, approved artwork, production environment verification, true-device/sandbox acceptance, signed build/upload, Apple review, and public release remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
+**iOS App Store R1 status:** Local release configuration and Phase 1B/1C deletion initiation/write protection are prepared only. Neither deletion migration is remotely applied, the initiation release gate remains disabled, and the worker, RevenueCat permission verification, Auth deletion, local cleanup, and Mobile UI remain open. Legal links/disclosures, approved artwork, production environment verification, true-device/sandbox acceptance, signed build/upload, Apple review, and public release also remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
 
 ## Release backlog
 

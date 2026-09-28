@@ -39,6 +39,15 @@ function statusError(
       401,
     );
   }
+  if (result.code === "account_deletion_pending") {
+    return json(
+      {
+        code: result.code,
+        error: "AI access is unavailable while account deletion is pending.",
+      },
+      409,
+    );
+  }
   return json(
     {
       code: result.code,
