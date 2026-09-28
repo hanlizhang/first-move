@@ -91,8 +91,8 @@ export interface AuthenticatedCatEconomyResult {
 
 export interface MobileSyncClient {
   auth: {
-    getSession(): Promise<{
-      data: { session: { user: { id: string } } | null };
+    getUser(): Promise<{
+      data: { user: { id: string } | null };
       error: unknown | null;
     }>;
   };
@@ -751,8 +751,8 @@ export class MobileSyncRuntime {
 
   private async currentSessionMatches(): Promise<boolean> {
     try {
-      const { data, error } = await this.dependencies.client.auth.getSession();
-      return !error && data.session?.user.id === this.dependencies.userId;
+      const { data, error } = await this.dependencies.client.auth.getUser();
+      return !error && data.user?.id === this.dependencies.userId;
     } catch {
       return false;
     }

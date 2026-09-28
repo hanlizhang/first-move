@@ -29,6 +29,7 @@ function mockRevenueCat(initialInfo = customerInfo(false)) {
   const configureCalls: { apiKey: string; appUserID: string }[] = [];
   const logInCalls: string[] = [];
   let getCustomerInfoCalls = 0;
+  let logOutCalls = 0;
   let restorePurchasesCalls = 0;
   let presentPaywallCalls = 0;
   let paywallResult: RevenueCatPaywallResult = "cancelled";
@@ -51,6 +52,11 @@ function mockRevenueCat(initialInfo = customerInfo(false)) {
       logInCalls.push(appUserID);
       currentAppUserId = appUserID;
       return { customerInfo: currentInfo };
+    },
+    async logOut() {
+      logOutCalls += 1;
+      currentAppUserId = "anonymous-after-deletion";
+      return currentInfo;
     },
     async getCustomerInfo() {
       getCustomerInfoCalls += 1;
@@ -80,6 +86,9 @@ function mockRevenueCat(initialInfo = customerInfo(false)) {
     get getCustomerInfoCalls() {
       return getCustomerInfoCalls;
     },
+    get logOutCalls() {
+      return logOutCalls;
+    },
     get restorePurchasesCalls() {
       return restorePurchasesCalls;
     },
@@ -97,6 +106,10 @@ function mockRevenueCat(initialInfo = customerInfo(false)) {
     },
     failRestore() {
       restoreError = true;
+    },
+    setExistingIdentity(appUserId: string) {
+      configured = true;
+      currentAppUserId = appUserId;
     },
     emitCustomerInfo(nextInfo: RevenueCatCustomerInfo) {
       listener?.(nextInfo);
@@ -187,6 +200,32 @@ test("sign-out or Guest Mode immediately clears app-visible Pro state", async ()
 
   mock.emitCustomerInfo(customerInfo(true));
   assert.equal(subscriptions.getSnapshot().status, "unavailable");
+});
+
+test("accepted account deletion clears presentation and logs out only that identified user", async () => {
+  const mock = mockRevenueCat(customerInfo(true));
+  const subscriptions = controller(mock);
+  await subscriptions.updateIdentity(USER_A);
+
+  await subscriptions.removeIdentityForAccountDeletion(USER_A);
+
+  assert.equal(subscriptions.getSnapshot().status, "unavailable");
+  assert.equal(subscriptions.getPresentationSnapshot().userId, undefined);
+  assert.equal(mock.logOutCalls, 1);
+  await subscriptions.removeIdentityForAccountDeletion(USER_B);
+  assert.equal(mock.logOutCalls, 1);
+});
+
+test("a stale persisted RevenueCat identity is removed before it can be reidentified", async () => {
+  const mock = mockRevenueCat(customerInfo(true));
+  mock.setExistingIdentity(USER_A);
+  const subscriptions = controller(mock);
+
+  await subscriptions.removeIdentityForAccountDeletion(USER_A);
+
+  assert.equal(mock.logOutCalls, 1);
+  assert.deepEqual(mock.configureCalls, []);
+  assert.deepEqual(mock.logInCalls, []);
 });
 
 test("account A to account B clears A before identifying and reading B", async () => {

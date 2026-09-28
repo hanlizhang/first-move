@@ -9,7 +9,7 @@ create table public.account_deletion_requests (
     check (status in ('pending', 'processing', 'retry_wait', 'completed')),
   revenuecat_status text not null default 'pending'
     constraint account_deletion_requests_revenuecat_status_check
-    check (revenuecat_status in ('pending', 'deletion_requested', 'absence_confirmed')),
+    check (revenuecat_status in ('pending', 'deletion_satisfied')),
   supabase_status text not null default 'pending'
     constraint account_deletion_requests_supabase_status_check
     check (supabase_status in ('pending', 'deleted')),
@@ -45,12 +45,12 @@ create table public.account_deletion_requests (
     or (status <> 'processing' and lease_token is null and lease_expires_at is null)
   ),
   constraint account_deletion_requests_service_order_check check (
-    supabase_status <> 'deleted' or revenuecat_status = 'absence_confirmed'
+    supabase_status <> 'deleted' or revenuecat_status = 'deletion_satisfied'
   ),
   constraint account_deletion_requests_completion_check check (
     (
       status = 'completed'
-      and revenuecat_status = 'absence_confirmed'
+      and revenuecat_status = 'deletion_satisfied'
       and supabase_status = 'deleted'
       and completed_at is not null
     )
@@ -89,7 +89,7 @@ to service_role;
 comment on table public.account_deletion_requests is
   'Server-only account-deletion outbox. user_id deliberately has no auth.users foreign key so retry/completion state survives Auth deletion. Completed rows contain only operational UUID/status metadata, are retained for 30 days, and must then be purged by trusted cleanup; Phase 1B adds no cleanup worker.';
 comment on column public.account_deletion_requests.revenuecat_status is
-  'deletion_requested records RevenueCat v1 HTTP 200 acceptance only. It is not provider completion; absence_confirmed requires a later authoritative not-found check.';
+  'deletion_satisfied records a terminal ensure-deleted result for this workflow: RevenueCat v1 HTTP 200 accepted and queued deletion, or HTTP 404 already absent. HTTP 200 is not proof that asynchronous physical deletion has finished.';
 comment on column public.account_deletion_requests.failure_category is
   'Bounded operational category only. Never store raw provider errors, emails, tokens, credentials, user content, prompts, photos, or receipts.';
 comment on column public.account_deletion_requests.lease_token is

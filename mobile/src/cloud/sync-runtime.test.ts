@@ -407,9 +407,9 @@ function harness(options: {
   const cloudStates: unknown[] = [];
   const client: MobileSyncClient = {
     auth: {
-      async getSession() {
+      async getUser() {
         return {
-          data: { session: authUser ? { user: { id: authUser } } : null },
+          data: { user: authUser ? { id: authUser } : null },
           error: null,
         };
       },
@@ -1013,15 +1013,12 @@ test("the current Supabase UUID is revalidated before every queued dispatch", as
   await fixture.runtime.mutate((state) =>
     editTask(state, TASK_ID, { title: "Second", direction: "Rest" }, () => NOW),
   );
-  let sessionChecks = 0;
-  fixture.client.auth.getSession = async () => {
-    sessionChecks += 1;
+  let identityChecks = 0;
+  fixture.client.auth.getUser = async () => {
+    identityChecks += 1;
     return {
       data: {
-        session:
-          sessionChecks <= 2
-            ? { user: { id: USER_A } }
-            : { user: { id: USER_B } },
+        user: identityChecks <= 2 ? { id: USER_A } : { id: USER_B },
       },
       error: null,
     };
@@ -1037,6 +1034,30 @@ test("the current Supabase UUID is revalidated before every queued dispatch", as
   });
 });
 
+test("a deleted Auth identity is rejected before any queued write can replay", async () => {
+  const fixture = harness();
+  await fixture.runtime.start();
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    addTask(state, { title: "Never replay", direction: "Rest" }, () => NOW, () => TASK_ID),
+  );
+  fixture.client.auth.getUser = async () => ({
+    data: { user: null },
+    error: { status: 403, code: "user_not_found" },
+  });
+
+  fixture.online(true);
+  await fixture.runtime.retry();
+
+  assert.equal(syncCalls(fixture.cloud).length, 0);
+  assert.equal((await fixture.queue.load(USER_A)).pending.length, 1);
+  assert.deepEqual(fixture.runtime.getSnapshot().diagnostic, {
+    failureClass: "auth-session",
+    safeErrorCode: "SESSION_MISMATCH",
+    safeMessageClass: "authenticated-owner-session-mismatch",
+  });
+});
+
 test("a session change after an RPC response leaves the mutation queued and reports auth", async () => {
   const fixture = harness();
   await fixture.runtime.start();
@@ -1044,15 +1065,12 @@ test("a session change after an RPC response leaves the mutation queued and repo
   await fixture.runtime.mutate((state) =>
     addTask(state, { title: "Stay queued", direction: "Rest" }, () => NOW, () => TASK_ID),
   );
-  let sessionChecks = 0;
-  fixture.client.auth.getSession = async () => {
-    sessionChecks += 1;
+  let identityChecks = 0;
+  fixture.client.auth.getUser = async () => {
+    identityChecks += 1;
     return {
       data: {
-        session:
-          sessionChecks === 1
-            ? { user: { id: USER_A } }
-            : { user: { id: USER_B } },
+        user: identityChecks === 1 ? { id: USER_A } : { id: USER_B },
       },
       error: null,
     };

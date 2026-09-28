@@ -7,7 +7,7 @@
     "scheme": "firstmove",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "app.firstmove.mobile",
       "buildNumber": "1",
       "config": {

@@ -103,6 +103,23 @@ export function SecondaryButton({ title, ...props }: Omit<PressableProps, "child
   );
 }
 
+export function DangerButton({ title, ...props }: Omit<PressableProps, "children"> & { title: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      {...props}
+      style={({ pressed }) => [
+        styles.button,
+        styles.dangerButton,
+        pressed && styles.dangerPressed,
+        props.disabled && styles.disabled,
+      ]}
+    >
+      <Text style={styles.dangerButtonText}>{title}</Text>
+    </Pressable>
+  );
+}
+
 export function LoadingState({ label = "Loading First Move…" }: { label?: string }) {
   return (
     <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.loading}>
@@ -185,6 +202,9 @@ const styles = StyleSheet.create({
   secondaryButton: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
   secondaryPressed: { backgroundColor: colors.surfaceMuted },
   secondaryButtonText: { color: colors.text, fontSize: typography.body, fontWeight: "800" },
+  dangerButton: { backgroundColor: colors.danger },
+  dangerPressed: { opacity: 0.82 },
+  dangerButtonText: { color: "#FFFFFF", fontSize: typography.body, fontWeight: "800" },
   disabled: { opacity: 0.55 },
   loading: { alignItems: "center", flex: 1, gap: spacing.md, justifyContent: "center", minHeight: 300 },
 });

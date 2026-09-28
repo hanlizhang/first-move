@@ -26,6 +26,10 @@ export interface AccountDeletionDependencies {
     userId: string,
     environment: Environment,
   ) => Promise<InitiationOutcome>;
+  attemptWorker?: (
+    userId: string,
+    environment: Environment,
+  ) => Promise<void>;
 }
 
 export async function handleAccountDeletionInitiation(
@@ -80,6 +84,13 @@ export async function handleAccountDeletionInitiation(
     return deletionResponse("unavailable", 503);
   }
   if (outcome === "user_not_found") return deletionResponse("denied", 401);
+  if (dependencies.attemptWorker) {
+    try {
+      await dependencies.attemptWorker(identity.userId, dependencies.environment);
+    } catch {
+      // Durable outbox retry remains authoritative when the bounded attempt fails.
+    }
+  }
   return deletionResponse("in_progress", 202);
 }
 

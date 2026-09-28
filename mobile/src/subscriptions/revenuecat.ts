@@ -39,6 +39,7 @@ export interface RevenueCatSdk {
   configure(configuration: { apiKey: string; appUserID: string }): void;
   getAppUserID(): Promise<string>;
   logIn(appUserID: string): Promise<{ customerInfo: RevenueCatCustomerInfo }>;
+  logOut(): Promise<RevenueCatCustomerInfo>;
   getCustomerInfo(): Promise<RevenueCatCustomerInfo>;
   restorePurchases(): Promise<RevenueCatCustomerInfo>;
   addCustomerInfoUpdateListener(
@@ -166,6 +167,23 @@ export class RevenueCatSubscriptionController {
 
     this.publish(LOADING_STATE);
     return this.enqueue(() => this.identifyAndRefresh(userId, generation));
+  }
+
+  removeIdentityForAccountDeletion(userId: string): Promise<void> {
+    this.generation += 1;
+    this.targetUserId = undefined;
+    this.identifiedUserId = undefined;
+    this.publish(UNAVAILABLE_STATE);
+
+    return this.enqueue(async () => {
+      try {
+        if (!(await this.sdk.isConfigured())) return;
+        if ((await this.sdk.getAppUserID()) !== userId) return;
+        await this.sdk.logOut();
+      } catch {
+        // App-visible identity is already cleared; no provider details escape.
+      }
+    });
   }
 
   refresh(): Promise<void> {

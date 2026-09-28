@@ -169,29 +169,29 @@ select throws_ok(
   $$,
   '23514',
   null,
-  'Supabase Auth deletion cannot precede confirmed RevenueCat absence'
+  'Supabase Auth deletion cannot precede a satisfied RevenueCat deletion step'
 );
 select throws_ok(
   $$
     update public.account_deletion_requests
     set status = 'completed', next_retry_at = null,
-      failure_category = null, revenuecat_status = 'deletion_requested',
+      failure_category = null, revenuecat_status = 'pending',
       supabase_status = 'deleted', completed_at = transaction_timestamp()
     where user_id = '93000000-0000-4000-8000-000000000001'
   $$,
   '23514',
   null,
-  'RevenueCat request acceptance alone cannot mark deletion complete'
+  'a pending RevenueCat deletion step cannot mark deletion complete'
 );
 select lives_ok(
   $$
     update public.account_deletion_requests
     set status = 'completed', next_retry_at = null,
-      failure_category = null, revenuecat_status = 'absence_confirmed',
+      failure_category = null, revenuecat_status = 'deletion_satisfied',
       supabase_status = 'deleted', completed_at = transaction_timestamp()
     where user_id = '93000000-0000-4000-8000-000000000001'
   $$,
-  'completion requires confirmed RevenueCat absence and Auth deletion'
+  'completion requires a satisfied RevenueCat deletion step and Auth deletion'
 );
 select lives_ok(
   $$insert into public.account_deletion_requests (user_id) values ('93000000-0000-4000-8000-000000000001')$$,

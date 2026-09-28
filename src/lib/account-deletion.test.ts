@@ -124,6 +124,29 @@ test("the verified bearer UUID is the only deletion target", async () => {
   assert.deepEqual(await response.json(), { status: "in_progress" });
 });
 
+test("accepted initiation makes one best-effort worker attempt for only the verified UUID", async () => {
+  const attemptedUsers: string[] = [];
+  const response = await handleAccountDeletionInitiation(
+    deletionRequest("Bearer verified-token", {
+      confirmation: ACCOUNT_DELETION_CONFIRMATION,
+      userId: FORGED_USER_ID,
+    }),
+    {
+      environment: ENABLED_ENVIRONMENT,
+      now: () => new Date(NOW_SECONDS * 1_000),
+      verifyBearer: async () => recentIdentity(),
+      initiate: async () => "initiated",
+      attemptWorker: async (userId) => {
+        attemptedUsers.push(userId);
+        throw new Error("durable retry remains available");
+      },
+    },
+  );
+  assert.equal(response.status, 202);
+  assert.deepEqual(attemptedUsers, [USER_ID]);
+  assert.deepEqual(await response.json(), { status: "in_progress" });
+});
+
 test("magic-link, OTP, and initial email signup AMR timestamps count as interactive", () => {
   for (const method of ["magiclink", "otp", "email/signup"]) {
     assert.equal(

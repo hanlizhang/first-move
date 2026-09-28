@@ -401,16 +401,18 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 - [x] Reconcile the local release audit, confirmed Apple product/storefront state, and exact EAS build/submit sequence without claiming remote acceptance or release.
 - [x] Add the local-only Phase 1B server-controlled account-deletion outbox migration and isolated database coverage for defaults, constraints, retry/lease state, client denial, owner isolation, Auth-user survival, application-data cascades, and shared catalogs.
 - [x] Add local-only Phase 1C recent-auth/exact-confirmation initiation, a disabled-by-default server release gate, idempotent outbox initiation, and race-safe pending-deletion write gates for sync/setup/economics/AI; keep both deletion migrations unapplied remotely.
-- [ ] Supply approved native app icon and App Store screenshots/metadata for required iPhone and supported-iPad sizes.
-- [ ] Add a compliant in-app account-deletion path and trusted server deletion implementation, including active-subscription guidance, without redesigning Auth or cloud storage.
+- [x] Add the local-only Phase 1D trusted deletion worker/state machine with atomic claim/lease transitions, bounded retries, mocked RevenueCat/Auth behavior, read-only Storage ownership preflight, one verified-user attempt after initiation, and a disabled-by-default protected retry boundary; keep all destructive behavior uninvoked and unapplied remotely.
+- [x] Add the local-only Phase 1E authenticated Mobile deletion UI, fresh email-link guidance, exact confirmation, Apple billing warning/manage link, UUID-scoped cleanup/quarantine, stale-session protection, and iPhone-only R1 configuration.
+- [ ] Supply approved native app icon and App Store screenshots/metadata for required iPhone sizes.
+- [ ] Remotely migrate, deploy, configure, and manually accept the complete account-deletion path with disposable accounts, including RevenueCat delete permission and reliable retry invocation.
 - [ ] Publish and link a Privacy Policy and Terms of Use from the app; verify the production paywall's localized price, duration, auto-renewal, cancellation, benefits, and legal links.
 - [ ] Add a manage-subscription path and complete production RevenueCat Offering/paywall plus Apple sandbox purchase/restore/lifecycle acceptance.
 - [ ] Resolve or explicitly accept the Mobile-only new-account initialization gap before App Review.
 - [ ] Configure the EAS production public variables and server-only AI/RevenueCat secrets in their proper remote environments; complete production region/rate-limit controls.
-- [ ] Complete true-device iPhone and supported-iPad Auth, sync, camera/photo, AI fallback, subscription, outage, and accessibility acceptance.
+- [ ] Complete true-device iPhone Auth, sync, account deletion, camera/photo, AI fallback, subscription, outage, and accessibility acceptance.
 - [ ] Build and upload with EAS, accept the exact TestFlight build, attach both first subscriptions to app version `1.0.0`, and submit them together for App Review.
 
-**iOS App Store R1 status:** Local release configuration and Phase 1B/1C deletion initiation/write protection are prepared only. Neither deletion migration is remotely applied, the initiation release gate remains disabled, and the worker, RevenueCat permission verification, Auth deletion, local cleanup, and Mobile UI remain open. Legal links/disclosures, approved artwork, production environment verification, true-device/sandbox acceptance, signed build/upload, Apple review, and public release also remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
+**iOS App Store R1 status:** Local release configuration and account-deletion Phases 1B–1E are implemented and automated-tested only. None of the three deletion migrations is remotely applied; the initiation gate remains disabled; the protected retry route and one-attempt initiation path are not deployed; and retry scheduling plus RevenueCat delete permission remain unverified. The Mobile UI/local cleanup exists, while Web UI/local cleanup remains open. Legal links/disclosures, approved iPhone artwork, server configuration, true-device/sandbox acceptance, signed build/upload, Apple review, and public release also remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
 
 ## Release backlog
 

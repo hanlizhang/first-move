@@ -19,6 +19,10 @@ test("the first public iOS identity keeps the established application identifier
   assert.equal(app.expo.ios.buildNumber, "1");
 });
 
+test("the first public iOS release is iPhone-only", () => {
+  assert.equal(app.expo.ios.supportsTablet, false);
+});
+
 test("iOS store builds use the production EAS environment without embedded values", () => {
   assert.equal(eas.cli.appVersionSource, "local");
   assert.deepEqual(eas.build.production, {
