@@ -1,6 +1,6 @@
 # First public iOS release audit
 
-Status: local release preparation on `release/ios-appstore-r1`, updated 2026-09-28. This is not a claim that an EAS production build exists, that Apple accepted a build or subscription, or that the app is publicly released. No Apple, RevenueCat, EAS, Supabase, or other remote configuration was changed.
+Status: final local legal-page integration on `release/ios-appstore-r1`, updated 2026-09-28. Production authentication email uses verified Resend Custom SMTP, and production disposable-account deletion acceptance is complete. An EAS production build, TestFlight acceptance, App Review, and public release have not occurred.
 
 ## Existing release work found
 
@@ -9,7 +9,7 @@ Status: local release preparation on `release/ios-appstore-r1`, updated 2026-09-
 - Current Mobile already has RevenueCat R1/R2: the Supabase Auth UUID is the App User ID, the exact entitlement is `pro`, the current/default dashboard Offering supplies products and localized prices, restore is implemented, Guest does not configure RevenueCat, and Test Store purchase/restore was previously accepted on iOS Simulator.
 - Release key selection is already safe: development selects only `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`; an iOS release selects only `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` and never falls back to Test Store.
 - Current Mobile already has the camera/photo picker permission flow, local image resizing, transient-file cleanup, and no persisted toothbrush images. The generated native project remains intentionally uncommitted.
-- Web PWA icons exist for the separate Web experience. They are code-generated Web assets, not approved native App Store artwork, and were not reused as a Mobile app icon.
+- The final native iOS icon and its Expo configuration were integrated separately and remain unchanged by the legal-page integration.
 
 ## Confirmed Apple and RevenueCat state
 
@@ -23,7 +23,9 @@ The following state was supplied for this release and recorded locally without r
 | Annual product | `app.firstmove.mobile.pro.annual`, single-seat, $39.99 US |
 | RevenueCat | Both Apple products imported into the existing project and associated with entitlement `pro` |
 | Review state | Annual is Ready for Review; the first subscriptions must be submitted with the app version |
-| Initial storefronts | US, CA, UK, CH, AU, NZ, SG, JP |
+| Production domain | `https://firstmovestartsmall.com` |
+| R1 storefronts | US, CA, CH, AU, NZ, SG |
+| Deferred storefronts | UK, JP |
 
 Neither subscription is documented as approved. No production build is documented as accepted. No public release is documented.
 
@@ -39,7 +41,7 @@ Neither subscription is documented as approved. No production build is documente
 | RevenueCat key | Release iOS requires the Apple public SDK key and ignores the Test Store key. The owner reports the EAS production public variables are configured; their values were not remotely inspected, and no public SDK value or secret was written to Git. |
 | Permissions | Camera and selected-photo permission copy names the app, says the photo is for a toothbrush check, and says it is not kept. Microphone permission is disabled. |
 | Encryption | `usesNonExemptEncryption: false` remains configured; the release owner must ensure the App Store export-compliance answer matches the actual app and SDK behavior. |
-| Artwork | No repository-owned Mobile app icon, App Store screenshots, or approved launch artwork exists. Expo defaults must not be treated as release assets. |
+| Artwork | Final native iOS icon configuration is integrated. App Store screenshots and remaining listing metadata are still required. |
 
 ## Account, legal, and subscription paths
 
@@ -51,17 +53,19 @@ Implemented paths:
 - local Free/Pro presentation and server-authoritative AI allowance presentation;
 - privacy-focused inline copy for secrets, Journal data, and toothbrush photos;
 - authenticated Settings account deletion with fresh email-link guidance, exact confirmation, Apple billing warning, Apple subscription management, and owner-scoped device cleanup after accepted initiation.
+- verified Resend Custom SMTP for production authentication email;
+- public unauthenticated `/privacy`, `/terms`, and `/support` routes using the approved content; and
+- a Legal section in Guest and authenticated Mobile Settings linking to those production-domain routes.
 
 App Review blockers:
 
-1. **Account deletion production readiness:** Phases 1B–1E locally define persistent state, recent-auth/exact-confirmation initiation, pending-deletion write gates, the trusted worker, protected retry boundary, authenticated Mobile UI, Apple warning/manage link, UUID-scoped cleanup, and one once-daily Vercel Cron invocation. The complete migration chain and pgTAP `0001`–`0012` pass in a disposable local environment. None of the three migrations, server routes, or cron is remotely deployed; the initiation gate is disabled; production `CRON_SECRET`/monitoring and the deployed RevenueCat secret's customer-delete permission are unverified. No real provider/Auth deletion or disposable-account end-to-end acceptance has run. The local feature is implemented, but the undeployed path remains an App Review blocker while account creation is enabled.
-2. **Privacy Policy:** there is no published Privacy Policy route/URL and no accessible in-app link. Inline privacy copy is not a policy.
-3. **Terms of Use:** there is no published Terms route/URL and no accessible in-app link.
-4. **Subscription disclosure:** the production RevenueCat Offering/paywall cannot be verified from the repository. Before review, verify that it contains both Apple products, localized price and duration, auto-renewal/cancellation disclosure, benefits that are actually available, restore, and Privacy Policy/Terms links. Authenticated Settings now provides Apple's subscription-management path within the deletion disclosure.
+1. **Deploy the legal routes:** the three public routes and Mobile links are implemented locally, but the current changes still need a normal production deployment before their final URLs are live.
+2. **Subscription disclosure:** the production RevenueCat Offering/paywall cannot be verified from the repository. Before review, verify that it contains both Apple products, localized price and duration, auto-renewal/cancellation disclosure, benefits that are actually available, restore, and Privacy Policy/Terms links. Authenticated Settings provides Apple's subscription-management path within the deletion disclosure.
+3. **Store delivery:** create and accept the EAS production build, complete TestFlight and true-device/sandbox acceptance, finish App Store metadata, and submit for App Review.
 
 The earlier Mobile-only new-account blocker is resolved locally: an empty authenticated account now offers explicit Start fresh, sends no Guest data, validates the returned empty canonical workspace, and activates the existing UUID-scoped runtime. Import this device remains explicitly deferred. True-device acceptance is still required and no production backend deployment is implied.
 
-These blockers are intentionally not papered over with placeholder URLs, incomplete deletion UI, or invented legal text.
+The approved legal content is preserved under `docs/legal`; the internal App Store privacy checklist is preserved under `docs/release` and is not publicly routed or linked.
 
 ## Account deletion Phases 1B–1E: local state, worker, and Mobile release path
 
@@ -73,7 +77,7 @@ Migration `20260927130000_account_deletion_initiation.sql` adds a service-role-o
 
 `POST /api/account-deletion/initiate` is non-destructive. It validates the bearer through Supabase Auth, matches signed claims to the current non-anonymous user, derives only that UUID, and requires a timestamped `magiclink`, `otp`, or `email/signup` AMR event no more than five minutes old. A refreshed token, `token_refresh`, string-only AMR, and JWT issuance time do not prove reauthentication. The exact confirmation is `DELETE MY ACCOUNT`; client-supplied target IDs do not affect the target. New and repeated requests both return the same no-store in-progress status. Failures expose only denial, reauthentication-required, confirmation-required, or temporarily unavailable states.
 
-The route is fail-closed unless the private server variable `ACCOUNT_DELETION_INITIATION_ENABLED` equals `phase-1c-verified`. No enabling configuration was added or remotely inspected in this phase, and the route is not deployed. Before enabling it, reproduce the final migration set and database regression suite in an isolated environment, apply all three deletion migrations in order to the intended environment, perform read-only post-migration verification of the write triggers/RPC grants there, deploy the server with the gate still disabled, and manually verify the recent-auth flow with disposable accounts. This server variable is not an EAS public variable.
+The route is fail-closed unless the private server variable `ACCOUNT_DELETION_INITIATION_ENABLED` equals `phase-1c-verified`. The complete production path has since passed disposable-account acceptance. This server variable remains server-only and is not an EAS public variable.
 
 Migration `20260928120000_account_deletion_worker.sql` adds only service-role worker primitives: atomic claim with `FOR UPDATE SKIP LOCKED`, lease-checked RevenueCat progress, bounded retry, terminal completion, and a read-only `storage.objects.owner_id` ownership preflight. Active leases cannot be stolen; expired processing leases are reclaimable. Database time owns lease and retry scheduling.
 
@@ -81,19 +85,11 @@ The worker calls RevenueCat v1 DELETE only for the trusted Supabase UUID. HTTP 2
 
 After the RevenueCat step is satisfied, the worker checks only whether `storage.objects.owner_id` contains the trusted UUID. Any owned object records `supabase_storage` and prevents Auth deletion; a preflight error records `supabase_transient`. The worker never edits Storage metadata or deletes buckets/files. With no owned objects, it uses server-only Supabase admin hard deletion for the request UUID. Successful and documented already-missing results are idempotent success; other Auth failures retry as `supabase_transient`. The database marks completion only with RevenueCat `deletion_satisfied` and Supabase `deleted`, and the outbox survives Auth deletion. Completed tombstone cleanup remains deferred for 30 days.
 
-After durable initiation, the same request makes one best-effort worker attempt filtered by the bearer-verified UUID; no client-supplied UUID reaches the claim. Failures remain in the outbox. `GET` and `POST /api/internal/account-deletion-worker` accept no target and make one queue attempt only when the server-only bearer matches `CRON_SECRET`; the legacy `ACCOUNT_DELETION_WORKER_SECRET` remains a fallback only when `CRON_SECRET` is absent. `vercel.json` declares one production cron request daily at `03:00` UTC, which is compatible with Vercel's once-daily Hobby minimum and may execute within that hour on Hobby. The declaration is local only: production still needs `CRON_SECRET`, deployment, log/alert review for permission/Storage retry categories, and confirmation that the cron appears in the intended Vercel project.
+After durable initiation, the same request makes one best-effort worker attempt filtered by the bearer-verified UUID; no client-supplied UUID reaches the claim. Failures remain in the outbox. `GET` and `POST /api/internal/account-deletion-worker` accept no target and make one queue attempt only when the server-only bearer matches `CRON_SECRET`; the legacy `ACCOUNT_DELETION_WORKER_SECRET` remains a fallback only when `CRON_SECRET` is absent. `vercel.json` declares one production cron request daily at `03:00` UTC.
 
 The Mobile Settings panel renders only for an authenticated account. It explains permanent account/cloud erasure, guides a fresh magic-link flow, requires exact `DELETE MY ACCOUNT`, warns that deletion does not cancel Apple billing, and opens `https://apps.apple.com/account/subscriptions`. On HTTP 202 accepted initiation, Mobile first stops owner sync/in-memory work, persists a UUID quarantine, removes only that UUID's account-local workspace, cloud cache, pending sync/economic queue, and Morning skip, logs RevenueCat out only when its current App User ID matches, and clears the local Supabase session. Guest workspace/daily plans/Morning state and other UUID namespaces remain. Live Auth validation precedes RevenueCat identification at restore, and every sync dispatch validates the current live user. A quarantine or explicit Auth `user_not_found` repeats UUID cleanup; generic invalid/expired sessions fail closed without erasing account data.
 
-The production RevenueCat v1 secret's delete permission is still unverified. The production Storage dashboard's owner-verified empty-bucket observation remains a prerequisite observation, not runtime proof. All provider/Auth behavior is mocked locally, no real deletion has occurred, and Web deletion UI/local cleanup remains unimplemented.
-
-The later implementation must follow this order:
-
-1. Review the already-passing isolated regression result, apply all three deletion migrations in order, perform read-only post-migration verification in the target environment, and deploy the server/Mobile changes with `ACCOUNT_DELETION_INITIATION_ENABLED` absent.
-2. Configure a strong server-only `CRON_SECRET` (at least 16 random characters), deploy the once-daily Vercel Cron and target-free GET route, confirm the cron is active only on the production deployment, and verify bounded retry/log/alert behavior without enabling client initiation. Remove or leave absent the fallback `ACCOUNT_DELETION_WORKER_SECRET` once `CRON_SECRET` is in use.
-3. Verify the deployed RevenueCat v1 secret can call customer DELETE, then exercise 200, 404, permission, transient, Storage-blocked, Auth-success/already-missing, and process-interruption behavior with disposable accounts only. Confirm the owner-verified empty Storage state again.
-4. Run true-device iPhone acceptance for the magic-link five-minute AMR flow, exact confirmation, Apple management link, immediate UUID cleanup, stale second-device session, offline queue rejection, Guest/other-account preservation, and failure recovery.
-5. Enable `ACCOUNT_DELETION_INITIATION_ENABLED=phase-1c-verified` only after those checks pass. Separately implement Web deletion/local cleanup and the trusted 30-day tombstone purge.
+The production disposable-account flow has been accepted. That acceptance does not change the disclosure that RevenueCat deletion may be queued or that provider-side physical deletion need not finish instantaneously.
 
 RevenueCat customer deletion does not cancel an Apple subscription. The Mobile UI now warns about continuing Apple billing and offers Apple's management path without blocking immediate account deletion. The production Supabase Storage dashboard showed no buckets based on owner verification; that is a prerequisite observation, not proof that every production deletion path has been tested.
 
@@ -105,7 +101,7 @@ Mobile validates the complete canonical response before making the account edita
 
 ## Other release blockers and acceptance gates
 
-- Supply approved native icon artwork and App Store screenshots for required iPhone sizes; finish listing copy, support URL, age rating, export compliance, and App Privacy answers. Do not reuse the Web PWA art without an explicit design decision.
+- Supply App Store screenshots for required iPhone sizes and finish listing copy, support URL, age rating, export compliance, and App Privacy answers. The final native icon is already integrated.
 - Verify the production RevenueCat current Offering/paywall includes the confirmed monthly and annual Apple products and that the Apple public SDK key belongs to the `app.firstmove.mobile` RevenueCat app. Do not use the Test Store key.
 - Confirm the explicit Apple App ID has In-App Purchase available and the EAS-generated signed provisioning/build contains the expected native RevenueCat modules. No artificial entitlement key should be added to `app.json`.
 - Complete true-device iPhone acceptance for email handoff/deep link, explicit empty-account Start fresh and Guest preservation, account deletion, account switching, secure-session restart, offline/retry sync, camera/photo privacy, AI manual fallbacks, Apple sandbox purchase, restore, renewal/expiry/refund/grace behavior, and server/RevenueCat outages.
@@ -147,8 +143,8 @@ After processing, install this same build from TestFlight and complete the true-
 
 Results through 2026-09-28:
 
-- Mobile tests: 249 passed, 0 failed; strict TypeScript and Expo lint passed. The new coverage verifies explicit empty-account Start fresh, empty `{}` RPC input, no Guest upload, Guest preservation, canonical activation, response-loss recovery, idempotent repeat, and safe failure/retry.
-- Web application tests: 271 passed, 0 failed; strict TypeScript, ESLint, and the local Next.js production build passed. Focused deletion tests additionally exercised both RevenueCat terminal results, permission/transient failures, recent authentication, verified-user targeting, one-attempt invocation, `CRON_SECRET` protection, the single daily Vercel declaration, safe recovery, and privacy-safe statuses.
+- Mobile tests: 251 passed, 0 failed; strict TypeScript and Expo lint passed. Focused coverage verifies that Guest and authenticated Settings both render exactly the three production-domain legal/support links.
+- Web application tests: 274 passed, 0 failed; strict TypeScript, ESLint, and the local Next.js production build passed. The build prerenders `/privacy`, `/terms`, and `/support`; local production-server checks returned HTTP 200 without authentication, while `/app-store-privacy-checklist` returned 404.
 - Expo introspection passed: display name `First Move: Start Small`, bundle ID `app.firstmove.mobile`, version/build `1.0.0` / `1`, `supportsTablet: false`, expected camera/photo usage descriptions, and no fabricated IAP entitlement.
 - Expo dependency validation passed against the installed SDK map in offline mode, with Expo's warning that offline validation is less reliable. Expo Doctor was not available from project-local dependencies; a no-install attempt did not complete and was stopped without downloading or changing the environment. The prior recorded run before this increment passed 21/21, but it is not presented as a current rerun.
 - iOS export passed with the Test Store variable explicitly empty; output was generated in a temporary directory outside the repository. This was not an EAS build or signed archive.
