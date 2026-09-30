@@ -4,6 +4,10 @@ First Move is a private cross-platform product with a Next.js Web app and an Exp
 
 The app is inspired by behavioral activation and intentional-use design. It is not medical treatment, a diagnostic tool, or a substitute for professional care, and it makes no claim to stimulate or repair the brain.
 
+## iOS demo
+
+[Watch the First Move iOS walkthrough on YouTube](https://www.youtube.com/shorts/J9iiwr5u3UM). It shows the small-action flow, focus sessions, and other mobile screens. The app is still in development; the video is a demo, not an App Store release link.
+
 ## Core flow
 
 1. Notice or declare that you are stuck.
