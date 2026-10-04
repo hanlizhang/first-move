@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
@@ -141,7 +141,7 @@ export default function FocusScreen() {
       description={
         openSession
           ? undefined
-          : "Start a countdown or stopwatch directly, or use a pending First Move. Every mode uses the same saved local Session engine."
+          : "Choose a countdown or stopwatch, or continue a pending First Move."
       }
     >
       {localWorkspaceMessage ? (
@@ -164,7 +164,7 @@ export default function FocusScreen() {
               (state) => cancelSession(state, openSession.id),
               assisted
                 ? "Cancelled. Your pending First Move is still ready."
-                : "Cancelled. No completed or stopped Session was saved.",
+                : "Cancelled. No focus time was saved.",
             );
           }}
           onPause={() =>
@@ -190,7 +190,7 @@ export default function FocusScreen() {
                 next.sessions.find((session) => session.id === openSession.id)
                   ?.status === "completed"
                   ? "Session complete and saved automatically."
-                  : "Stopped when you chose. This Session is already saved.",
+                  : "Stopped when you chose. Your focus time is saved.",
             )
           }
           saving={saving || !workspaceEditable}
@@ -226,26 +226,21 @@ export default function FocusScreen() {
             />
           ) : null}
 
-          <CountdownSetup
+          <FocusSetup
             disabled={saving || !workspaceEditable}
             linkOptions={linkOptions}
-            onStart={(input) =>
+            onStartCountdown={(input) =>
               void saveChange(
                 (state, current) =>
                   startCountdown(state, input, current, undefined, references),
-                "Your standalone countdown has started.",
+                "Your countdown has started.",
               )
             }
-          />
-
-          <StopwatchSetup
-            disabled={saving || !workspaceEditable}
-            linkOptions={linkOptions}
-            onStart={(input) =>
+            onStartStopwatch={(input) =>
               void saveChange(
                 (state, current) =>
                   startStopwatch(state, input, current, undefined, references),
-                "Your standalone stopwatch has started.",
+                "Your stopwatch has started.",
               )
             }
           />
@@ -464,12 +459,12 @@ function PendingFirstMoveCard({
           value={`${intent.intendedDurationMinutes} minutes`}
         />
         <Detail
-          label="Relationship"
+          label="Linked item"
           value={intentRelationshipLabel(intent, linkOptions, state)}
         />
       </View>
       <Body muted>
-        This assisted countdown will keep its existing ActivityIntent relationship.
+        Direction, duration, and any linked item are already set for this First Move.
       </Body>
       <PrimaryButton
         disabled={disabled}
@@ -477,6 +472,85 @@ function PendingFirstMoveCard({
         onPress={onStart}
       />
     </Card>
+  );
+}
+
+type FocusSetupMode = "countdown" | "stopwatch";
+
+function FocusSetup({
+  disabled,
+  linkOptions,
+  onStartCountdown,
+  onStartStopwatch,
+}: {
+  disabled: boolean;
+  linkOptions: readonly FocusLinkOption[];
+  onStartCountdown(input: Parameters<typeof startCountdown>[1]): void;
+  onStartStopwatch(input: Parameters<typeof startStopwatch>[1]): void;
+}) {
+  const [mode, setMode] = useState<FocusSetupMode>("countdown");
+
+  return (
+    <Card>
+      <Label>Focus setup</Label>
+      <FocusModeSelector mode={mode} onSelect={setMode} />
+      <View
+        accessibilityElementsHidden={mode !== "countdown"}
+        importantForAccessibility={mode === "countdown" ? "auto" : "no-hide-descendants"}
+        style={mode !== "countdown" && styles.hiddenSetup}
+      >
+        <CountdownSetup
+          disabled={disabled}
+          linkOptions={linkOptions}
+          onStart={onStartCountdown}
+        />
+      </View>
+      <View
+        accessibilityElementsHidden={mode !== "stopwatch"}
+        importantForAccessibility={mode === "stopwatch" ? "auto" : "no-hide-descendants"}
+        style={mode !== "stopwatch" && styles.hiddenSetup}
+      >
+        <StopwatchSetup
+          disabled={disabled}
+          linkOptions={linkOptions}
+          onStart={onStartStopwatch}
+        />
+      </View>
+    </Card>
+  );
+}
+
+function FocusModeSelector({
+  mode,
+  onSelect,
+}: {
+  mode: FocusSetupMode;
+  onSelect(mode: FocusSetupMode): void;
+}) {
+  return (
+    <View accessibilityRole="tablist" style={styles.modeSelector}>
+      {(["countdown", "stopwatch"] as const).map((option) => {
+        const selected = mode === option;
+        const label = option === "countdown" ? "Countdown" : "Stopwatch";
+        return (
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            key={option}
+            onPress={() => onSelect(option)}
+            style={({ pressed }) => [
+              styles.modeOption,
+              selected && styles.modeOptionSelected,
+              pressed && styles.choicePressed,
+            ]}
+          >
+            <Text style={[styles.modeOptionText, selected && styles.modeOptionTextSelected]}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -494,6 +568,8 @@ function CountdownSetup({
   const [linkKey, setLinkKey] = useState("");
   const [preset, setPreset] = useState<number>(25);
   const [customMinutes, setCustomMinutes] = useState("");
+  const [customExpanded, setCustomExpanded] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const customDuration = customMinutes
     ? parseFocusDurationInput(customMinutes)
     : undefined;
@@ -503,67 +579,63 @@ function CountdownSetup({
     setLinkKey(key);
     const source = findFocusLinkOption(linkOptions, key);
     if (!source) return;
+    setDetailsExpanded(true);
     setDirection(source.direction);
     setLabel(source.title);
   }
 
   return (
-    <Card>
-      <Label>Standalone</Label>
-      <Heading>Quick Countdown</Heading>
-      <Body muted>
-        Start Focus directly without creating or consuming an ActivityIntent.
-      </Body>
-      <FocusLinkPicker
-        label="Link to a Task or Habit (optional)"
-        onSelect={chooseLink}
-        options={linkOptions}
-        selectedKey={linkKey}
-      />
-      <Text style={styles.inputLabel}>Activity title (optional)</Text>
-      <TextInput
-        accessibilityLabel="Countdown activity title"
-        maxLength={160}
-        onChangeText={setLabel}
-        placeholder="Focus time"
-        placeholderTextColor={colors.textMuted}
-        style={styles.textInput}
-        value={label}
-      />
-      <DirectionPicker onSelect={setDirection} selected={direction} />
-      <Text style={styles.inputLabel}>Duration</Text>
-      <View accessibilityRole="radiogroup" style={styles.choiceRow}>
+    <View style={styles.setupContent}>
+      <View style={styles.setupIntro}>
+        <Heading>Choose a duration</Heading>
+        <Body muted>Pick a starting point. You can stop whenever you need.</Body>
+      </View>
+      <View accessibilityRole="radiogroup" style={styles.durationChoices}>
         {FOCUS_COUNTDOWN_PRESETS.map((minutes) => (
           <ChoiceButton
+            compact
             key={minutes}
             label={`${minutes} min`}
             onPress={() => {
               setPreset(minutes);
               setCustomMinutes("");
+              setCustomExpanded(false);
             }}
             selected={!customMinutes && preset === minutes}
           />
         ))}
       </View>
-      <Text style={styles.inputLabel}>Custom minutes</Text>
-      <TextInput
-        accessibilityLabel="Custom countdown minutes"
-        keyboardType="number-pad"
-        maxLength={3}
-        onChangeText={setCustomMinutes}
-        placeholder="1–720"
-        placeholderTextColor={colors.textMuted}
-        style={[styles.textInput, styles.minutesInput]}
-        value={customMinutes}
+      <DisclosureButton
+        expanded={customExpanded}
+        label={customMinutes && customDuration
+          ? `Custom · ${customDuration} min`
+          : "Custom duration"}
+        onPress={() => setCustomExpanded((current) => !current)}
       />
-      {customMinutes && customDuration === undefined ? (
-        <Text accessibilityLiveRegion="polite" style={styles.validationText}>
-          Enter a whole number from 1 to 720.
-        </Text>
+      {customExpanded ? (
+        <View style={styles.customDurationPanel}>
+          <Text style={styles.inputLabel}>Custom minutes</Text>
+          <TextInput
+            accessibilityLabel="Custom countdown minutes"
+            keyboardType="number-pad"
+            maxLength={3}
+            onChangeText={setCustomMinutes}
+            placeholder="1–720"
+            placeholderTextColor={colors.textMuted}
+            style={[styles.textInput, styles.minutesInput]}
+            value={customMinutes}
+          />
+          {customMinutes && customDuration === undefined ? (
+            <Text accessibilityLiveRegion="polite" style={styles.validationText}>
+              Enter a whole number from 1 to 720.
+            </Text>
+          ) : null}
+        </View>
       ) : null}
       <PrimaryButton
+        accessibilityLabel="Start countdown focus"
         disabled={disabled || duration === undefined}
-        title="Start countdown"
+        title="Start Focus"
         onPress={() => {
           if (duration === undefined) return;
           onStart({
@@ -574,7 +646,23 @@ function CountdownSetup({
           });
         }}
       />
-    </Card>
+      <DetailsDisclosure
+        expanded={detailsExpanded}
+        summary={focusDetailsSummary(label, direction, linkKey, linkOptions)}
+        onPress={() => setDetailsExpanded((current) => !current)}
+      >
+        <SetupDetails
+          direction={direction}
+          label={label}
+          linkKey={linkKey}
+          linkOptions={linkOptions}
+          mode="countdown"
+          onDirectionChange={setDirection}
+          onLabelChange={setLabel}
+          onLinkChange={chooseLink}
+        />
+      </DetailsDisclosure>
+    </View>
   );
 }
 
@@ -590,42 +678,27 @@ function StopwatchSetup({
   const [label, setLabel] = useState("");
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
   const [linkKey, setLinkKey] = useState("");
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   function chooseLink(key: string): void {
     setLinkKey(key);
     const source = findFocusLinkOption(linkOptions, key);
     if (!source) return;
+    setDetailsExpanded(true);
     setDirection(source.direction);
     setLabel(source.title);
   }
 
   return (
-    <Card>
-      <Label>Standalone</Label>
-      <Heading>Stopwatch</Heading>
-      <Body muted>
-        Track open-ended time with the same persisted Session engine.
-      </Body>
-      <FocusLinkPicker
-        label="Link to a Task or Habit (optional)"
-        onSelect={chooseLink}
-        options={linkOptions}
-        selectedKey={linkKey}
-      />
-      <Text style={styles.inputLabel}>Activity title (optional)</Text>
-      <TextInput
-        accessibilityLabel="Stopwatch activity title"
-        maxLength={160}
-        onChangeText={setLabel}
-        placeholder="Tracked time"
-        placeholderTextColor={colors.textMuted}
-        style={styles.textInput}
-        value={label}
-      />
-      <DirectionPicker onSelect={setDirection} selected={direction} />
+    <View style={styles.setupContent}>
+      <View style={styles.setupIntro}>
+        <Heading>Open-ended focus</Heading>
+        <Body muted>Start now and stop when the activity is finished.</Body>
+      </View>
       <PrimaryButton
+        accessibilityLabel="Start stopwatch focus"
         disabled={disabled}
-        title="Start stopwatch"
+        title="Start Focus"
         onPress={() =>
           onStart({
             direction,
@@ -634,7 +707,118 @@ function StopwatchSetup({
           })
         }
       />
-    </Card>
+      <DetailsDisclosure
+        expanded={detailsExpanded}
+        summary={focusDetailsSummary(label, direction, linkKey, linkOptions)}
+        onPress={() => setDetailsExpanded((current) => !current)}
+      >
+        <SetupDetails
+          direction={direction}
+          label={label}
+          linkKey={linkKey}
+          linkOptions={linkOptions}
+          mode="stopwatch"
+          onDirectionChange={setDirection}
+          onLabelChange={setLabel}
+          onLinkChange={chooseLink}
+        />
+      </DetailsDisclosure>
+    </View>
+  );
+}
+
+function SetupDetails({
+  direction,
+  label,
+  linkKey,
+  linkOptions,
+  mode,
+  onDirectionChange,
+  onLabelChange,
+  onLinkChange,
+}: {
+  direction: Direction;
+  label: string;
+  linkKey: string;
+  linkOptions: readonly FocusLinkOption[];
+  mode: FocusSetupMode;
+  onDirectionChange(value: Direction): void;
+  onLabelChange(value: string): void;
+  onLinkChange(value: string): void;
+}) {
+  return (
+    <View style={styles.detailsPanel}>
+      <Text style={styles.inputLabel}>Activity title (optional)</Text>
+      <TextInput
+        accessibilityLabel={`${mode === "countdown" ? "Countdown" : "Stopwatch"} activity title`}
+        maxLength={160}
+        onChangeText={onLabelChange}
+        placeholder={mode === "countdown" ? "Focus time" : "Tracked time"}
+        placeholderTextColor={colors.textMuted}
+        style={styles.textInput}
+        value={label}
+      />
+      <DirectionPicker compact onSelect={onDirectionChange} selected={direction} />
+      <FocusLinkPicker
+        label="Link to a Task or Habit (optional)"
+        onSelect={onLinkChange}
+        options={linkOptions}
+        selectedKey={linkKey}
+      />
+    </View>
+  );
+}
+
+function DetailsDisclosure({
+  children,
+  expanded,
+  onPress,
+  summary,
+}: {
+  children: ReactNode;
+  expanded: boolean;
+  onPress(): void;
+  summary: string;
+}) {
+  return (
+    <View style={styles.detailsDisclosure}>
+      <DisclosureButton
+        expanded={expanded}
+        label={expanded ? "Hide details" : "Add details"}
+        onPress={onPress}
+        summary={expanded ? undefined : summary}
+      />
+      {expanded ? children : null}
+    </View>
+  );
+}
+
+function DisclosureButton({
+  expanded,
+  label,
+  onPress,
+  summary,
+}: {
+  expanded: boolean;
+  label: string;
+  onPress(): void;
+  summary?: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.disclosureButton, pressed && styles.choicePressed]}
+    >
+      <View style={styles.disclosureCopy}>
+        <Text style={styles.disclosureLabel}>{label}</Text>
+        {summary ? <Text style={styles.disclosureSummary}>{summary}</Text> : null}
+      </View>
+      <Text accessibilityElementsHidden style={styles.disclosureIcon}>
+        {expanded ? "−" : "+"}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -725,7 +909,7 @@ function SessionReview({
         <>
           <View style={styles.details}>
             <Detail label="Direction" value={session.direction} />
-            <Detail label="Relationship" value={relationship} />
+            <Detail label="Linked item" value={relationship} />
           </View>
           <SecondaryButton
             disabled={!workspaceEditable}
@@ -737,7 +921,7 @@ function SessionReview({
         <>
           <Text style={styles.inputLabel}>Activity title</Text>
           <TextInput
-            accessibilityLabel="Saved Session activity title"
+            accessibilityLabel="Saved focus activity title"
             maxLength={160}
             onChangeText={setLabel}
             placeholder="What did you do?"
@@ -753,7 +937,7 @@ function SessionReview({
             </View>
           ) : currentLinkUnavailable ? (
             <View style={styles.retainedRelationship}>
-              <Text style={styles.inputLabel}>Current relationship retained</Text>
+              <Text style={styles.inputLabel}>Current linked item retained</Text>
               <Body muted>{relationship}</Body>
               <SecondaryButton
                 disabled={saving || !workspaceEditable}
@@ -791,18 +975,21 @@ function SessionReview({
 }
 
 function DirectionPicker({
+  compact = false,
   onSelect,
   selected,
 }: {
+  compact?: boolean;
   onSelect(value: Direction): void;
   selected: Direction;
 }) {
   return (
     <>
       <Text style={styles.inputLabel}>Direction</Text>
-      <View accessibilityRole="radiogroup" style={styles.choiceList}>
+      <View accessibilityRole="radiogroup" style={compact ? styles.choiceRow : styles.choiceList}>
         {DIRECTIONS.map((direction) => (
           <ChoiceButton
+            compact={compact}
             key={direction}
             label={direction}
             onPress={() => onSelect(direction)}
@@ -815,11 +1002,13 @@ function DirectionPicker({
 }
 
 function ChoiceButton({
+  compact = false,
   detail,
   label,
   onPress,
   selected,
 }: {
+  compact?: boolean;
   detail?: string;
   label: string;
   onPress(): void;
@@ -832,6 +1021,7 @@ function ChoiceButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.choice,
+        compact && styles.choiceCompact,
         selected && styles.choiceSelected,
         pressed && styles.choicePressed,
       ]}
@@ -866,6 +1056,25 @@ function focusTitle(
   if (closedStatus === "completed") return "Session complete";
   if (closedStatus === "stopped") return "Time saved";
   return "Choose how to focus";
+}
+
+function focusDetailsSummary(
+  label: string,
+  direction: Direction,
+  linkKey: string,
+  options: readonly FocusLinkOption[],
+): string {
+  const parts: string[] = [];
+  const linked = findFocusLinkOption(options, linkKey);
+  const trimmedLabel = label.trim();
+  if (linked) {
+    parts.push(`${linked.kind === "task" ? "Task" : "Habit"}: ${linked.title}`);
+  }
+  if (trimmedLabel && trimmedLabel !== linked?.title) parts.push(trimmedLabel);
+  if (direction !== DIRECTIONS[0]) parts.push(direction);
+  return parts.length > 0
+    ? parts.join(" · ")
+    : "Title, direction, or linked Task/Habit";
 }
 
 function intentRelationshipLabel(
@@ -913,7 +1122,7 @@ function sessionRelationshipLabel(
       findFocusLinkOption(options, focusLinkKey("habit", session.linkedHabitId))?.title;
     return title ? `Habit: ${title}` : "Linked Habit currently unavailable";
   }
-  return "Standalone — no linked item";
+  return "No linked item";
 }
 
 function formatDuration(milliseconds: number): string {
@@ -1042,6 +1251,76 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   focusActionDisabled: { opacity: 0.55 },
+  modeSelector: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    padding: spacing.xs,
+  },
+  modeOption: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.sm,
+  },
+  modeOptionSelected: { backgroundColor: colors.primary },
+  modeOptionText: {
+    color: colors.text,
+    fontSize: typography.body,
+    fontWeight: "800",
+  },
+  modeOptionTextSelected: { color: "#FFFFFF" },
+  hiddenSetup: { display: "none" },
+  setupContent: { gap: spacing.md, paddingTop: spacing.sm },
+  setupIntro: { gap: spacing.xs },
+  durationChoices: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  customDurationPanel: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.sm,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  detailsDisclosure: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  disclosureButton: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.sm,
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  disclosureCopy: { flex: 1, gap: 2 },
+  disclosureLabel: {
+    color: colors.text,
+    fontSize: typography.small,
+    fontWeight: "800",
+  },
+  disclosureSummary: {
+    color: colors.textMuted,
+    fontSize: typography.label,
+    lineHeight: 17,
+  },
+  disclosureIcon: {
+    color: colors.primary,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  detailsPanel: { gap: spacing.sm },
   details: { gap: spacing.sm },
   detail: { gap: spacing.xs },
   detailLabel: {
@@ -1088,6 +1367,12 @@ const styles = StyleSheet.create({
     minWidth: 72,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  choiceCompact: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    minWidth: 52,
+    paddingHorizontal: spacing.sm,
   },
   choiceSelected: {
     backgroundColor: colors.primary,

@@ -90,7 +90,7 @@ export function FocusLinkPicker({
                 Link a Task or Habit
               </Text>
               <Text style={styles.description}>
-                Choose one active item, or keep this Session standalone.
+                Choose one active item, or continue without a link.
               </Text>
             </View>
             <Pressable
@@ -118,7 +118,7 @@ export function FocusLinkPicker({
             keyboardShouldPersistTaps="handled"
           >
             <PickerOption
-              detail="Keep this Session standalone"
+              detail="Continue without a link"
               label="No linked item"
               onPress={() => choose("")}
               selected={!selectedKey}
