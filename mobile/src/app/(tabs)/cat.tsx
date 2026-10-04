@@ -62,6 +62,7 @@ import {
   createCatSequenceScheduler,
   facingTowardRoomPoint,
   normalizedRoomPoint,
+  normalizedRoomPointFromTranslation,
   projectCatQaPreview,
   roomPointInArea,
   shouldWandPounce,
@@ -110,6 +111,7 @@ interface CatVisualState {
 }
 
 interface CatVisualStep {
+  catOffsetPx?: { x: number; y: number };
   caption: string;
   discreteReducedMotionPlacement?: boolean;
   durationMs: number;
@@ -118,6 +120,7 @@ interface CatVisualStep {
   point?: NormalizedRoomPoint;
   pose: CatPose;
   scene?: CatScene;
+  snapTarget?: boolean;
   target?: CatTargetVisual;
   targetPoint?: NormalizedRoomPoint;
   temporaryFurniture?: CatItemId;
@@ -133,6 +136,7 @@ const INITIAL_CAT_VISUAL: CatVisualState = {
 
 const WAND_POUNCE_COOLDOWN_MS = 1_200;
 const WAND_POUNCE_DURATION_MS = 520;
+const CAT_ROOM_HEIGHT = 310;
 const CAT_SPRITE_WIDTH = 160;
 const MOBILE_MOUSE_STEPS = catMouseChaseSteps();
 const MOBILE_YARN_STEPS = catYarnPlaySteps();
@@ -533,6 +537,8 @@ function useCatRoomInteractions({
   const selectedFurnitureRef = useRef(selectedFurnitureId);
   const roomLayoutRef = useRef({ height: 0, width: 0 });
   const catPointRef = useRef<NormalizedRoomPoint>({ ...CAT_HOME_POINT });
+  const catPixelOffsetRef = useRef({ x: 0, y: 0 });
+  const renderedCatTranslationRef = useRef({ x: 0, y: 0 });
   const targetPointRef = useRef<NormalizedRoomPoint>({ ...CAT_ROOM_LAYOUT.wandStart });
   const activeActionRef = useRef<CatActiveAction | undefined>(undefined);
   const lastWandPounceAtRef = useRef(Number.NEGATIVE_INFINITY);
@@ -544,6 +550,19 @@ function useCatRoomInteractions({
   const [catTranslateY] = useState(() => new Animated.Value(0));
   const [targetTranslateX] = useState(() => new Animated.Value(0));
   const [targetTranslateY] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    const xListener = catTranslateX.addListener(({ value }) => {
+      renderedCatTranslationRef.current.x = value;
+    });
+    const yListener = catTranslateY.addListener(({ value }) => {
+      renderedCatTranslationRef.current.y = value;
+    });
+    return () => {
+      catTranslateX.removeListener(xListener);
+      catTranslateY.removeListener(yListener);
+    };
+  }, [catTranslateX, catTranslateY]);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -588,31 +607,43 @@ function useCatRoomInteractions({
       point: NormalizedRoomPoint,
       durationMs = 320,
       discreteReducedMotionPlacement = false,
+      pixelOffset = { x: 0, y: 0 },
     ) => {
       const nextPoint = clampNormalizedRoomPoint(point);
+      const baseTranslation = catTranslationFor(
+        nextPoint,
+        roomLayoutRef.current.width,
+        roomLayoutRef.current.height,
+      );
+      const translation = {
+        x: baseTranslation.x + pixelOffset.x,
+        y: baseTranslation.y + pixelOffset.y,
+      };
       if (reducedMotionRef.current) {
         catAnimationRef.current?.stop();
         catAnimationRef.current = undefined;
         if (discreteReducedMotionPlacement) {
           catPointRef.current = nextPoint;
-          const translation = catTranslationFor(
-            nextPoint,
-            roomLayoutRef.current.width,
-            roomLayoutRef.current.height,
-          );
+          catPixelOffsetRef.current = pixelOffset;
+          renderedCatTranslationRef.current = translation;
           catTranslateX.setValue(translation.x);
           catTranslateY.setValue(translation.y);
         }
         return;
       }
-      catPointRef.current = nextPoint;
-      const translation = catTranslationFor(
-        nextPoint,
-        roomLayoutRef.current.width,
-        roomLayoutRef.current.height,
-      );
       catAnimationRef.current?.stop();
-      catAnimationRef.current = Animated.parallel([
+      // Keep relayouts anchored to the active destination. Facing uses the
+      // listener-backed rendered position instead of this planned point.
+      catPointRef.current = nextPoint;
+      catPixelOffsetRef.current = pixelOffset;
+      if (durationMs === 0) {
+        catAnimationRef.current = undefined;
+        renderedCatTranslationRef.current = translation;
+        catTranslateX.setValue(translation.x);
+        catTranslateY.setValue(translation.y);
+        return;
+      }
+      const animation = Animated.parallel([
         Animated.timing(catTranslateX, {
           duration: durationMs,
           easing: Easing.out(Easing.quad),
@@ -626,9 +657,26 @@ function useCatRoomInteractions({
           useNativeDriver: true,
         }),
       ]);
-      catAnimationRef.current.start();
+      catAnimationRef.current = animation;
+      animation.start(({ finished }) => {
+        if (finished && catAnimationRef.current === animation) {
+          catAnimationRef.current = undefined;
+        }
+      });
     },
     [catTranslateX, catTranslateY],
+  );
+
+  const renderedCatPoint = useCallback(
+    () => normalizedRoomPointFromTranslation(
+      renderedCatTranslationRef.current.x,
+      renderedCatTranslationRef.current.y,
+      roomLayoutRef.current.width,
+      roomLayoutRef.current.height,
+      CAT_SPRITE_WIDTH / 2,
+      94,
+    ),
+    [],
   );
 
   const setTargetPoint = useCallback(
@@ -678,7 +726,7 @@ function useCatRoomInteractions({
   );
 
   const settle = useCallback(
-    (scene: CatScene, animate = true) => {
+    (scene: CatScene, animate = true, facing = visualRef.current.facing) => {
       activeActionRef.current = scene === "garden" ? "garden" : undefined;
       clearPounceTimer();
       setCatPoint(CAT_HOME_POINT, animate ? 360 : 0, true);
@@ -689,7 +737,7 @@ function useCatRoomInteractions({
           scene === "garden"
             ? CAT_INTERACTION_CAPTIONS.garden
             : CAT_INTERACTION_CAPTIONS.sitting,
-        facing: visualRef.current.facing,
+        facing,
         scene,
       });
     },
@@ -709,7 +757,7 @@ function useCatRoomInteractions({
       activeActionRef.current = action;
       sequenceScheduler.start(
         steps,
-        (step) => {
+        (step, index) => {
           if (
             !mountedRef.current ||
             !focusedRef.current ||
@@ -719,19 +767,21 @@ function useCatRoomInteractions({
             return;
           }
           const scene = step.scene ?? settleScene;
-          const currentPoint = catPointRef.current;
-          const facingOrigin = step.point ?? currentPoint;
+          const renderedPoint = renderedCatPoint();
           const facing =
             step.facing ??
             (step.targetPoint
-              ? facingTowardRoomPoint(facingOrigin, step.targetPoint, visualRef.current.facing)
+              ? facingTowardRoomPoint(renderedPoint, step.targetPoint, visualRef.current.facing)
               : visualRef.current.facing);
-          if (step.targetPoint) setTargetPoint(step.targetPoint, 260);
+          if (step.targetPoint) {
+            setTargetPoint(step.targetPoint, index === 0 || step.snapTarget ? 0 : 260);
+          }
           if (step.point) {
             setCatPoint(
               step.point,
               Math.min(440, Math.round(step.durationMs * 0.45)),
               userInitiated && step.discreteReducedMotionPlacement,
+              step.catOffsetPx,
             );
           }
           commitVisual({
@@ -757,7 +807,7 @@ function useCatRoomInteractions({
         },
       );
     },
-    [cancelActive, commitVisual, sequenceScheduler, setCatPoint, setTargetPoint, settle],
+    [cancelActive, commitVisual, renderedCatPoint, sequenceScheduler, setCatPoint, setTargetPoint, settle],
   );
 
   const playSequence = useCallback(
@@ -771,10 +821,11 @@ function useCatRoomInteractions({
   const sitTogether = useCallback(() => {
     if (!enabledRef.current || !focusedRef.current) return;
     cancelActive(true);
-    settle("room");
+    settle("room", true, "right");
   }, [cancelActive, settle]);
 
   const exploreRoom = useCallback(() => {
+    const destination = roomPointInArea(CAT_ROOM_LAYOUT.mousePlayArea, 0.92, 1);
     startSteps(
       "room-walk",
       [
@@ -782,7 +833,8 @@ function useCatRoomInteractions({
           caption: CAT_INTERACTION_CAPTIONS.walking,
           durationMs: 3_200,
           discreteReducedMotionPlacement: true,
-          point: roomPointInArea(CAT_ROOM_LAYOUT.mousePlayArea, 0.92, 1),
+          facing: facingTowardRoomPoint(CAT_HOME_POINT, destination, "right"),
+          point: destination,
           pose: "walking",
           scene: "room",
         },
@@ -798,7 +850,7 @@ function useCatRoomInteractions({
         return;
       }
       if (furnitureId === "window-cushion") {
-        playSequence("perch");
+        playSequence("perch-nap");
         return;
       }
       startSteps(
@@ -825,6 +877,7 @@ function useCatRoomInteractions({
           {
             caption: catReactionCaption(pose, selectedFurnitureRef.current),
             durationMs: 5_000,
+            facing: "right",
             pose,
             scene: "room",
           },
@@ -861,8 +914,9 @@ function useCatRoomInteractions({
     activeActionRef.current = "wand";
     lastWandPounceAtRef.current = Number.NEGATIVE_INFINITY;
     setTargetPoint(CAT_ROOM_LAYOUT.wandStart, 0);
+    const currentCatPoint = renderedCatPoint();
     const facing = facingTowardRoomPoint(
-      catPointRef.current,
+      currentCatPoint,
       CAT_ROOM_LAYOUT.wandStart,
       visualRef.current.facing,
     );
@@ -875,7 +929,7 @@ function useCatRoomInteractions({
       scene: "room",
       target: "wand",
     });
-  }, [cancelActive, commitVisual, setTargetPoint]);
+  }, [cancelActive, commitVisual, renderedCatPoint, setTargetPoint]);
 
   const toggleWand = useCallback(() => {
     if (activeActionRef.current === "wand") {
@@ -898,7 +952,7 @@ function useCatRoomInteractions({
         ),
         CAT_ROOM_LAYOUT.wandPlayArea,
       );
-      const currentCatPoint = catPointRef.current;
+      const currentCatPoint = renderedCatPoint();
       const nextCatPoint = stepTowardRoomPoint(
         currentCatPoint,
         nextTarget,
@@ -910,13 +964,18 @@ function useCatRoomInteractions({
         nextTarget,
         visualRef.current.facing,
       );
-      setTargetPoint(nextTarget);
+      setTargetPoint(nextTarget, 0);
       setCatPoint(nextCatPoint, 180);
 
       const now = Date.now();
       const pouncing = visualRef.current.pose === "pouncing";
+      if (pouncing) {
+        if (facing !== visualRef.current.facing) {
+          commitVisual({ ...visualRef.current, facing });
+        }
+        return;
+      }
       if (
-        !pouncing &&
         now - lastWandPounceAtRef.current >= WAND_POUNCE_COOLDOWN_MS &&
         shouldWandPounce(nextCatPoint, nextTarget, Math.random())
       ) {
@@ -953,11 +1012,11 @@ function useCatRoomInteractions({
         return;
       }
 
-      if (!pouncing && facing !== visualRef.current.facing) {
+      if (facing !== visualRef.current.facing) {
         commitVisual({ ...visualRef.current, facing });
       }
     },
-    [clearPounceTimer, commitVisual, setCatPoint, setTargetPoint],
+    [clearPounceTimer, commitVisual, renderedCatPoint, setCatPoint, setTargetPoint],
   );
 
   const wandResponderEnabled = visual.action === "wand";
@@ -979,11 +1038,14 @@ function useCatRoomInteractions({
         roomLayoutRef.current.width,
         roomLayoutRef.current.height,
       );
+      catTranslation.x += catPixelOffsetRef.current.x;
+      catTranslation.y += catPixelOffsetRef.current.y;
       const targetTranslation = targetTranslationFor(
         targetPointRef.current,
         roomLayoutRef.current.width,
         roomLayoutRef.current.height,
       );
+      renderedCatTranslationRef.current = catTranslation;
       catTranslateX.setValue(catTranslation.x);
       catTranslateY.setValue(catTranslation.y);
       targetTranslateX.setValue(targetTranslation.x);
@@ -1073,11 +1135,13 @@ function useCatRoomInteractions({
         catAnimationRef.current?.stop();
         catAnimationRef.current = undefined;
         catPointRef.current = { ...CAT_HOME_POINT };
+        catPixelOffsetRef.current = { x: 0, y: 0 };
         const homeTranslation = catTranslationFor(
           CAT_HOME_POINT,
           roomLayoutRef.current.width,
           roomLayoutRef.current.height,
         );
+        renderedCatTranslationRef.current = homeTranslation;
         catTranslateX.setValue(homeTranslation.x);
         catTranslateY.setValue(homeTranslation.y);
       }
@@ -1107,12 +1171,14 @@ function useCatRoomInteractions({
       idleSchedulerRef.current = idleScheduler;
       if (enabled) {
         catPointRef.current = { ...CAT_HOME_POINT };
+        catPixelOffsetRef.current = { x: 0, y: 0 };
         targetPointRef.current = { ...CAT_ROOM_LAYOUT.wandStart };
         const homeTranslation = catTranslationFor(
           CAT_HOME_POINT,
           roomLayoutRef.current.width,
           roomLayoutRef.current.height,
         );
+        renderedCatTranslationRef.current = homeTranslation;
         catTranslateX.setValue(homeTranslation.x);
         catTranslateY.setValue(homeTranslation.y);
         commitVisual(INITIAL_CAT_VISUAL);
@@ -1180,6 +1246,7 @@ function catVisualSteps(sequence: CatInteractionSequence): CatVisualStep[] {
         ...common,
         point: placement.cat,
         pose: index === 0 ? "anticipating" : index === 1 ? "yarn" : "sitting",
+        snapTarget: true,
         target: "yarn",
         targetPoint: placement.target,
       };
@@ -1190,6 +1257,7 @@ function catVisualSteps(sequence: CatInteractionSequence): CatVisualStep[] {
         ...common,
         point: placement.cat,
         pose: index === 0 ? "anticipating" : index === 1 ? "walking" : "mouse",
+        snapTarget: true,
         target: "mouse",
         targetPoint: placement.target,
       };
@@ -1197,6 +1265,8 @@ function catVisualSteps(sequence: CatInteractionSequence): CatVisualStep[] {
     if (sequence === "scratch") {
       return {
         ...common,
+        catOffsetPx: MOBILE_SCRATCH_PLACEMENT.catOffsetPx,
+        facing: "right" as const,
         point: MOBILE_SCRATCH_PLACEMENT.cat,
         pose: index % 2 === 0 ? "scratching-left" : "scratching-right",
         targetPoint: MOBILE_SCRATCH_PLACEMENT.target,
@@ -1207,6 +1277,14 @@ function catVisualSteps(sequence: CatInteractionSequence): CatVisualStep[] {
       return {
         ...common,
         point: CAT_ROOM_LAYOUT.bedAnchor,
+        pose: "sleeping" as const,
+      };
+    }
+    if (sequence === "perch-nap") {
+      return {
+        ...common,
+        facing: "left" as const,
+        point: CAT_ROOM_LAYOUT.windowPerchAnchor,
         pose: "sleeping" as const,
       };
     }
@@ -1238,6 +1316,7 @@ function catVisualSteps(sequence: CatInteractionSequence): CatVisualStep[] {
       point: placement.cat,
       pose: index === 0 ? "anticipating" : "butterfly",
       scene: "garden" as const,
+      snapTarget: true,
       target: "butterfly" as const,
       targetPoint: placement.target,
     };
@@ -1342,58 +1421,64 @@ function CatRoom({
         </Card>
       ) : null}
 
-      <View
-        {...interactions.panHandlers}
-        accessibilityHint={visual.action === "wand" ? "Drag anywhere inside the room to move the teaser." : undefined}
-        accessibilityLabel={`${room.stage}. ${visual.caption}`}
-        onLayout={interactions.onRoomLayout}
-        ref={roomRef}
-        style={[styles.room, garden && styles.gardenRoom]}
-      >
-        {garden ? (
-          <>
-            <View style={styles.gardenSky} />
-            <Text style={styles.gardenDetail}>✿ ･ﾟ ✿ ･ﾟ ✿</Text>
-          </>
-        ) : (
-          <View style={styles.window}><View style={styles.windowPane} /><View style={styles.windowPane} /></View>
-        )}
-        <View style={[styles.roomFloor, garden && styles.gardenFloor]}>
-          <View style={[styles.roomFloorHighlight, garden && styles.gardenFloorHighlight]} />
-        </View>
-        {!garden ? <FurnitureVisual itemId={room.selectedFurniture?.id} /> : null}
-        {!garden && visual.temporaryFurniture && visual.temporaryFurniture !== room.selectedFurniture?.id ? (
-          <FurnitureVisual itemId={visual.temporaryFurniture} />
-        ) : null}
-        <RoomToyVisuals
-          activeTarget={visual.target}
-          ownsMouse={available.mouse && !garden}
-          ownsYarn={available.yarn && !garden}
-          targetTranslateX={interactions.targetTranslateX}
-          targetTranslateY={interactions.targetTranslateY}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.kittenLayer,
-            {
-              transform: [
-                { translateX: interactions.catTranslateX },
-                { translateY: interactions.catTranslateY },
-              ],
-            },
-          ]}
+      <View style={[styles.roomFrame, garden && styles.gardenRoomFrame]}>
+        <View
+          {...interactions.panHandlers}
+          accessibilityHint={visual.action === "wand" ? "Drag anywhere inside the room to move the teaser." : undefined}
+          accessibilityLabel={`${room.stage}. ${visual.caption}`}
+          accessibilityRole="image"
+          onLayout={interactions.onRoomLayout}
+          ref={roomRef}
+          style={[styles.room, garden && styles.gardenRoom]}
+          testID="cat-room-scene"
         >
-          <PixelKitten
-            accessibilityLabel={visual.caption}
-            blinking={visual.blinking}
-            facing={visual.facing}
-            pose={visual.pose}
-            showFloor={false}
+          {garden ? (
+            <>
+              <View style={styles.gardenSky} />
+              <Text style={styles.gardenDetail}>✿ ･ﾟ ✿ ･ﾟ ✿</Text>
+            </>
+          ) : (
+            <View style={styles.window}><View style={styles.windowPane} /><View style={styles.windowPane} /></View>
+          )}
+          <View style={[styles.roomFloor, garden && styles.gardenFloor]}>
+            <View style={[styles.roomFloorHighlight, garden && styles.gardenFloorHighlight]} />
+          </View>
+          {!garden ? <FurnitureVisual itemId={room.selectedFurniture?.id} /> : null}
+          {!garden && visual.temporaryFurniture && visual.temporaryFurniture !== room.selectedFurniture?.id ? (
+            <FurnitureVisual itemId={visual.temporaryFurniture} />
+          ) : null}
+          <RoomToyVisuals
+            activeTarget={visual.target}
+            ownsMouse={available.mouse && !garden}
+            ownsYarn={available.yarn && !garden}
+            targetTranslateX={interactions.targetTranslateX}
+            targetTranslateY={interactions.targetTranslateY}
           />
-        </Animated.View>
-        <View style={styles.roomMessage}>
-          <Text accessibilityLiveRegion="polite" style={styles.roomMessageText}>{visual.caption}</Text>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.kittenLayer,
+              {
+                transform: [
+                  { translateX: interactions.catTranslateX },
+                  { translateY: interactions.catTranslateY },
+                ],
+              },
+            ]}
+          >
+            <PixelKitten
+              accessibilityLabel={visual.caption}
+              blinking={visual.blinking}
+              facing={visual.facing}
+              pose={visual.pose}
+              showFloor={false}
+            />
+          </Animated.View>
+        </View>
+        <View style={styles.roomCaption} testID="cat-room-caption">
+          <Text accessibilityLiveRegion="polite" style={styles.roomCaptionText}>
+            {visual.caption}
+          </Text>
         </View>
       </View>
 
@@ -1863,8 +1948,10 @@ const styles = StyleSheet.create({
   growthTitle: { color: colors.text, fontSize: typography.body, fontWeight: "900" },
   symbolicNote: { color: colors.textMuted, fontSize: typography.small, fontStyle: "italic", lineHeight: 20 },
   returnMessage: { color: colors.success, fontSize: typography.body, fontWeight: "700", lineHeight: 22 },
-  room: { alignItems: "center", backgroundColor: "#FDECCB", borderColor: "#D9A86C", borderRadius: radii.lg, borderWidth: 1, height: 310, justifyContent: "flex-end", overflow: "hidden", padding: spacing.md, position: "relative" },
-  gardenRoom: { backgroundColor: "#DFF2D0", borderColor: "#79A96B" },
+  roomFrame: { backgroundColor: "#FFFCF6", borderColor: "#D9A86C", borderRadius: radii.lg, borderWidth: 1, overflow: "hidden" },
+  gardenRoomFrame: { borderColor: "#79A96B" },
+  room: { alignItems: "center", backgroundColor: "#FDECCB", height: CAT_ROOM_HEIGHT, overflow: "hidden", padding: spacing.md, position: "relative" },
+  gardenRoom: { backgroundColor: "#DFF2D0" },
   gardenSky: { backgroundColor: "#CDECF4", height: 190, left: 0, position: "absolute", right: 0, top: 0 },
   window: { backgroundColor: "#BFE5F5", borderColor: "#FFFFFF", borderWidth: 5, flexDirection: "row", height: 75, left: spacing.lg, position: "absolute", top: spacing.lg, width: 108 },
   windowPane: { borderColor: "#FFFFFF", borderRightWidth: 2, flex: 1 },
@@ -1874,8 +1961,8 @@ const styles = StyleSheet.create({
   gardenFloor: { backgroundColor: "#A9CF83" },
   gardenFloorHighlight: { backgroundColor: "#C7E4A9" },
   kittenLayer: { height: 110, left: 0, position: "absolute", top: 0, width: CAT_SPRITE_WIDTH, zIndex: 3 },
-  roomMessage: { backgroundColor: "rgba(255,255,255,0.92)", borderRadius: radii.sm, marginTop: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: "100%", zIndex: 10 },
-  roomMessageText: { color: colors.text, fontSize: typography.small, textAlign: "center" },
+  roomCaption: { alignItems: "center", backgroundColor: "#FFFCF6", borderTopColor: "#E4D3BE", borderTopWidth: StyleSheet.hairlineWidth, justifyContent: "center", minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  roomCaptionText: { color: colors.text, flexShrink: 1, fontSize: typography.small, lineHeight: 20, textAlign: "center", width: "100%" },
   movingTarget: { height: 38, left: 0, marginLeft: -19, marginTop: -19, position: "absolute", top: 0, width: 38, zIndex: 6 },
   yarnBall: { backgroundColor: "#9C6644", borderColor: "#6F422A", borderRadius: 16, borderWidth: 2, height: 32, left: 2, position: "absolute", top: 2, width: 32 },
   yarnStripe: { backgroundColor: "#F0D5B5", height: 2, left: 5, position: "absolute", top: 13, width: 20 },

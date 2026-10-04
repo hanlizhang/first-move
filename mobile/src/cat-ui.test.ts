@@ -163,15 +163,59 @@ test("transient interactions replace timers, settle, and clean up on navigation 
   assert.match(source, /cancelActive\(false\)/);
 });
 
-test("target-based phases face from their planned Cat point instead of stale animation state", () => {
-  assert.match(source, /const facingOrigin = step\.point \?\? currentPoint;/);
-  assert.match(source, /facingTowardRoomPoint\(facingOrigin, step\.targetPoint, visualRef\.current\.facing\)/);
+test("target-based phases face from the listener-backed rendered Cat point", () => {
+  assert.match(source, /const renderedPoint = renderedCatPoint\(\);/);
+  assert.match(source, /facingTowardRoomPoint\(renderedPoint, step\.targetPoint, visualRef\.current\.facing\)/);
   assert.match(source, /MOBILE_SCRATCH_PLACEMENT = catScratchingPostPlacement\(\)/);
   assert.match(source, /MOBILE_BUTTERFLY_STEPS = catButterflyFollowSteps\(\)/);
   assert.doesNotMatch(
     source,
-    /facingTowardRoomPoint\(currentPoint, step\.targetPoint, visualRef\.current\.facing\)/,
+    /facingTowardRoomPoint\(step\.point, step\.targetPoint/,
   );
+});
+
+test("Cat Room caption is a wrapping sibling outside the clipped animation scene", () => {
+  assert.match(source, /testID="cat-room-scene"/);
+  assert.match(source, /testID="cat-room-caption"/);
+  assert.match(
+    source,
+    /<\/Animated\.View>\s*<\/View>\s*<View style=\{styles\.roomCaption\} testID="cat-room-caption">/,
+  );
+  assert.match(source, /room: \{[^}]*height: CAT_ROOM_HEIGHT[^}]*overflow: "hidden"/);
+  assert.match(source, /roomCaptionText: \{[^}]*flexShrink: 1[^}]*lineHeight: 20/);
+  assert.doesNotMatch(source, /roomMessage|zIndex: 10/);
+});
+
+test("interaction-facing corrections are pose-specific and keep visible targets coherent", () => {
+  assert.match(source, /settle\("room", true, "right"\)/);
+  assert.match(source, /facing: facingTowardRoomPoint\(CAT_HOME_POINT, destination, "right"\)/);
+  assert.match(source, /caption: catReactionCaption\(pose, selectedFurnitureRef\.current\),\s*durationMs: 5_000,\s*facing: "right"/);
+  for (const sequence of ["yarn", "mouse", "butterfly"]) {
+    assert.match(source, new RegExp(`sequence === "${sequence}"[\\s\\S]*?snapTarget: true`));
+  }
+  assert.match(source, /index === 0 \|\| step\.snapTarget \? 0 : 260/);
+  assert.match(source, /if \(finished && catAnimationRef\.current === animation\)/);
+  assert.match(source, /const currentCatPoint = renderedCatPoint\(\);/);
+  assert.match(source, /setTargetPoint\(nextTarget, 0\)/);
+  assert.match(source, /if \(pouncing\) \{[\s\S]*?commitVisual\(\{ \.\.\.visualRef\.current, facing \}\)/);
+  assert.match(source, /normalizedRoomPointFromTranslation\(/);
+  assert.match(source, /catTranslateX\.addListener/);
+  assert.match(source, /catTranslateY\.addListener/);
+  assert.match(source, /Facing uses the[\s\S]*?rendered position[\s\S]*?catPointRef\.current = nextPoint;/);
+});
+
+test("scratch uses a fixed paw-contact calibration without changing global sprite facing", () => {
+  assert.match(source, /catOffsetPx: MOBILE_SCRATCH_PLACEMENT\.catOffsetPx/);
+  assert.match(source, /sequence === "scratch"[\s\S]*?facing: "right" as const/);
+  assert.match(source, /baseTranslation\.x \+ pixelOffset\.x/);
+  assert.match(pixelKittenSource, /facing === "left" \? "translate\(160 0\) scale\(-1 1\)"/);
+});
+
+test("room layers keep furniture behind the Cat and moving targets above it", () => {
+  assert.match(source, /kittenLayer: \{[^}]*zIndex: 3/);
+  assert.match(source, /movingTarget: \{[^}]*zIndex: 6/);
+  assert.match(source, /scratchingPost: \{[^}]*zIndex: 1/);
+  assert.match(source, /catTree: \{[^}]*zIndex: 1/);
 });
 
 test("feeding reacts before the economic write and pending flags always clear", () => {
@@ -252,7 +296,7 @@ test("reduced motion preserves discrete target, pose, facing, and immediate scro
   assert.doesNotMatch(source, /reducedMotionRef\.current && action === "scratch"/);
   assert.match(source, /userInitiated && step\.discreteReducedMotionPlacement/);
   assert.match(source, /!reducedMotionRef\.current &&[\s\S]*?selectedFurnitureRef\.current === "cat-bed"/);
-  assert.match(source, /setTargetPoint\(nextTarget\)/);
+  assert.match(source, /setTargetPoint\(nextTarget, 0\)/);
   assert.match(source, /facingTowardRoomPoint/);
 });
 
@@ -271,7 +315,9 @@ test("furniture interactions place the kitten at bed, perch, post, and tree targ
   assert.match(source, /furnitureId === "cat-bed"/);
   assert.match(source, /playSequence\("bed-nap"\)/);
   assert.match(source, /furnitureId === "window-cushion"/);
-  assert.match(source, /playSequence\("perch"\)/);
+  assert.match(source, /playSequence\("perch-nap"\)/);
+  assert.match(source, /sequence === "perch-nap"[\s\S]*?pose: "sleeping" as const/);
+  assert.match(source, /sequence === "perch"[\s\S]*?pose: "watching" as const/);
   assert.match(source, /temporaryFurniture: "scratching-post"/);
   assert.match(source, /pose: index % 2 === 0 \? "scratching-left" : "scratching-right"/);
   assert.match(source, /CAT_ROOM_LAYOUT\.catTreeMidAnchor/);

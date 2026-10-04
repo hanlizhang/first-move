@@ -10,6 +10,7 @@ import {
   CAT_QA_PREVIEW_DAYS,
   CAT_QA_PREVIEW_ITEM_IDS,
   CAT_ROOM_LAYOUT,
+  CAT_SCRATCH_PAW_CONTACT_OFFSET_PX,
   CAT_FOOD_VISUAL_BY_ITEM_ID,
   CAT_TARGET_PADDING,
   CAT_WAND_POUNCE_DISTANCE,
@@ -32,6 +33,7 @@ import {
   facingTowardRoomPoint,
   idleActionFor,
   normalizedRoomPoint,
+  normalizedRoomPointFromTranslation,
   projectCatQaPreview,
   randomCatIdleDelay,
   roomPointDistance,
@@ -96,6 +98,7 @@ test("Cat v1B captions and item mappings use the shared interaction semantics", 
     "mouse-pounce": "Paws land beside the toy mouse.",
     scratch: "Scratch, stretch, scratch.",
     "bed-nap": "This looks like a good place for a nap.",
+    "perch-nap": "The kitten curls up for a nap on the window perch.",
     perch: "The kitten watches the world from the window.",
     "tree-climb": "Up the cat tree, one step at a time.",
     "tree-perch": "Higher is apparently better.",
@@ -134,6 +137,14 @@ test("normalized targets clamp to padded room bounds and invalid layouts return 
     clampNormalizedRoomPoint({ x: 0.5, y: 0.5 }, Number.POSITIVE_INFINITY),
     { x: 0.5, y: 0.5 },
   );
+  assert.deepEqual(
+    normalizedRoomPointFromTranslation(80, 61, 320, 310, 80, 94),
+    { x: 0.5, y: 0.5 },
+  );
+  assert.deepEqual(
+    normalizedRoomPointFromTranslation(Number.NaN, 0, 320, 310, 80, 94),
+    CAT_HOME_POINT,
+  );
 });
 
 test("wand following uses bounded steps, facing, proximity, and reduced-motion immobility", () => {
@@ -166,9 +177,14 @@ test("room anchors align supports and keep mouse, yarn, and wand targets bounded
   assert.ok(isRoomPointInArea(CAT_ROOM_LAYOUT.catTreeTopAnchor, CAT_ROOM_LAYOUT.catTreeTopPlatform));
 
   const scratch = catScratchingPostPlacement();
-  assert.equal(facingTowardRoomPoint(scratch.cat, scratch.target), "right");
-  assert.ok(scratch.target.x > scratch.cat.x);
-  assert.ok(roomPointDistance(scratch.cat, scratch.target) <= 0.101);
+  assert.deepEqual(scratch.cat, scratch.target);
+  assert.deepEqual(scratch.catOffsetPx, { x: -CAT_SCRATCH_PAW_CONTACT_OFFSET_PX, y: 0 });
+  const renderedScratchAnchor = {
+    x: scratch.cat.x + scratch.catOffsetPx!.x / 320,
+    y: scratch.cat.y,
+  };
+  assert.equal(facingTowardRoomPoint(renderedScratchAnchor, scratch.target), "right");
+  assert.ok(scratch.target.x > renderedScratchAnchor.x);
 
   const mouse = catMouseChaseSteps();
   assert.equal(facingTowardRoomPoint(mouse[0]!.cat, mouse[0]!.target), "left");
@@ -190,10 +206,35 @@ test("room anchors align supports and keep mouse, yarn, and wand targets bounded
   const yarn = catYarnPlaySteps();
   assert.ok(yarn.every(({ target }) => isRoomPointInArea(target, CAT_ROOM_LAYOUT.toyPlayArea)));
   assert.ok(yarn.every(({ cat, target }) => roomPointDistance(cat, target) <= 0.101));
+  assert.ok(yarn.every(({ cat, target }) => facingTowardRoomPoint(cat, target) === "right"));
   assert.deepEqual(clampRoomPointToArea({ x: 1, y: 0 }, CAT_ROOM_LAYOUT.wandPlayArea), {
     x: CAT_ROOM_LAYOUT.wandPlayArea.right,
     y: CAT_ROOM_LAYOUT.wandPlayArea.top,
   });
+});
+
+test("perch and tree pose anchors remain inside visible room and support bounds", () => {
+  for (const point of [
+    CAT_ROOM_LAYOUT.windowPerchAnchor,
+    CAT_ROOM_LAYOUT.catTreeMidAnchor,
+    CAT_ROOM_LAYOUT.catTreeTopAnchor,
+  ]) {
+    assert.ok(point.x >= CAT_TARGET_PADDING && point.x <= 1 - CAT_TARGET_PADDING);
+    assert.ok(point.y >= CAT_TARGET_PADDING && point.y <= CAT_ROOM_LAYOUT.floorY);
+  }
+  assert.ok(
+    isRoomPointInArea(
+      CAT_ROOM_LAYOUT.catTreeMidAnchor,
+      CAT_ROOM_LAYOUT.catTreeMidPlatform,
+    ),
+  );
+  assert.ok(
+    isRoomPointInArea(
+      CAT_ROOM_LAYOUT.catTreeTopAnchor,
+      CAT_ROOM_LAYOUT.catTreeTopPlatform,
+    ),
+  );
+  assert.ok(CAT_ROOM_LAYOUT.windowPerchAnchor.y < CAT_ROOM_LAYOUT.floorY);
 });
 
 test("five Cat food IDs use five distinct production visual treatments", () => {
@@ -224,6 +265,10 @@ test("yarn, mouse, furniture, tricks, and butterfly have distinct finite sequenc
     ["mouse-stalk", "mouse-chase", "mouse-pounce"],
   );
   assert.equal(CAT_INTERACTION_SEQUENCES.scratch.length, 3);
+  assert.deepEqual(CAT_INTERACTION_SEQUENCES["perch-nap"], [
+    { phase: "perch-nap", durationMs: 5_000 },
+  ]);
+  assert.notDeepEqual(CAT_INTERACTION_SEQUENCES["perch-nap"], CAT_INTERACTION_SEQUENCES.perch);
   assert.deepEqual(
     CAT_INTERACTION_SEQUENCES.tree.map(({ phase }) => phase),
     ["tree-climb", "tree-perch"],

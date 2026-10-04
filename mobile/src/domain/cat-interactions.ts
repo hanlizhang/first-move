@@ -103,6 +103,7 @@ export const CAT_INTERACTION_CAPTIONS = {
   "mouse-pounce": "Paws land beside the toy mouse.",
   scratch: "Scratch, stretch, scratch.",
   "bed-nap": "This looks like a good place for a nap.",
+  "perch-nap": "The kitten curls up for a nap on the window perch.",
   perch: "The kitten watches the world from the window.",
   "tree-climb": "Up the cat tree, one step at a time.",
   "tree-perch": "Higher is apparently better.",
@@ -137,6 +138,7 @@ export const CAT_INTERACTION_SEQUENCES = {
     { phase: "scratch", durationMs: 450 },
   ],
   "bed-nap": [{ phase: "bed-nap", durationMs: 5_000 }],
+  "perch-nap": [{ phase: "perch-nap", durationMs: 5_000 }],
   perch: [{ phase: "perch", durationMs: 5_000 }],
   tree: [
     { phase: "tree-climb", durationMs: 1_000 },
@@ -222,6 +224,7 @@ export const CAT_ROOM_LAYOUT: CatRoomLayout = {
 
 export const CAT_HOME_POINT: NormalizedRoomPoint = CAT_ROOM_LAYOUT.catHome;
 export const CAT_TARGET_PADDING = 0.06;
+export const CAT_SCRATCH_PAW_CONTACT_OFFSET_PX = 43;
 export const CAT_WAND_STEP = 0.12;
 export const CAT_WAND_POUNCE_DISTANCE = 0.14;
 export const FIRST_CAT_IDLE_DELAY_MS = 5 * 60_000;
@@ -261,7 +264,8 @@ export function offsetRoomPoint(point: NormalizedRoomPoint, x: number, y: number
 
 export function catScratchingPostPlacement(layout = CAT_ROOM_LAYOUT): CatTargetStep {
   return {
-    cat: offsetRoomPoint(layout.scratchingPostAnchor, -0.1, 0),
+    cat: layout.scratchingPostAnchor,
+    catOffsetPx: { x: -CAT_SCRATCH_PAW_CONTACT_OFFSET_PX, y: 0 },
     target: layout.scratchingPostAnchor,
   };
 }
@@ -281,6 +285,7 @@ export function catButterflyFollowSteps(layout = CAT_ROOM_LAYOUT): readonly CatT
 
 export interface CatTargetStep {
   cat: NormalizedRoomPoint;
+  catOffsetPx?: { x: number; y: number };
   target: NormalizedRoomPoint;
 }
 
@@ -380,6 +385,30 @@ export function normalizedRoomPoint(
     return { ...CAT_HOME_POINT };
   }
   return clampNormalizedRoomPoint({ x: x / width, y: y / height });
+}
+
+export function normalizedRoomPointFromTranslation(
+  translateX: number,
+  translateY: number,
+  width: number,
+  height: number,
+  anchorX: number,
+  anchorY: number,
+): NormalizedRoomPoint {
+  if (
+    !Number.isFinite(translateX) ||
+    !Number.isFinite(translateY) ||
+    !Number.isFinite(anchorX) ||
+    !Number.isFinite(anchorY)
+  ) {
+    return { ...CAT_HOME_POINT };
+  }
+  return normalizedRoomPoint(
+    translateX + anchorX,
+    translateY + anchorY,
+    width,
+    height,
+  );
 }
 
 export function roomPointDistance(
