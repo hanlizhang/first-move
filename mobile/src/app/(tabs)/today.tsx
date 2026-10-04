@@ -64,22 +64,16 @@ export default function TodayScreen() {
     <Screen
       eyebrow={formatCurrentDate(today)}
       title="Today"
-      description="A small view of what matters now and the time you chose intentionally."
+      description="What matters today, and your next small move."
     >
-      <View style={styles.topRow}>
-        <SyncPill auth={auth} sync={sync} />
-        <Text style={styles.summaryText}>
-          {view.tasks.filter((task) => task.completedOn.includes(today)).length} Tasks done ·{" "}
-          {view.habits.filter((habit) => !isHabitActive(habit, today)).length} Habits checked
-        </Text>
+      <View style={styles.statusRow}>
+        <SyncStatus auth={auth} sync={sync} />
       </View>
 
       <PrimaryButton
         title="I’m Stuck"
         onPress={() => router.push("/(tabs)/first-moves")}
       />
-
-      <MorningPlanFlow dateKey={today} />
 
       {localWorkspaceMessage ? (
         <Card tone="danger">
@@ -98,8 +92,12 @@ export default function TodayScreen() {
       ) : null}
 
       <TodaySummary
+        checkedHabits={view.habits.filter((habit) => !isHabitActive(habit, today)).length}
+        completedTasks={view.tasks.filter((task) => task.completedOn.includes(today)).length}
         directionTotals={view.directionTotals}
+        habitCount={view.habits.length}
         points={localWorkspace.progress.points}
+        taskCount={view.tasks.length}
         totalFocusedMs={view.totalFocusedMs}
       />
 
@@ -109,7 +107,7 @@ export default function TodayScreen() {
           onPress={() => router.push("/tasks")}
           title="Tasks"
         />
-        <View style={styles.compactCard}>
+        <View style={styles.sectionList}>
           {view.tasks.length === 0 ? (
             <EmptyRow message="No active Tasks. Add one small next step." />
           ) : (
@@ -144,7 +142,7 @@ export default function TodayScreen() {
           onPress={() => router.push("/habits")}
           title="Habits"
         />
-        <View style={styles.compactCard}>
+        <View style={styles.sectionList}>
           {view.habits.length === 0 ? (
             <EmptyRow message="No Habits are scheduled for today." />
           ) : (
@@ -176,7 +174,7 @@ export default function TodayScreen() {
           onPress={() => router.push("/(tabs)/focus")}
           title="Focus today"
         />
-        <View style={styles.compactCard}>
+        <View style={styles.sectionList}>
           {view.focusItems.length === 0 ? (
             <EmptyRow message="No completed or intentionally stopped Focus Sessions yet." />
           ) : (
@@ -187,9 +185,11 @@ export default function TodayScreen() {
         </View>
       </View>
 
+      <MorningPlanFlow dateKey={today} />
+
       <View style={styles.section}>
         <StaticSectionHeader detail={`${view.timeline.length}`} title="Activity timeline" />
-        <View style={styles.compactCard}>
+        <View style={[styles.sectionList, styles.timelineList]}>
           {view.timeline.length === 0 ? (
             <EmptyRow message="Your completed Tasks, Habit check-ins, and closed Focus Sessions will appear here." />
           ) : (
@@ -272,45 +272,51 @@ export default function TodayScreen() {
 }
 
 function TodaySummary({
+  checkedHabits,
+  completedTasks,
   directionTotals,
+  habitCount,
   points,
+  taskCount,
   totalFocusedMs,
 }: {
+  checkedHabits: number;
+  completedTasks: number;
   directionTotals: ReturnType<typeof getTodayView>["directionTotals"];
+  habitCount: number;
   points: number;
+  taskCount: number;
   totalFocusedMs: number;
 }) {
+  const activeDirections = DIRECTIONS.map((direction) => ({
+    direction,
+    duration: directionTotals[direction],
+  })).filter((item) => item.duration > 0);
+
   return (
-    <View style={styles.summaryCard}>
-      <View style={styles.metricsRow}>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Current points</Text>
-          <Text style={styles.metricValue}>{formatPoints(points)}</Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricLabel}>Focused today</Text>
-          <Text style={styles.metricValue}>{formatFocusedDuration(totalFocusedMs)}</Text>
-        </View>
+    <View accessibilityLabel="Today overview" style={styles.overview}>
+      <View style={styles.overviewMetrics}>
+        <OverviewMetric label="Tasks" value={`${completedTasks}/${taskCount}`} />
+        <OverviewMetric label="Habits" value={`${checkedHabits}/${habitCount}`} />
+        <OverviewMetric label="Focused today" value={formatFocusedDuration(totalFocusedMs)} />
       </View>
-      <View style={styles.directionList}>
-        {DIRECTIONS.map((direction) => {
-          const duration = directionTotals[direction];
-          const width = `${
-            totalFocusedMs > 0 ? Math.round((duration / totalFocusedMs) * 100) : 0
-          }%` as `${number}%`;
-          return (
-            <View key={direction} style={styles.directionRow}>
-              <View style={styles.directionHeading}>
-                <Text numberOfLines={1} style={styles.directionLabel}>{direction}</Text>
-                <Text style={styles.directionDuration}>{formatFocusedDuration(duration)}</Text>
-              </View>
-              <View style={styles.directionTrack}>
-                <View style={[styles.directionFill, { width }]} />
-              </View>
-            </View>
-          );
-        })}
-      </View>
+      <Text style={styles.overviewContext}>
+        Current points {formatPoints(points)}
+        {activeDirections.length > 0
+          ? ` · ${activeDirections
+              .map((item) => `${item.direction} ${formatFocusedDuration(item.duration)}`)
+              .join(" · ")}`
+          : " · No Focus activity yet"}
+      </Text>
+    </View>
+  );
+}
+
+function OverviewMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.overviewMetric}>
+      <Text style={styles.overviewValue}>{value}</Text>
+      <Text style={styles.overviewLabel}>{label}</Text>
     </View>
   );
 }
@@ -391,7 +397,7 @@ function TaskRow({
         onPress={onOpen}
         style={({ pressed }) => [styles.itemCopy, pressed && styles.pressed]}
       >
-        <Text numberOfLines={2} style={[styles.itemTitle, completed && styles.completedText]}>
+        <Text style={[styles.itemTitle, completed && styles.completedText]}>
           {task.title}
         </Text>
         <Text style={styles.itemMeta}>{task.direction}</Text>
@@ -426,7 +432,7 @@ function HabitRow({
         verb={checked ? "Uncheck" : "Check"}
       />
       <View style={styles.itemCopy}>
-        <Text numberOfLines={2} style={[styles.itemTitle, checked && styles.completedText]}>
+        <Text style={[styles.itemTitle, checked && styles.completedText]}>
           {habit.title}
         </Text>
         <Text style={styles.itemMeta}>{habit.direction}</Text>
@@ -474,14 +480,14 @@ function FocusRow({ first, item }: { first: boolean; item: TodayFocusItem }) {
   return (
     <View style={[styles.focusRow, !first && styles.itemBorder]}>
       <View style={styles.focusHeading}>
-        <Text numberOfLines={2} style={[styles.itemTitle, styles.focusTitle]}>{item.title}</Text>
+        <Text style={[styles.itemTitle, styles.focusTitle]}>{item.title}</Text>
         <Text style={styles.duration}>{formatFocusedDuration(item.durationMs)}</Text>
       </View>
       <Text style={styles.itemMeta}>
         {item.direction} · {item.status === "completed" ? "Completed" : "Stopped intentionally"}
       </Text>
       {item.linkedKind && item.linkedLabel ? (
-        <Text numberOfLines={2} style={styles.linkedLabel}>
+        <Text style={styles.linkedLabel}>
           {item.linkedKind} · {item.linkedLabel}
         </Text>
       ) : null}
@@ -499,7 +505,7 @@ function TimelineRow({ first, item }: { first: boolean; item: TodayTimelineItem 
         <Text style={styles.timelineKind}>{item.kind}</Text>
       </View>
       <View style={styles.timelineCopy}>
-        <Text numberOfLines={2} style={styles.itemTitle}>{item.label}</Text>
+        <Text style={styles.itemTitle}>{item.label}</Text>
         <Text style={styles.itemMeta}>
           {item.direction}
           {item.durationMs !== undefined
@@ -520,13 +526,18 @@ function EmptyRow({ message }: { message: string }) {
   return <Text style={styles.emptyText}>{message}</Text>;
 }
 
-function SyncPill({ auth, sync }: { auth: AuthState; sync: AppSyncState }) {
+function SyncStatus({ auth, sync }: { auth: AuthState; sync: AppSyncState }) {
   const display = syncDisplay(auth, sync);
   return (
     <View
       accessibilityLabel={`Sync status: ${display.label}`}
-      style={[styles.syncPill, display.tone === "good" ? styles.syncGood : styles.syncCaution]}
+      style={styles.syncStatus}
     >
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+        style={[styles.syncDot, display.tone === "good" ? styles.syncGood : styles.syncCaution]}
+      />
       <Text style={[styles.syncText, display.tone === "good" ? styles.syncGoodText : styles.syncCautionText]}>
         {display.label}
       </Text>
@@ -572,39 +583,23 @@ function formatPointChange(points: number): string {
 
 const styles = StyleSheet.create({
   section: { gap: spacing.xs },
-  compactCard: {
-    backgroundColor: "#FFFCF6",
-    borderColor: "#E4D3BE",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: spacing.xs,
+  sectionList: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  summaryCard: {
-    backgroundColor: "#FFFCF6",
-    borderColor: "#E4D3BE",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: 12,
-  },
-  topRow: {
+  timelineList: { borderBottomColor: "#DED8CF", borderTopColor: "#DED8CF" },
+  statusRow: {
     alignItems: "center",
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
   },
-  summaryText: { color: colors.textMuted, fontSize: typography.small },
-  syncPill: {
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  syncGood: { backgroundColor: colors.successSoft, borderColor: "#86EFAC" },
-  syncCaution: { backgroundColor: colors.warningSoft, borderColor: "#FCD34D" },
-  syncText: { fontSize: typography.small, fontWeight: "800" },
+  syncStatus: { alignItems: "center", flexDirection: "row", gap: 6, minHeight: 24 },
+  syncDot: { borderRadius: radii.pill, height: 7, width: 7 },
+  syncGood: { backgroundColor: colors.success },
+  syncCaution: { backgroundColor: colors.warning },
+  syncText: { fontSize: typography.small, fontWeight: "700" },
   syncGoodText: { color: colors.success },
   syncCautionText: { color: colors.warning },
   notice: {
@@ -614,31 +609,29 @@ const styles = StyleSheet.create({
     fontSize: typography.small,
     padding: spacing.sm,
   },
-  metricsRow: { flexDirection: "row", gap: 12 },
-  metric: { flex: 1 },
-  metricLabel: { color: "#8B5A35", fontSize: typography.small, fontWeight: "800" },
-  metricValue: { color: "#4A2F21", fontSize: 24, fontWeight: "900", marginTop: 1 },
-  directionList: { gap: 6 },
-  directionRow: { gap: 3 },
-  directionHeading: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
-  directionLabel: { color: "#4A2F21", flex: 1, fontSize: typography.small },
-  directionDuration: { color: colors.textMuted, fontSize: typography.small, fontWeight: "800" },
-  directionTrack: {
-    backgroundColor: "#EFCBA2",
-    borderRadius: radii.pill,
-    height: 6,
-    overflow: "hidden",
+  overview: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    gap: spacing.sm,
+    paddingHorizontal: 12,
+    paddingVertical: spacing.sm,
   },
-  directionFill: { backgroundColor: "#C6864F", borderRadius: radii.pill, height: 6 },
+  overviewMetrics: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  overviewMetric: { flexBasis: 80, flexGrow: 1, minWidth: 76 },
+  overviewValue: { color: colors.text, fontSize: 20, fontWeight: "900", lineHeight: 24 },
+  overviewLabel: { color: colors.textMuted, fontSize: typography.small, lineHeight: 18 },
+  overviewContext: { color: colors.textMuted, fontSize: typography.small, lineHeight: 20 },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
     justifyContent: "space-between",
   },
-  sectionTitleRow: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
+  sectionTitleRow: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: spacing.sm },
   sectionTitle: {
     color: "#4A2F21",
-    fontSize: typography.heading,
+    fontSize: 20,
     fontWeight: "800",
   },
   count: {
@@ -660,6 +653,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     minHeight: touchTarget,
+    paddingVertical: spacing.xs,
   },
   itemBorder: { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
   checkboxTouch: {
@@ -691,7 +685,7 @@ const styles = StyleSheet.create({
   duration: { color: "#4A2F21", fontSize: typography.body, fontWeight: "800" },
   linkedLabel: { color: colors.primary, fontSize: typography.small, lineHeight: 18, marginTop: 2 },
   timelineRow: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, paddingVertical: 6 },
-  timelineTimeColumn: { width: 58 },
+  timelineTimeColumn: { flexShrink: 0, minWidth: 64 },
   timelineTime: { color: "#4A2F21", fontSize: typography.small, fontWeight: "800" },
   timelineKind: { color: colors.textMuted, fontSize: typography.label, marginTop: 1 },
   timelineCopy: { flex: 1 },

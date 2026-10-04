@@ -43,7 +43,7 @@ export function ReflectionEditor({
 
   if (!editing) {
     return (
-      <View style={styles.editorCard}>
+      <View style={styles.editor}>
         {existing ? <ReflectionPreview reflection={existing} /> : (
           <Body muted>A few private words can help close the day gently.</Body>
         )}
@@ -61,7 +61,7 @@ export function ReflectionEditor({
   }
 
   return (
-    <View style={styles.editorCard}>
+    <View style={styles.editor}>
       <RatingRow
         disabled={disabled || saving}
         label="Mood"
@@ -231,13 +231,13 @@ function toInput(entry?: JournalEntry): ReflectionInput {
 }
 
 const styles = StyleSheet.create({
-  editorCard: {
-    backgroundColor: "#FFFCF6",
-    borderColor: "#E4D3BE",
-    borderRadius: radii.md,
-    borderWidth: 1,
+  editor: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
-    padding: 12,
+    paddingVertical: 12,
   },
   preview: { gap: spacing.xs },
   saved: { color: colors.success, fontSize: typography.small, fontWeight: "800" },

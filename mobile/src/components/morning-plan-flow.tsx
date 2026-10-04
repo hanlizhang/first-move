@@ -2,7 +2,7 @@ import { File, Paths } from "expo-file-system";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useMemo, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { featureRemaining } from "../ai/access.ts";
 import { useFirstMoveApp } from "../app-state/app-provider.tsx";
@@ -12,8 +12,8 @@ import {
 } from "../domain/morning.ts";
 import { localWorkspaceKey } from "../local/repository.ts";
 import { loadMorningSkip, markMorningSkipped } from "../local/morning-skip.ts";
-import { colors, radii, spacing, typography } from "../theme/tokens.ts";
-import { Body, Card, Heading, Label, PrimaryButton, SecondaryButton } from "./ui.tsx";
+import { colors, radii, spacing, touchTarget, typography } from "../theme/tokens.ts";
+import { Body, Heading, Label, PrimaryButton, SecondaryButton } from "./ui.tsx";
 import { DayPlanner } from "./day-planner.tsx";
 
 type PreparedPhoto = {
@@ -35,6 +35,7 @@ export function MorningPlanFlow({ dateKey }: { dateKey: string }) {
     ownerKey: string;
     dateKey?: string;
   }>();
+  const [expanded, setExpanded] = useState(false);
   const complete = localWorkspace.morningChecks.some((check) => check.dateKey === dateKey);
   const skipped =
     skipSnapshot?.ownerKey === ownerKey && skipSnapshot?.dateKey === dateKey;
@@ -51,22 +52,45 @@ export function MorningPlanFlow({ dateKey }: { dateKey: string }) {
     };
   }, [ownerKey]);
 
+  const title =
+    step === "verify"
+      ? "Morning Start"
+      : complete
+        ? "Morning Start complete"
+        : "Morning Start skipped";
+  const summary =
+    step === "verify"
+      ? "Optional toothbrush check and day planning"
+      : complete
+        ? "The kitten enjoyed breakfast · Plan when useful"
+        : "No check, reward, or AI request · Plan when useful";
+
   return (
     <View style={styles.flow}>
-      {step === "verify" ? (
-        <MorningStart dateKey={dateKey} onSkip={skipMorning} />
-      ) : (
-        <Card tone={complete ? "success" : "default"}>
-          <Label>Morning Start</Label>
-          <Heading>{complete ? "The kitten enjoyed breakfast" : "Skipped for today"}</Heading>
-          <Body muted>
-            {complete
-              ? "Your morning check was saved."
-              : "No Morning check, reward, or AI request was created."}
-          </Body>
-        </Card>
-      )}
-      {step === "plan" ? <DayPlanner dateKey={dateKey} /> : null}
+      <View style={[styles.shell, complete && styles.completeShell]}>
+        <Pressable
+          accessibilityLabel={`${expanded ? "Collapse" : "Open"} ${title}`}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded((current) => !current)}
+          style={({ pressed }) => [styles.summaryRow, pressed && styles.pressed]}
+        >
+          <View style={styles.summaryCopy}>
+            <Text style={styles.kicker}>OPTIONAL</Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.summary}>{summary}</Text>
+          </View>
+          <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.disclosure}>
+            {expanded ? "−" : "+"}
+          </Text>
+        </Pressable>
+        {expanded && step === "verify" ? (
+          <View style={styles.details}>
+            <MorningStart dateKey={dateKey} onSkip={skipMorning} />
+          </View>
+        ) : null}
+      </View>
+      {expanded && step === "plan" ? <DayPlanner dateKey={dateKey} /> : null}
     </View>
   );
 
@@ -109,8 +133,8 @@ function MorningStart({ dateKey, onSkip }: { dateKey: string; onSkip(): void }) 
   );
 
   return (
-    <Card tone="default">
-      <Label>Morning Start · Optional daily check</Label>
+    <View style={styles.start}>
+      <Label>Toothbrush check</Label>
       <Heading>Take a current photo with your toothbrush</Heading>
       <Body muted>
         First Move uploads it only when you tap Verify photo and deletes the temporary copy. It is a routine check, not dental analysis.
@@ -173,7 +197,7 @@ function MorningStart({ dateKey, onSkip }: { dateKey: string; onSkip(): void }) 
         }}
         title="Skip without reward · Plan my day"
       />
-    </Card>
+    </View>
   );
 
   async function choosePhoto(method: PreparedPhoto["captureMethod"]) {
@@ -312,7 +336,39 @@ function deletePickerCacheFile(uri: string) {
 }
 
 const styles = StyleSheet.create({
-  flow: { gap: spacing.md },
+  flow: { gap: spacing.sm },
+  shell: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  completeShell: { backgroundColor: colors.successSoft, borderColor: "#86EFAC" },
+  summaryRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: touchTarget,
+    paddingHorizontal: 12,
+    paddingVertical: spacing.sm,
+  },
+  summaryCopy: { flex: 1 },
+  kicker: {
+    color: colors.textMuted,
+    fontSize: typography.label,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  title: { color: colors.text, fontSize: typography.body, fontWeight: "800", lineHeight: 22 },
+  summary: { color: colors.textMuted, fontSize: typography.small, lineHeight: 19 },
+  disclosure: { color: colors.primary, fontSize: 24, fontWeight: "700", minWidth: 24, textAlign: "center" },
+  details: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+  },
+  start: { gap: spacing.sm },
   preview: {
     backgroundColor: colors.surfaceMuted,
     borderRadius: radii.md,
@@ -320,4 +376,5 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   message: { color: colors.text, fontSize: typography.small, lineHeight: 21 },
+  pressed: { opacity: 0.72 },
 });

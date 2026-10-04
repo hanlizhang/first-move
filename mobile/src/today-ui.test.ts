@@ -11,6 +11,14 @@ const reflectionSource = readFileSync(
   new URL("./components/reflection-editor.tsx", import.meta.url),
   "utf8",
 );
+const morningSource = readFileSync(
+  new URL("./components/morning-plan-flow.tsx", import.meta.url),
+  "utf8",
+);
+const plannerSource = readFileSync(
+  new URL("./components/day-planner.tsx", import.meta.url),
+  "utf8",
+);
 
 test("Mobile Today exposes compact points, direction, activity, and Reflection content", () => {
   for (const label of [
@@ -61,4 +69,68 @@ test("Today shows simple sync language without developer-facing architecture cop
     todaySource,
     /canonical workspace|UUID working copy|storage boundary/i,
   );
+});
+
+test("Today puts core actions and daily content ahead of optional Morning Start", () => {
+  const stuck = todaySource.indexOf('title="I’m Stuck"');
+  const tasks = todaySource.indexOf('title="Tasks"');
+  const habits = todaySource.indexOf('title="Habits"');
+  const focus = todaySource.indexOf('title="Focus today"');
+  const morning = todaySource.indexOf("<MorningPlanFlow");
+  const timeline = todaySource.indexOf('title="Activity timeline"');
+  const reflection = todaySource.indexOf('title="Reflection"');
+
+  assert.ok(stuck > -1);
+  assert.ok(stuck < tasks && tasks < habits && habits < focus);
+  assert.ok(focus < morning && morning < timeline && timeline < reflection);
+  assert.match(todaySource, /Today overview/);
+  assert.match(todaySource, /completedTasks.*taskCount/s);
+  assert.match(todaySource, /checkedHabits.*habitCount/s);
+  assert.match(todaySource, /No Focus activity yet/);
+});
+
+test("Today uses lightweight row lists instead of a bordered card for every section", () => {
+  assert.match(todaySource, /StyleSheet\.hairlineWidth/);
+  assert.match(todaySource, /style=\{styles\.sectionList\}/);
+  assert.doesNotMatch(todaySource, /styles\.compactCard|compactCard:/);
+  assert.doesNotMatch(reflectionSource, /editorCard/);
+});
+
+test("Morning Start is collapsed until opened and keeps every verification and planning route", () => {
+  assert.match(morningSource, /const \[expanded, setExpanded\] = useState\(false\)/);
+  assert.match(morningSource, /accessibilityState=\{\{ expanded \}\}/);
+  assert.match(morningSource, /expanded && step === "verify"/);
+  assert.match(morningSource, /expanded && step === "plan"/);
+  for (const label of [
+    "Take photo",
+    "Choose image",
+    "Verify photo",
+    "Skip without reward · Plan my day",
+  ]) {
+    assert.match(morningSource, new RegExp(label));
+  }
+  assert.match(plannerSource, /Plan manually/);
+  assert.match(plannerSource, /Create Tasks directly/);
+});
+
+test("Morning and planning show AI allowance only inside their entered flows", () => {
+  const expandedVerification = morningSource.indexOf("function MorningStart");
+  const morningQuota = morningSource.indexOf("quotaCopy");
+  assert.ok(expandedVerification > -1 && morningQuota > expandedVerification);
+  assert.match(morningSource, /Guest Mode never calls the live AI service/);
+  assert.match(morningSource, /Skip remains available without a reward/);
+  assert.match(plannerSource, /const signedIn = auth\.status === "authenticated"/);
+  assert.match(plannerSource, /Manual planning remains available/);
+  assert.match(plannerSource, /Organize with AI/);
+});
+
+test("Focus summary, chronological activity, and both Reflection states remain present", () => {
+  assert.match(todaySource, /formatFocusedDuration\(view\.totalFocusedMs\)/);
+  assert.match(todaySource, /view\.focusItems\.map/);
+  assert.match(todaySource, /view\.timeline\.map/);
+  assert.match(todaySource, /formatTimelineTime/);
+  assert.match(reflectionSource, /Add reflection/);
+  assert.match(reflectionSource, /Edit reflection/);
+  assert.match(reflectionSource, /Saved today/);
+  assert.match(reflectionSource, /Private on your workspace\. Never sent to AI\./);
 });
