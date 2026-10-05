@@ -1759,7 +1759,7 @@ function Inventory({ room }: { room: CatRoomView }) {
   ] as const;
   const hasAnything = groups.some(([, entries]) => entries.length > 0);
   return (
-    <Card>
+    <View style={styles.inventoryShelf}>
       <Text style={styles.cardTitle}>Owned things</Text>
       {!hasAnything ? (
         <Body muted>Your first Cat Store reward will appear here.</Body>
@@ -1768,15 +1768,40 @@ function Inventory({ room }: { room: CatRoomView }) {
           entries.length > 0 ? (
             <View key={label} style={styles.inventoryGroup}>
               <Text style={styles.inventoryLabel}>{label}</Text>
-              <Text style={styles.inventoryText}>
-                {entries.map(({ item, quantity }) => item.durable ? item.name : `${item.name} × ${quantity}`).join(" · ")}
-              </Text>
+              <View style={styles.inventoryTiles}>
+                {entries.map(({ item, quantity }) => (
+                  <View
+                    accessibilityLabel={item.durable ? item.name : `${item.name}, quantity ${quantity}`}
+                    accessible
+                    key={item.id}
+                    style={styles.inventoryTile}
+                  >
+                    <View style={[styles.inventoryMark, inventoryMarkStyle(item.kind)]}>
+                      <Text style={styles.inventoryMarkText}>{item.name.slice(0, 1)}</Text>
+                      {!item.durable ? (
+                        <View style={styles.inventoryQuantity}>
+                          <Text style={styles.inventoryQuantityText}>×{quantity}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text numberOfLines={2} style={styles.inventoryName}>{item.name}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           ) : null,
         )
       )}
-    </Card>
+    </View>
   );
+}
+
+function inventoryMarkStyle(kind: CatCatalogItem["kind"]) {
+  if (kind === "food") return styles.inventoryMarkFood;
+  if (kind === "toy") return styles.inventoryMarkToy;
+  if (kind === "furniture") return styles.inventoryMarkFurniture;
+  if (kind === "trick") return styles.inventoryMarkTrick;
+  return styles.inventoryMarkAdventure;
 }
 
 function SectionTab({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
@@ -2149,9 +2174,70 @@ const styles = StyleSheet.create({
   companionActionArrow: { color: colors.primary, fontSize: 24, fontWeight: "700" },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.5 },
-  inventoryGroup: { gap: spacing.xs },
-  inventoryLabel: { color: colors.textMuted, fontSize: typography.small, fontWeight: "800" },
-  inventoryText: { color: colors.text, fontSize: typography.body, lineHeight: 22 },
+  inventoryShelf: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.md,
+    paddingTop: spacing.md,
+  },
+  inventoryGroup: { gap: spacing.sm },
+  inventoryLabel: {
+    color: colors.textMuted,
+    fontSize: typography.label,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  inventoryTiles: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  inventoryTile: {
+    alignItems: "center",
+    flexBasis: 76,
+    flexGrow: 1,
+    gap: spacing.xs,
+    maxWidth: 104,
+    minWidth: 76,
+  },
+  inventoryMark: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    height: 58,
+    justifyContent: "center",
+    position: "relative",
+    width: "100%",
+  },
+  inventoryMarkFood: { backgroundColor: "#FDE5CF" },
+  inventoryMarkToy: { backgroundColor: "#EAE4FF" },
+  inventoryMarkFurniture: { backgroundColor: "#E8D9C8" },
+  inventoryMarkTrick: { backgroundColor: "#DCFCE7" },
+  inventoryMarkAdventure: { backgroundColor: "#DFF2D0" },
+  inventoryMarkText: {
+    color: "#4A2F21",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  inventoryQuantity: {
+    backgroundColor: colors.primary,
+    borderRadius: radii.pill,
+    minWidth: 30,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    position: "absolute",
+    right: -4,
+    top: -4,
+  },
+  inventoryQuantityText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  inventoryName: {
+    color: colors.text,
+    fontSize: typography.label,
+    fontWeight: "700",
+    lineHeight: 16,
+    textAlign: "center",
+  },
   storeBalance: { alignItems: "center", backgroundColor: colors.primary, borderRadius: radii.lg, padding: spacing.lg },
   storeBalanceLabel: { color: "#EDE9FE", fontSize: typography.small, fontWeight: "800" },
   storeBalanceValue: { color: "#FFFFFF", fontSize: 30, fontWeight: "900", marginTop: spacing.xs },

@@ -94,6 +94,8 @@ test("Today uses lightweight row lists instead of a bordered card for every sect
   assert.match(todaySource, /style=\{styles\.sectionList\}/);
   assert.doesNotMatch(todaySource, /styles\.compactCard|compactCard:/);
   assert.doesNotMatch(reflectionSource, /editorCard/);
+  assert.doesNotMatch(todaySource, /function OverviewMetric|overviewMetrics|overviewMetric:/);
+  assert.match(todaySource, /overviewValue: \{ color: colors\.text, fontSize: 30/);
 });
 
 test("Morning Start is collapsed until opened and keeps every verification and planning route", () => {

@@ -38,6 +38,15 @@ test("Mobile Cat presents a real room, store, balance, progress, and inventory",
   assert.match(source, /PixelKitten/);
 });
 
+test("Owned things uses a compact visual shelf with consumable quantity badges", () => {
+  assert.match(source, /styles\.inventoryShelf/);
+  assert.match(source, /styles\.inventoryTiles/);
+  assert.match(source, /inventoryMarkStyle\(item\.kind\)/);
+  assert.match(source, /<Text style=\{styles\.inventoryQuantityText\}>×\{quantity\}<\/Text>/);
+  assert.match(source, /accessibilityLabel=\{item\.durable \? item\.name : `\$\{item\.name\}, quantity \$\{quantity\}`\}/);
+  assert.doesNotMatch(source, /styles\.inventoryText/);
+});
+
 test("approved furnishings are selectable and render as static room objects", () => {
   for (const itemId of [
     "cat-bed",

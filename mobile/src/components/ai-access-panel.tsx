@@ -3,13 +3,13 @@ import { StyleSheet, Text, View } from "react-native";
 import { mobileAiAccessPresentation } from "../ai/access.ts";
 import { useFirstMoveApp } from "../app-state/app-provider.tsx";
 import { colors, spacing, typography } from "../theme/tokens.ts";
-import { Body, Card, Heading, Label, SecondaryButton } from "./ui.tsx";
+import { Body, Heading, Label, SecondaryButton } from "./ui.tsx";
 
 export function AiAccessPanel() {
   const { aiAccess, refreshAiAccess } = useFirstMoveApp();
   const presentation = mobileAiAccessPresentation(aiAccess);
   return (
-    <Card tone={presentation.tone === "success" ? "success" : "default"}>
+    <View style={styles.section}>
       <Label>First Move AI</Label>
       <Heading>{presentation.heading}</Heading>
       <Body muted>{presentation.summary}</Body>
@@ -30,13 +30,19 @@ export function AiAccessPanel() {
         />
       ) : null}
       <Body muted>
-        The server checks access again before every live request. Purchase status shown elsewhere never authorizes AI.
+        Access is confirmed before each live request. Manual options always remain available.
       </Body>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  section: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+  },
   allowances: { gap: spacing.xs },
   allowance: {
     color: colors.text,

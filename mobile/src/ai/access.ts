@@ -89,7 +89,7 @@ export function mobileAiAccessPresentation(
   if (state.status === "loading") {
     return {
       heading: "Checking AI access…",
-      summary: "Checking this account with the First Move server.",
+      summary: "Checking the AI access available to this account.",
       allowances: [],
       tone: "default",
     };
@@ -121,7 +121,7 @@ export function mobileAiAccessPresentation(
   const remaining = state.access.remainingFeatureActionsToday;
   return {
     heading: "First Move AI · Pro",
-    summary: "Daily allowances are checked and enforced by the server.",
+    summary: "Your daily AI actions renew each day.",
     allowances: [
       `Plan my day: ${remaining.daily_plan} of 1 remaining today`,
       `Toothbrush verification: ${remaining.toothbrush_verification} of 3 remaining today`,

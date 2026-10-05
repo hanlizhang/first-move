@@ -40,7 +40,7 @@ export function SubscriptionPanel() {
         <Label>First Move Pro</Label>
         <Heading>Sign in to purchase or restore</Heading>
         <Body>
-          RevenueCat purchases are available only for a signed-in account. Guest Mode remains fully functional.
+          Purchases and restores are available only for a signed-in account. Guest Mode remains fully functional.
         </Body>
       </Card>
     );
@@ -68,7 +68,7 @@ export function SubscriptionPanel() {
         <Body>Your Pro entitlement is active for this account.</Body>
       ) : subscription.status === "free" ? (
         <Body>
-          Upgrade through the secure RevenueCat paywall. Plans and localized prices come directly from the store.
+          See available plans and localized prices securely through the App Store.
         </Body>
       ) : subscription.status === "loading" ? (
         <Body muted>Checking this account’s subscription status…</Body>

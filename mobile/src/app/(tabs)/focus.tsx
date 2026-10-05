@@ -114,7 +114,7 @@ export default function FocusScreen() {
           );
           if (completed?.status === "completed") {
             presentFocusCompletion(completed);
-            setNotice("Session complete and saved automatically.");
+            setNotice("");
           } else {
             completionRequested.current = undefined;
           }
@@ -181,7 +181,7 @@ export default function FocusScreen() {
               (next) =>
                 next.sessions.find((session) => session.id === openSession.id)
                   ?.status === "completed"
-                  ? "Session complete and saved automatically."
+                  ? ""
                   : "Paused. Your elapsed time is saved.",
             )
           }
@@ -194,11 +194,7 @@ export default function FocusScreen() {
           onStop={() =>
             void saveChange(
               (state, current) => stopSession(state, openSession.id, current),
-              (next) =>
-                next.sessions.find((session) => session.id === openSession.id)
-                  ?.status === "completed"
-                  ? "Session complete and saved automatically."
-                  : "Stopped when you chose. Your focus time is saved.",
+              "",
             )
           }
           saving={saving || !workspaceEditable}
@@ -468,29 +464,18 @@ function PendingFirstMoveCard({
   state: AppState;
 }) {
   return (
-    <Card tone="primary">
-      <Label>Pending First Move</Label>
+    <View style={styles.nextMove}>
+      <Label>Next small move</Label>
       <Heading>{intent.moveText}</Heading>
-      <View style={styles.details}>
-        <Detail label="Direction" value={intent.direction} />
-        <Detail
-          label="Intended duration"
-          value={`${intent.intendedDurationMinutes} minutes`}
-        />
-        <Detail
-          label="Linked item"
-          value={intentRelationshipLabel(intent, linkOptions, state)}
-        />
-      </View>
-      <Body muted>
-        Direction, duration, and any linked item are already set for this First Move.
-      </Body>
+      <Text style={styles.nextMoveMeta}>
+        {intent.direction} · {intent.intendedDurationMinutes} min · {intentRelationshipLabel(intent, linkOptions, state)}
+      </Text>
       <PrimaryButton
         disabled={disabled}
         title="Start this First Move"
         onPress={onStart}
       />
-    </Card>
+    </View>
   );
 }
 
@@ -510,7 +495,7 @@ function FocusSetup({
   const [mode, setMode] = useState<FocusSetupMode>("countdown");
 
   return (
-    <Card>
+    <View style={styles.focusSetup}>
       <Label>Focus setup</Label>
       <FocusModeSelector mode={mode} onSelect={setMode} />
       <View
@@ -535,7 +520,7 @@ function FocusSetup({
           onStart={onStartStopwatch}
         />
       </View>
-    </Card>
+    </View>
   );
 }
 
@@ -612,6 +597,7 @@ function CountdownSetup({
       <View accessibilityRole="radiogroup" style={styles.durationChoices}>
         {FOCUS_COUNTDOWN_PRESETS.map((minutes) => (
           <ChoiceButton
+            balanced
             compact
             key={minutes}
             label={`${minutes} min`}
@@ -916,25 +902,34 @@ function SessionReview({
   }
 
   return (
-    <Card tone={session.status === "completed" ? "success" : "default"}>
+    <View style={[styles.sessionReview, editing && styles.sessionReviewEditing]}>
       <Label>
-        {session.status === "completed" ? "Session complete" : "Stopped intentionally"}
+        Last focus · {session.status === "completed" ? "Completed" : "Stopped intentionally"}
       </Label>
-      <Heading>{session.label}</Heading>
-      <Body>
-        Saved automatically · Actual time: {formatDuration(session.actualElapsedMs ?? 0)}
-      </Body>
+      <Text
+        accessibilityLabel={`Actual focus time ${formatDuration(session.actualElapsedMs ?? 0)}`}
+        style={styles.reviewDuration}
+      >
+        {formatDuration(session.actualElapsedMs ?? 0)}
+      </Text>
+      <Text style={styles.reviewTitle}>{session.label}</Text>
       {!editing ? (
         <>
-          <View style={styles.details}>
-            <Detail label="Direction" value={session.direction} />
-            <Detail label="Linked item" value={relationship} />
-          </View>
-          <SecondaryButton
+          <Text style={styles.reviewMeta}>
+            {session.direction} · {relationship}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
             disabled={!workspaceEditable}
-            title="Edit details"
             onPress={() => setEditing(true)}
-          />
+            style={({ pressed }) => [
+              styles.editDetailsButton,
+              pressed && styles.choicePressed,
+              !workspaceEditable && styles.focusActionDisabled,
+            ]}
+          >
+            <Text style={styles.editDetailsText}>Edit details</Text>
+          </Pressable>
         </>
       ) : (
         <>
@@ -989,7 +984,7 @@ function SessionReview({
           />
         </>
       )}
-    </Card>
+    </View>
   );
 }
 
@@ -1021,12 +1016,14 @@ function DirectionPicker({
 }
 
 function ChoiceButton({
+  balanced = false,
   compact = false,
   detail,
   label,
   onPress,
   selected,
 }: {
+  balanced?: boolean;
   compact?: boolean;
   detail?: string;
   label: string;
@@ -1041,6 +1038,7 @@ function ChoiceButton({
       style={({ pressed }) => [
         styles.choice,
         compact && styles.choiceCompact,
+        balanced && styles.choiceBalanced,
         selected && styles.choiceSelected,
         pressed && styles.choicePressed,
       ]}
@@ -1057,23 +1055,15 @@ function ChoiceButton({
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detail}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
 function focusTitle(
   openStatus?: SessionStatus,
   closedStatus?: SessionStatus,
 ): string {
   if (openStatus === "running") return "Track this time";
   if (openStatus === "paused") return "Paused where you left it";
-  if (closedStatus === "completed") return "Session complete";
-  if (closedStatus === "stopped") return "Time saved";
+  if (closedStatus === "completed" || closedStatus === "stopped") {
+    return "Ready for what’s next";
+  }
   return "Choose how to focus";
 }
 
@@ -1155,6 +1145,70 @@ function formatDuration(milliseconds: number): string {
 }
 
 const styles = StyleSheet.create({
+  sessionReview: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+    paddingBottom: spacing.md,
+  },
+  sessionReviewEditing: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  reviewDuration: {
+    color: colors.text,
+    fontSize: 36,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    lineHeight: 42,
+  },
+  reviewTitle: {
+    color: colors.text,
+    fontSize: typography.heading,
+    fontWeight: "800",
+    lineHeight: 28,
+  },
+  reviewMeta: {
+    color: colors.textMuted,
+    fontSize: typography.small,
+    lineHeight: 20,
+  },
+  editDetailsButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    minHeight: touchTarget,
+    paddingRight: spacing.md,
+  },
+  editDetailsText: {
+    color: colors.primary,
+    fontSize: typography.small,
+    fontWeight: "800",
+  },
+  nextMove: {
+    backgroundColor: colors.primarySoft,
+    borderLeftColor: colors.primary,
+    borderLeftWidth: 4,
+    borderRadius: radii.sm,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  nextMoveMeta: {
+    color: colors.textMuted,
+    fontSize: typography.small,
+    lineHeight: 20,
+  },
+  focusSetup: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+  },
   activeSessionCard: {
     alignItems: "stretch",
     backgroundColor: "#FFFCF6",
@@ -1314,13 +1368,10 @@ const styles = StyleSheet.create({
   },
   disclosureButton: {
     alignItems: "center",
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.sm,
     flexDirection: "row",
     gap: spacing.sm,
     justifyContent: "space-between",
     minHeight: touchTarget,
-    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   disclosureCopy: { flex: 1, gap: 2 },
@@ -1340,18 +1391,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   detailsPanel: { gap: spacing.sm },
-  details: { gap: spacing.sm },
-  detail: { gap: spacing.xs },
-  detailLabel: {
-    color: colors.textMuted,
-    fontSize: typography.label,
-    fontWeight: "700",
-  },
-  detailValue: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: "700",
-  },
   inputLabel: {
     color: colors.text,
     fontSize: typography.small,
@@ -1393,6 +1432,7 @@ const styles = StyleSheet.create({
     minWidth: 52,
     paddingHorizontal: spacing.sm,
   },
+  choiceBalanced: { flexBasis: "29%", flexGrow: 1 },
   choiceSelected: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,

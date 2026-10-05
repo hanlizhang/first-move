@@ -17,9 +17,10 @@ test("Guest and authenticated Settings both render the legal links", () => {
 });
 
 test("Settings links exactly the three public First Move pages", () => {
-  assert.match(panelSource, /title="Privacy Policy"/);
-  assert.match(panelSource, /title="Terms of Use"/);
-  assert.match(panelSource, /title="Support"/);
+  assert.match(panelSource, /label="Privacy Policy"/);
+  assert.match(panelSource, /label="Terms of Use"/);
+  assert.match(panelSource, /label="Support"/);
+  assert.match(panelSource, /accessibilityRole="link"/);
   assert.match(panelSource, /https:\/\/firstmovestartsmall\.com\/privacy/);
   assert.match(panelSource, /https:\/\/firstmovestartsmall\.com\/terms/);
   assert.match(panelSource, /https:\/\/firstmovestartsmall\.com\/support/);

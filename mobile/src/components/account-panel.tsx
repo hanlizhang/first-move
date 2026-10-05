@@ -61,9 +61,9 @@ export function AccountPanel() {
   if (auth.status === "authenticated") {
     return (
       <View style={styles.group}>
-        <Card tone="success">
-          <Label>Authenticated</Label>
-          <Heading>Signed in securely</Heading>
+        <View style={styles.section}>
+          <Label>Account</Label>
+          <Heading>Signed in</Heading>
           <Body>{auth.user.email ?? "Email address unavailable"}</Body>
           <SecondaryButton
             disabled={pending}
@@ -74,8 +74,8 @@ export function AccountPanel() {
               })
             }
           />
-          <Body muted>Signing out does not delete guest data or account-scoped local cache data.</Body>
-        </Card>
+          <Body muted>Signing out keeps Guest Mode and account data separate.</Body>
+        </View>
         <CloudStatusCard
           onRefresh={() => void refreshCloud()}
           onStartFresh={() => void runStartFresh()}
@@ -186,7 +186,7 @@ export function AccountPanel() {
             {sync.pendingCount} {sync.pendingCount === 1 ? "change" : "changes"} queued
           </Heading>
           <Body muted>
-            Changes are saved to this account’s device workspace before upload.
+            Your changes are saved on this device and will sync when possible.
           </Body>
           <SecondaryButton title="Retry and refresh" onPress={onRefresh} />
         </Card>
@@ -212,48 +212,38 @@ export function AccountPanel() {
       );
     }
     if (sync.status === "synced" && cloud.status === "ready") {
-      const { state } = cloud.workspace;
       return (
-        <Card tone="success">
-          <Label>Synced</Label>
+        <View style={styles.section}>
+          <Label>Synced · Up to date</Label>
           <Heading>Your progress is synced</Heading>
-          <View style={styles.metrics}>
-            <Metric label="Tasks" value={state.tasks.length} />
-            <Metric label="Habits" value={state.habits.length} />
-            <Metric label="Sessions" value={state.sessions.length} />
-            <Metric label="Points" value={state.progress.points} />
-          </View>
           <Body muted>
             Tasks, Habits, First Moves, and Focus Sessions are available across your signed-in devices.
           </Body>
           <SecondaryButton title="Refresh cloud data" onPress={onRefresh} />
-        </Card>
+        </View>
       );
     }
     if (sync.status === "synced") {
       return (
-        <Card tone="success">
-          <Label>Synced</Label>
-          <Heading>Cloud operation complete</Heading>
+        <View style={styles.section}>
+          <Label>Synced · Up to date</Label>
+          <Heading>Your progress is synced</Heading>
           <SecondaryButton title="Refresh cloud data" onPress={onRefresh} />
-        </Card>
+        </View>
       );
     }
     return null;
   }
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.metric}>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   group: { gap: spacing.md },
+  section: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+  },
   inputLabel: { color: colors.text, fontSize: typography.small, fontWeight: "800", marginTop: spacing.sm },
   input: {
     backgroundColor: colors.surface,
@@ -265,8 +255,4 @@ const styles = StyleSheet.create({
     minHeight: touchTarget,
     paddingHorizontal: spacing.md,
   },
-  metrics: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  metric: { backgroundColor: colors.surface, borderRadius: radii.sm, minWidth: 92, padding: spacing.sm },
-  metricValue: { color: colors.text, fontSize: typography.heading, fontWeight: "800" },
-  metricLabel: { color: colors.textMuted, fontSize: typography.small },
 });

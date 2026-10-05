@@ -14,7 +14,7 @@ const pickerSource = readFileSync(
 );
 
 test("Mobile Focus exposes the three independent Session entry paths", () => {
-  assert.match(source, /Pending First Move/);
+  assert.match(source, /Next small move/);
   assert.match(source, /Start this First Move/);
   assert.match(source, /type FocusSetupMode = "countdown" \| "stopwatch"/);
   assert.match(source, /accessibilityLabel="Start countdown focus"/);
@@ -29,10 +29,11 @@ test("Mobile Focus exposes the three independent Session entry paths", () => {
 });
 
 test("Mobile Focus makes persistence automatic and review optional", () => {
-  assert.match(source, /Saved automatically/);
+  assert.match(source, /Actual focus time/);
   assert.match(source, /Edit details/);
   assert.match(source, /Save changes/);
   assert.doesNotMatch(source, /Save session/);
+  assert.doesNotMatch(source, /Saved automatically/);
 });
 
 test("Focus completion feedback follows only newly completed or stopped saved sessions", () => {
@@ -82,6 +83,8 @@ test("idle Focus uses one accessible mode selector and preserves both setup stat
 test("Countdown keeps every preset, secondary custom input, and existing start semantics", () => {
   assert.deepEqual(FOCUS_COUNTDOWN_PRESETS, [2, 5, 10, 25, 50]);
   assert.match(source, /FOCUS_COUNTDOWN_PRESETS\.map/);
+  assert.match(source, /<ChoiceButton\s+balanced\s+compact/);
+  assert.match(source, /choiceBalanced: \{ flexBasis: "29%", flexGrow: 1 \}/);
   assert.match(source, /label=\{`\$\{minutes\} min`\}/);
   assert.match(source, /label=\{customMinutes && customDuration[\s\S]*?"Custom duration"\}/);
   assert.match(source, /parseFocusDurationInput\(customMinutes\)/);

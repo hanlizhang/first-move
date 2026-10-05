@@ -295,28 +295,18 @@ function TodaySummary({
 
   return (
     <View accessibilityLabel="Today overview" style={styles.overview}>
-      <View style={styles.overviewMetrics}>
-        <OverviewMetric label="Tasks" value={`${completedTasks}/${taskCount}`} />
-        <OverviewMetric label="Habits" value={`${checkedHabits}/${habitCount}`} />
-        <OverviewMetric label="Focused today" value={formatFocusedDuration(totalFocusedMs)} />
-      </View>
+      <Text style={styles.overviewLabel}>Focused today</Text>
+      <Text style={styles.overviewValue}>{formatFocusedDuration(totalFocusedMs)}</Text>
       <Text style={styles.overviewContext}>
-        Current points {formatPoints(points)}
-        {activeDirections.length > 0
-          ? ` · ${activeDirections
-              .map((item) => `${item.direction} ${formatFocusedDuration(item.duration)}`)
-              .join(" · ")}`
-          : " · No Focus activity yet"}
+        Tasks {completedTasks}/{taskCount} · Habits {checkedHabits}/{habitCount} · Current points {formatPoints(points)}
       </Text>
-    </View>
-  );
-}
-
-function OverviewMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.overviewMetric}>
-      <Text style={styles.overviewValue}>{value}</Text>
-      <Text style={styles.overviewLabel}>{label}</Text>
+      <Text style={styles.overviewDirections}>
+        {activeDirections.length > 0
+          ? activeDirections
+              .map((item) => `${item.direction} ${formatFocusedDuration(item.duration)}`)
+              .join(" · ")
+          : "No Focus activity yet"}
+      </Text>
     </View>
   );
 }
@@ -583,13 +573,8 @@ function formatPointChange(points: number): string {
 
 const styles = StyleSheet.create({
   section: { gap: spacing.xs },
-  sectionList: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  timelineList: { borderBottomColor: "#DED8CF", borderTopColor: "#DED8CF" },
+  sectionList: {},
+  timelineList: {},
   statusRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -610,17 +595,21 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   overview: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
-    gap: spacing.sm,
-    paddingHorizontal: 12,
-    paddingVertical: spacing.sm,
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+    paddingBottom: spacing.md,
   },
-  overviewMetrics: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  overviewMetric: { flexBasis: 80, flexGrow: 1, minWidth: 76 },
-  overviewValue: { color: colors.text, fontSize: 20, fontWeight: "900", lineHeight: 24 },
-  overviewLabel: { color: colors.textMuted, fontSize: typography.small, lineHeight: 18 },
+  overviewValue: { color: colors.text, fontSize: 30, fontWeight: "900", lineHeight: 36 },
+  overviewLabel: {
+    color: colors.textMuted,
+    fontSize: typography.label,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
   overviewContext: { color: colors.textMuted, fontSize: typography.small, lineHeight: 20 },
+  overviewDirections: { color: colors.primary, fontSize: typography.small, fontWeight: "700", lineHeight: 20 },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",

@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Linking, StyleSheet, Text } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, typography } from "../theme/tokens.ts";
-import { Card, Heading, Label, SecondaryButton } from "./ui.tsx";
+import { colors, spacing, touchTarget, typography } from "../theme/tokens.ts";
+import { Heading, Label } from "./ui.tsx";
 
 export const LEGAL_LINKS = {
   privacy: "https://firstmovestartsmall.com/privacy",
@@ -14,16 +14,18 @@ export function LegalLinksPanel() {
   const [feedback, setFeedback] = useState<string>();
 
   return (
-    <Card>
+    <View style={styles.section}>
       <Label>Legal</Label>
       <Heading>Legal and support</Heading>
-      <SecondaryButton title="Privacy Policy" onPress={() => void open(LEGAL_LINKS.privacy)} />
-      <SecondaryButton title="Terms of Use" onPress={() => void open(LEGAL_LINKS.terms)} />
-      <SecondaryButton title="Support" onPress={() => void open(LEGAL_LINKS.support)} />
+      <View style={styles.rows}>
+        <LinkRow label="Privacy Policy" onPress={() => void open(LEGAL_LINKS.privacy)} />
+        <LinkRow label="Terms of Use" onPress={() => void open(LEGAL_LINKS.terms)} />
+        <LinkRow label="Support" onPress={() => void open(LEGAL_LINKS.support)} />
+      </View>
       {feedback ? (
         <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>
       ) : null}
-    </Card>
+    </View>
   );
 
   async function open(url: string) {
@@ -36,7 +38,47 @@ export function LegalLinksPanel() {
   }
 }
 
+function LinkRow({ label, onPress }: { label: string; onPress(): void }) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text accessibilityElementsHidden style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  section: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+  },
+  rows: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  row: {
+    alignItems: "center",
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    minHeight: touchTarget,
+  },
+  rowLabel: {
+    color: colors.text,
+    flex: 1,
+    fontSize: typography.body,
+    fontWeight: "700",
+  },
+  chevron: { color: colors.primary, fontSize: 26, fontWeight: "700" },
+  pressed: { opacity: 0.7 },
   feedback: {
     color: colors.textMuted,
     fontSize: typography.small,

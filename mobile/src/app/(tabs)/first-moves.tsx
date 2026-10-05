@@ -35,7 +35,6 @@ import {
   LoadingState,
   PrimaryButton,
   Screen,
-  SecondaryButton,
 } from "../../components/ui.tsx";
 import {
   colors,
@@ -158,7 +157,7 @@ export default function FirstMovesScreen() {
             <Body>{localWorkspaceMessage}</Body>
           </Card>
         ) : null}
-        <Card tone="primary">
+        <View style={[styles.flowSurface, styles.resultSurface]}>
           <Label>Pending First Move</Label>
           <Heading>{pendingIntent.moveText}</Heading>
           <View style={styles.details}>
@@ -175,19 +174,19 @@ export default function FirstMovesScreen() {
           />
           {!openSession ? (
             <>
-              <SecondaryButton
-                title="Change this move"
+              <TextAction
+                label="Change this move"
                 disabled={saving || !workspaceEditable}
                 onPress={() => void clearPending("move")}
               />
-              <SecondaryButton
-                title="Cancel for now"
+              <TextAction
+                label="Cancel for now"
                 disabled={saving || !workspaceEditable}
                 onPress={() => void clearPending("stuck-state")}
               />
             </>
           ) : null}
-        </Card>
+        </View>
       </Screen>
     );
   }
@@ -204,7 +203,7 @@ export default function FirstMovesScreen() {
         </Card>
       ) : null}
       {step === "stuck-state" ? (
-        <Card tone="primary">
+        <View style={styles.flowSurface}>
           <Label>Step 1 of 3</Label>
           <Heading>What feels closest right now?</Heading>
           <Body muted>You do not need to explain or justify it.</Body>
@@ -217,11 +216,11 @@ export default function FirstMovesScreen() {
               />
             ))}
           </View>
-        </Card>
+        </View>
       ) : null}
 
       {step === "direction" ? (
-        <Card tone="primary">
+        <View style={styles.flowSurface}>
           <Label>Step 2 of 3</Label>
           <Heading>Where would you like to move?</Heading>
           <Body muted>There is no best direction. You can change it later.</Body>
@@ -234,15 +233,15 @@ export default function FirstMovesScreen() {
               />
             ))}
           </View>
-          <SecondaryButton
-            title="Back"
+          <TextAction
+            label="Back"
             onPress={() => setStep("stuck-state")}
           />
-        </Card>
+        </View>
       ) : null}
 
       {step === "move" ? (
-        <Card tone="primary">
+        <View style={styles.flowSurface}>
           <Label>Step 3 of 3</Label>
           <Heading>Your First Move</Heading>
           <Body muted>
@@ -285,20 +284,20 @@ export default function FirstMovesScreen() {
             </Text>
           ) : null}
 
-          <View style={styles.actionGroup}>
-            <SecondaryButton
-              title="Choose another"
+          <View style={styles.utilityActions}>
+            <UtilityAction
+              label="Choose another"
               onPress={() =>
                 chooseTemplate(stuckState, direction, suggestionIndex + 1)
               }
             />
-            <SecondaryButton
-              title="Make duration shorter"
+            <UtilityAction
+              label="Make duration shorter"
               disabled={duration === 2}
               onPress={() => setDuration(nextShorterDuration(duration))}
             />
-            <SecondaryButton
-              title="Enter my own move"
+            <UtilityAction
+              label="Enter my own move"
               onPress={() => {
                 setTemplateId(undefined);
                 setMoveText("");
@@ -313,13 +312,13 @@ export default function FirstMovesScreen() {
             disabled={!moveText.trim() || saving || !workspaceEditable}
             onPress={() => void savePendingIntent()}
           />
-          <SecondaryButton
-            title="Change direction"
+          <TextAction
+            label="Change direction"
             disabled={saving}
             onPress={() => setStep("direction")}
           />
-          <SecondaryButton
-            title="Cancel"
+          <TextAction
+            label="Cancel"
             disabled={saving}
             onPress={() => {
               setNotice("Cancelled. Nothing was lost.");
@@ -329,7 +328,7 @@ export default function FirstMovesScreen() {
           {templateId ? (
             <Body muted>This suggestion came from the offline local library.</Body>
           ) : null}
-        </Card>
+        </View>
       ) : null}
 
       {notice && step !== "move" ? (
@@ -364,9 +363,67 @@ function ChoiceButton({
         pressed && styles.pressedChoice,
       ]}
     >
-      <Text style={[styles.choiceText, selected && styles.selectedChoiceText]}>
+      <Text style={[
+        styles.choiceText,
+        compact && styles.compactChoiceText,
+        selected && styles.selectedChoiceText,
+      ]}>
         {label}
       </Text>
+      {!compact ? (
+        <Text accessibilityElementsHidden style={styles.choiceChevron}>›</Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function UtilityAction({
+  disabled = false,
+  label,
+  onPress,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress(): void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.utilityAction,
+        pressed && styles.pressedChoice,
+        disabled && styles.disabled,
+      ]}
+    >
+      <Text style={styles.utilityActionText}>{label}</Text>
+      <Text accessibilityElementsHidden style={styles.utilityActionIcon}>+</Text>
+    </Pressable>
+  );
+}
+
+function TextAction({
+  disabled = false,
+  label,
+  onPress,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress(): void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.textAction,
+        pressed && styles.pressedChoice,
+        disabled && styles.disabled,
+      ]}
+    >
+      <Text style={styles.textActionText}>{label}</Text>
     </Pressable>
   );
 }
@@ -385,18 +442,44 @@ function sentenceCase(value: string): string {
 }
 
 const styles = StyleSheet.create({
-  choiceList: { gap: spacing.sm },
-  choice: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+  flowSurface: {
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  resultSurface: {
+    backgroundColor: colors.primarySoft,
+    borderLeftColor: colors.primary,
+    borderLeftWidth: 4,
     borderRadius: radii.sm,
-    borderWidth: 1,
+    padding: spacing.md,
+  },
+  choiceList: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  choice: {
+    alignItems: "center",
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: spacing.sm,
     justifyContent: "center",
     minHeight: touchTarget,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  compactChoice: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexGrow: 1,
+    minWidth: 72,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  compactChoice: { flexGrow: 1, minWidth: 72 },
   selectedChoice: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
@@ -404,10 +487,13 @@ const styles = StyleSheet.create({
   pressedChoice: { opacity: 0.78 },
   choiceText: {
     color: colors.text,
+    flex: 1,
     fontSize: typography.body,
     fontWeight: "700",
-    textAlign: "center",
+    textAlign: "left",
   },
+  choiceChevron: { color: colors.primary, fontSize: 26, fontWeight: "700" },
+  compactChoiceText: { flex: 0, textAlign: "center" },
   selectedChoiceText: { color: "#FFFFFF" },
   inputLabel: {
     color: colors.text,
@@ -436,7 +522,41 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.sm,
   },
-  actionGroup: { gap: spacing.sm },
+  utilityActions: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  utilityAction: {
+    alignItems: "center",
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: touchTarget,
+    paddingVertical: spacing.sm,
+  },
+  utilityActionText: {
+    color: colors.text,
+    flex: 1,
+    fontSize: typography.small,
+    fontWeight: "700",
+  },
+  utilityActionIcon: { color: colors.primary, fontSize: 22, fontWeight: "800" },
+  textAction: {
+    alignItems: "center",
+    alignSelf: "center",
+    justifyContent: "center",
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.md,
+  },
+  textActionText: {
+    color: colors.primary,
+    fontSize: typography.small,
+    fontWeight: "800",
+  },
+  disabled: { opacity: 0.5 },
   notice: {
     color: colors.primaryPressed,
     fontSize: typography.small,
