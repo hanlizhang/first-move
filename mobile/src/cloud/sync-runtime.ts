@@ -132,6 +132,7 @@ export interface MobileSyncRuntimeDependencies {
     hydratedAt: string,
   ): Promise<void>;
   applyWorkingState(state: AppState, dailyPlans?: DailyPlanRecord[]): void;
+  presentConfirmedTransition?(before: AppState, after: AppState): void;
   setCloudState(state: CloudHydrationState): void;
 }
 
@@ -682,7 +683,9 @@ export class MobileSyncRuntime {
     }
   }
 
-  private async flushPending(): Promise<void> {
+  private async flushPending(
+    presentationBefore?: AppState,
+  ): Promise<void> {
     if (!this.canWrite() || !this.record || this.record.pending.length === 0) return;
     if (!this.dependencies.online()) {
       this.setSnapshot({
@@ -705,6 +708,7 @@ export class MobileSyncRuntime {
 
     while (this.record.pending.length > 0) {
       const mutation = this.record.pending[0]!;
+      presentationBefore ??= mutation.state;
       let response: { data: unknown; error: unknown | null } | undefined;
       try {
         response = await this.authorizedRpc(SYNC_CLOUD_WORKSPACE_RPC, {
@@ -782,7 +786,7 @@ export class MobileSyncRuntime {
     await this.mutationTail;
     if (!this.isCurrent() || !this.record) return;
     if (this.record.pending.length > 0) {
-      await this.flushPending();
+      await this.flushPending(presentationBefore);
       return;
     }
     if (refreshAfterEconomicRejection) {
@@ -790,7 +794,20 @@ export class MobileSyncRuntime {
       if (!refreshed || !this.isCurrent()) return;
       latestWorkspace = refreshed;
     }
-    if (latestWorkspace) await this.applyValidatedWorkspace(latestWorkspace);
+    if (latestWorkspace) {
+      await this.applyValidatedWorkspace(latestWorkspace);
+      if (!this.isCurrent()) return;
+      try {
+        if (presentationBefore) {
+          this.dependencies.presentConfirmedTransition?.(
+            presentationBefore,
+            latestWorkspace.state,
+          );
+        }
+      } catch {
+        // Presentation can never affect a confirmed mutation or canonical state.
+      }
+    }
     await this.markSuccess();
   }
 

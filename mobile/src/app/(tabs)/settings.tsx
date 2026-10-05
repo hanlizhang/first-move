@@ -1,6 +1,7 @@
 import { AccountPanel } from "../../components/account-panel.tsx";
 import { AccountDeletionPanel } from "../../components/account-deletion-panel.tsx";
 import { AiAccessPanel } from "../../components/ai-access-panel.tsx";
+import { CelebrationQaPanel } from "../../components/celebration-qa-panel.tsx";
 import { LegalLinksPanel } from "../../components/legal-links-panel.tsx";
 import { SubscriptionPanel } from "../../components/subscription-panel.tsx";
 import { Body, Card, Heading, Label, Screen } from "../../components/ui.tsx";
@@ -17,6 +18,7 @@ export default function SettingsScreen() {
       <SubscriptionPanel />
       <AccountDeletionPanel />
       <AiAccessPanel />
+      {__DEV__ ? <CelebrationQaPanel /> : null}
       <Card>
         <Label>Privacy</Label>
         <Heading>Your private data stays private</Heading>

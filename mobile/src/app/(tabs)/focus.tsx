@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
 import { useFirstMoveApp } from "../../app-state/app-provider.tsx";
+import { useCelebrations } from "../../components/celebration-provider.tsx";
 import {
   Body,
   Card,
@@ -60,6 +61,7 @@ import {
 } from "../../theme/tokens.ts";
 
 export default function FocusScreen() {
+  const { presentFocusCompletion } = useCelebrations();
   const {
     localWorkspace,
     localWorkspaceMessage,
@@ -111,6 +113,7 @@ export default function FocusScreen() {
             (candidate) => candidate.id === session.id,
           );
           if (completed?.status === "completed") {
+            presentFocusCompletion(completed);
             setNotice("Session complete and saved automatically.");
           } else {
             completionRequested.current = undefined;
@@ -124,7 +127,12 @@ export default function FocusScreen() {
       clearTimeout(initialTick);
       clearInterval(interval);
     };
-  }, [openSession, updateLocalWorkspace, workspaceEditable]);
+  }, [
+    openSession,
+    presentFocusCompletion,
+    updateLocalWorkspace,
+    workspaceEditable,
+  ]);
 
   if (localWorkspaceStatus === "loading") {
     return (
@@ -260,13 +268,24 @@ export default function FocusScreen() {
     setSaving(true);
     setNotice("");
     let changed = false;
+    let closedSession: ActivitySession | undefined;
     const next = await updateLocalWorkspace((state) => {
+      const previousOpenSession = getOpenSession(state);
       const updated = recipe(state, current);
       changed = updated !== state;
+      if (changed && previousOpenSession) {
+        const candidate = updated.sessions.find(
+          (session) => session.id === previousOpenSession.id,
+        );
+        if (candidate?.status === "completed" || candidate?.status === "stopped") {
+          closedSession = candidate;
+        }
+      }
       return updated;
     });
     setSaving(false);
     if (next && changed) {
+      if (closedSession) presentFocusCompletion(closedSession);
       setNotice(
         typeof successNotice === "string" ? successNotice : successNotice(next),
       );

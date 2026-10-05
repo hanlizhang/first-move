@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
   type RefObject,
 } from "react";
 import { useFocusEffect } from "expo-router";
@@ -89,6 +88,7 @@ import { colors, radii, spacing, touchTarget, typography } from "../../theme/tok
 
 type CatSection = "room" | "store";
 type CatScene = "room" | "garden";
+type CatInteractionCategory = "care" | "play" | "relax";
 type CatTargetVisual = "wand" | "yarn" | "mouse" | "butterfly";
 type CatActiveAction =
   | CatInteractionSequence
@@ -1377,7 +1377,15 @@ function CatRoom({
   const available = catInteractionAvailability(ownedItemIds, room.selectedFurniture?.id);
   const { visual } = interactions;
   const garden = visual.scene === "garden";
-  const furnitureInteractionAvailable = available.scratch || available.perch || available.tree;
+  const [expandedCategory, setExpandedCategory] = useState<CatInteractionCategory>();
+  const playInteractionAvailable =
+    available.yarn ||
+    available.mouse ||
+    available.wand ||
+    available.scratch ||
+    available.highFive ||
+    available.pawShake ||
+    (available.butterfly && garden);
   const previewSafeEconomicDisabled = previewActive ? false : economicWriteDisabled;
   const beginVisualCommand = (command: () => void) => {
     onVisualCommandStart();
@@ -1482,49 +1490,78 @@ function CatRoom({
         </View>
       </View>
 
-      <Card>
+      <View style={styles.companionSection}>
         <Text style={styles.cardTitle}>Spend time together</Text>
-        <ActionGroup label="Kitten moments">
-          <ActionButton disabled={transientInteractionDisabled} label="Sit together" onPress={() => beginVisualCommand(interactions.sitTogether)} />
-          <ActionButton disabled={transientInteractionDisabled} label="Explore room" onPress={() => beginVisualCommand(interactions.exploreRoom)} />
-          <ActionButton
-            disabled={transientInteractionDisabled}
-            label="Nap"
-            onPress={() => beginVisualCommand(() => interactions.nap(room.selectedFurniture?.id))}
+        <Body muted>Choose a moment with your kitten.</Body>
+        <View style={styles.categoryRow}>
+          <InteractionCategoryButton
+            expanded={expandedCategory === "care"}
+            label="Care"
+            onPress={() => setExpandedCategory((current) => current === "care" ? undefined : "care")}
+            summary={room.ownedFood.length > 0 ? "Sit or feed" : "Sit together"}
           />
-        </ActionGroup>
-        {room.ownedFood.length > 0 ? (
-          <ActionGroup label="Food">
-            {room.ownedFood.map(({ item, quantity }) => (
-              <ActionButton
-                disabled={previewSafeEconomicDisabled}
-                key={item.id}
-                label={`Feed ${item.name} · ${quantity}`}
-                onPress={() => beginVisualCommand(() => onFeed(item))}
-              />
-            ))}
-          </ActionGroup>
-        ) : (
-          <Body muted>Food you buy will appear here.</Body>
-        )}
-        {available.yarn || available.mouse || available.wand ? (
-          <ActionGroup label="Toys">
+          {playInteractionAvailable ? (
+            <InteractionCategoryButton
+              expanded={expandedCategory === "play"}
+              label="Play"
+              onPress={() => setExpandedCategory((current) => current === "play" ? undefined : "play")}
+              summary="Toys & tricks"
+            />
+          ) : null}
+          <InteractionCategoryButton
+            expanded={expandedCategory === "relax"}
+            label="Relax"
+            onPress={() => setExpandedCategory((current) => current === "relax" ? undefined : "relax")}
+            summary={garden ? "Garden active" : "Nap & explore"}
+          />
+        </View>
+
+        {expandedCategory === "care" ? (
+          <View accessibilityLabel="Care interactions" style={styles.interactionPanel}>
+            <Text accessibilityRole="header" style={styles.interactionPanelTitle}>Care</Text>
+            <CompanionActionButton
+              disabled={transientInteractionDisabled}
+              label="Sit together"
+              onPress={() => beginVisualCommand(interactions.sitTogether)}
+            />
+            {room.ownedFood.length > 0 ? (
+              <View style={styles.interactionSubgroup}>
+                <Text style={styles.interactionSubheading}>Feed</Text>
+                <Text style={styles.interactionHelp}>Uses one owned food. Current quantities are shown.</Text>
+                {room.ownedFood.map(({ item, quantity }) => (
+                  <CompanionActionButton
+                    disabled={previewSafeEconomicDisabled}
+                    key={item.id}
+                    label={`Feed ${item.name} · ${quantity}`}
+                    onPress={() => beginVisualCommand(() => onFeed(item))}
+                  />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.interactionHelp}>Food you buy will appear here.</Text>
+            )}
+          </View>
+        ) : null}
+
+        {expandedCategory === "play" && playInteractionAvailable ? (
+          <View accessibilityLabel="Play interactions" style={styles.interactionPanel}>
+            <Text accessibilityRole="header" style={styles.interactionPanelTitle}>Play</Text>
             {available.yarn ? (
-              <ActionButton
+              <CompanionActionButton
                 disabled={transientInteractionDisabled}
                 label="Play with yarn"
                 onPress={() => beginVisualCommand(() => interactions.playSequence("yarn"))}
               />
             ) : null}
             {available.mouse ? (
-              <ActionButton
+              <CompanionActionButton
                 disabled={transientInteractionDisabled}
                 label="Chase toy mouse"
                 onPress={() => beginVisualCommand(() => interactions.playSequence("mouse"))}
               />
             ) : null}
             {available.wand ? (
-              <ActionButton
+              <CompanionActionButton
                 disabled={transientInteractionDisabled}
                 label={visual.action === "wand" ? "End wand play" : "Play with teaser wand"}
                 onPress={() => {
@@ -1533,76 +1570,97 @@ function CatRoom({
                 }}
               />
             ) : null}
-          </ActionGroup>
-        ) : null}
-        {furnitureInteractionAvailable ? (
-          <ActionGroup label="Furniture moments">
             {available.scratch ? (
-              <ActionButton
+              <CompanionActionButton
                 disabled={transientInteractionDisabled}
                 label="Scratch"
                 onPress={() => beginVisualCommand(() => interactions.playSequence("scratch"))}
               />
             ) : null}
+            {available.highFive ? (
+              <CompanionActionButton
+                disabled={transientInteractionDisabled}
+                label="High-five"
+                onPress={() => beginVisualCommand(() => interactions.playSequence("high-five"))}
+              />
+            ) : null}
+            {available.pawShake ? (
+              <CompanionActionButton
+                disabled={transientInteractionDisabled}
+                label="Paw shake"
+                onPress={() => beginVisualCommand(() => interactions.playSequence("paw-shake"))}
+              />
+            ) : null}
+            {available.butterfly && garden ? (
+              <CompanionActionButton
+                disabled={transientInteractionDisabled}
+                label="Follow butterfly"
+                onPress={() => beginVisualCommand(() => interactions.playSequence("butterfly"))}
+              />
+            ) : null}
+          </View>
+        ) : null}
+
+        {expandedCategory === "relax" ? (
+          <View accessibilityLabel="Relax and explore interactions" style={styles.interactionPanel}>
+            <Text accessibilityRole="header" style={styles.interactionPanelTitle}>Relax & explore</Text>
+            <CompanionActionButton
+              disabled={transientInteractionDisabled}
+              label="Nap"
+              onPress={() => beginVisualCommand(() => interactions.nap(room.selectedFurniture?.id))}
+            />
+            <CompanionActionButton
+              disabled={transientInteractionDisabled}
+              label="Explore room"
+              onPress={() => beginVisualCommand(interactions.exploreRoom)}
+            />
             {available.perch ? (
-              <ActionButton
+              <CompanionActionButton
                 disabled={transientInteractionDisabled}
                 label="Watch from perch"
                 onPress={() => beginVisualCommand(() => interactions.playSequence("perch"))}
               />
             ) : null}
             {available.tree ? (
-              <ActionButton
+              <CompanionActionButton
                 disabled={transientInteractionDisabled}
                 label="Climb / perch"
                 onPress={() => beginVisualCommand(() => interactions.playSequence("tree"))}
               />
             ) : null}
-          </ActionGroup>
-        ) : null}
-        {available.highFive || available.pawShake || available.butterfly || available.garden ? (
-          <ActionGroup label="Tricks & adventures">
-            {available.highFive ? (
-              <ActionButton disabled={transientInteractionDisabled} label="High-five" onPress={() => beginVisualCommand(() => interactions.playSequence("high-five"))} />
-            ) : null}
-            {available.pawShake ? (
-              <ActionButton disabled={transientInteractionDisabled} label="Paw shake" onPress={() => beginVisualCommand(() => interactions.playSequence("paw-shake"))} />
-            ) : null}
             {available.garden ? (
-              <ActionButton
+              <CompanionActionButton
                 disabled={transientInteractionDisabled}
                 label={garden ? "Return to room" : "Visit garden"}
                 onPress={() => beginVisualCommand(garden ? interactions.returnToRoom : interactions.visitGarden)}
               />
             ) : null}
-            {available.butterfly && garden ? (
-              <ActionButton disabled={transientInteractionDisabled} label="Follow butterfly" onPress={() => beginVisualCommand(() => interactions.playSequence("butterfly"))} />
-            ) : null}
-          </ActionGroup>
-        ) : null}
-      </Card>
-
-      <Inventory room={room} />
-
-      {room.ownedFurniture.length > 0 ? (
-        <Card>
-          <Text style={styles.cardTitle}>Room furniture</Text>
-          <Body muted>Choose one owned furnishing to show in the room.</Body>
-          <View style={styles.actionWrap}>
-            {room.ownedFurniture.map(({ item }) => (
-              <ActionButton
-                disabled={previewSafeEconomicDisabled || room.selectedFurniture?.id === item.id}
-                key={item.id}
-                label={room.selectedFurniture?.id === item.id ? `${item.name} · In room` : item.name}
-                onPress={() => onChooseFurniture(item.id)}
-              />
-            ))}
-            {room.selectedFurniture ? (
-              <ActionButton disabled={previewSafeEconomicDisabled} label="Clear furnishing" onPress={() => onChooseFurniture(undefined)} />
+            {room.ownedFurniture.length > 0 ? (
+              <View style={styles.interactionSubgroup}>
+                <Text style={styles.interactionSubheading}>Room furniture</Text>
+                <Text style={styles.interactionHelp}>Choose one owned furnishing to show in the room.</Text>
+                {room.ownedFurniture.map(({ item }) => (
+                  <CompanionActionButton
+                    disabled={previewSafeEconomicDisabled || room.selectedFurniture?.id === item.id}
+                    key={item.id}
+                    label={room.selectedFurniture?.id === item.id ? `${item.name} · In room` : item.name}
+                    onPress={() => onChooseFurniture(item.id)}
+                  />
+                ))}
+                {room.selectedFurniture ? (
+                  <CompanionActionButton
+                    disabled={previewSafeEconomicDisabled}
+                    label="Clear furnishing"
+                    onPress={() => onChooseFurniture(undefined)}
+                  />
+                ) : null}
+              </View>
             ) : null}
           </View>
-        </Card>
-      ) : null}
+        ) : null}
+      </View>
+
+      <Inventory room={room} />
     </>
   );
 }
@@ -1738,10 +1796,6 @@ function Stat({ label, value }: { label: string; value: string }) {
   return <View style={styles.stat}><Text style={styles.statLabel}>{label}</Text><Text style={styles.statValue}>{value}</Text></View>;
 }
 
-function ActionGroup({ children, label }: { children: ReactNode; label: string }) {
-  return <View style={styles.actionGroup}><Text style={styles.actionLabel}>{label}</Text><View style={styles.actionWrap}>{children}</View></View>;
-}
-
 function ActionButton({ disabled, label, onPress }: { disabled?: boolean; label: string; onPress(): void }) {
   return (
     <Pressable
@@ -1751,6 +1805,54 @@ function ActionButton({ disabled, label, onPress }: { disabled?: boolean; label:
       style={({ pressed }) => [styles.actionButton, pressed && styles.pressed, disabled && styles.disabled]}
     >
       <Text style={styles.actionButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function InteractionCategoryButton({
+  expanded,
+  label,
+  onPress,
+  summary,
+}: {
+  expanded: boolean;
+  label: string;
+  onPress(): void;
+  summary: string;
+}) {
+  return (
+    <Pressable
+      accessibilityHint={`Shows ${label} interactions`}
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.interactionCategory,
+        expanded && styles.interactionCategoryExpanded,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text style={[styles.interactionCategoryLabel, expanded && styles.interactionCategoryLabelExpanded]}>
+        {label}
+      </Text>
+      <Text style={[styles.interactionCategorySummary, expanded && styles.interactionCategorySummaryExpanded]}>
+        {summary}
+      </Text>
+    </Pressable>
+  );
+}
+
+function CompanionActionButton({ disabled, label, onPress }: { disabled?: boolean; label: string; onPress(): void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.companionAction, pressed && styles.pressed, disabled && styles.disabled]}
+    >
+      <Text style={styles.companionActionText}>{label}</Text>
+      <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.companionActionArrow}>›</Text>
     </Pressable>
   );
 }
@@ -1996,11 +2098,55 @@ const styles = StyleSheet.create({
   catTreeLowerPost: { backgroundColor: "#C59A6D", borderColor: "#70452B", borderWidth: 3, height: 63, left: 76, position: "absolute", top: 92, width: 20 },
   catTreeBase: { backgroundColor: "#8F5C32", borderRadius: 8, bottom: 0, height: 18, left: 16, position: "absolute", width: 110 },
   cardTitle: { color: colors.text, fontSize: typography.heading, fontWeight: "800" },
-  actionGroup: { gap: spacing.sm, marginTop: spacing.sm },
-  actionLabel: { color: colors.textMuted, fontSize: typography.label, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase" },
   actionWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   actionButton: { alignItems: "center", backgroundColor: colors.primarySoft, borderColor: "#C4B5FD", borderRadius: radii.sm, borderWidth: 1, justifyContent: "center", minHeight: touchTarget, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   actionButtonText: { color: colors.primaryPressed, fontSize: typography.small, fontWeight: "800" },
+  companionSection: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  categoryRow: { flexDirection: "row", gap: spacing.sm },
+  interactionCategory: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 66,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  interactionCategoryExpanded: { backgroundColor: colors.primary },
+  interactionCategoryLabel: { color: colors.text, fontSize: typography.body, fontWeight: "900" },
+  interactionCategoryLabelExpanded: { color: "#FFFFFF" },
+  interactionCategorySummary: { color: colors.textMuted, fontSize: typography.label, lineHeight: 16, marginTop: 2 },
+  interactionCategorySummaryExpanded: { color: "#EDE9FE" },
+  interactionPanel: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 0,
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm,
+  },
+  interactionPanelTitle: { color: colors.text, fontSize: typography.body, fontWeight: "900", marginBottom: spacing.xs },
+  interactionSubgroup: { gap: 0, marginTop: spacing.sm },
+  interactionSubheading: { color: colors.text, fontSize: typography.small, fontWeight: "900", marginBottom: 2 },
+  interactionHelp: { color: colors.textMuted, fontSize: typography.small, lineHeight: 19, marginBottom: spacing.xs },
+  companionAction: {
+    alignItems: "center",
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+    minHeight: touchTarget,
+    paddingVertical: spacing.sm,
+  },
+  companionActionText: { color: colors.text, flex: 1, fontSize: typography.body, fontWeight: "700", lineHeight: 22 },
+  companionActionArrow: { color: colors.primary, fontSize: 24, fontWeight: "700" },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.5 },
   inventoryGroup: { gap: spacing.xs },

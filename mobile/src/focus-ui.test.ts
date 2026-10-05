@@ -35,6 +35,19 @@ test("Mobile Focus makes persistence automatic and review optional", () => {
   assert.doesNotMatch(source, /Save session/);
 });
 
+test("Focus completion feedback follows only newly completed or stopped saved sessions", () => {
+  assert.match(source, /useCelebrations/);
+  assert.match(source, /presentFocusCompletion\(completed\)/);
+  assert.match(source, /candidate\?\.status === "completed" \|\| candidate\?\.status === "stopped"/);
+  assert.match(source, /if \(closedSession\) presentFocusCompletion\(closedSession\)/);
+  assert.match(source, /cancelSession\(state, openSession\.id\)/);
+  assert.doesNotMatch(
+    source.slice(source.indexOf("onCancel={() =>"), source.indexOf("onPause={() =>")),
+    /presentFocusCompletion/,
+  );
+  assert.match(source, /<SessionReview/);
+});
+
 test("Focus links use the current owner workspace without exposing sync internals", () => {
   assert.match(source, /buildFocusLinkOptions\(localWorkspace, today\)/);
   assert.doesNotMatch(source, /canonicalState/);

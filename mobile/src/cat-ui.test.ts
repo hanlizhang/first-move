@@ -85,6 +85,44 @@ test("owned Cat v1B items expose visible, ownership-gated actions", () => {
   assert.match(source, /catInteractionAvailability\(ownedItemIds, room\.selectedFurniture\?\.id\)/);
 });
 
+test("Cat interactions start as accessible Care, Play, and Relax disclosures", () => {
+  assert.match(source, /type CatInteractionCategory = "care" \| "play" \| "relax"/);
+  assert.match(source, /const \[expandedCategory, setExpandedCategory\] = useState<CatInteractionCategory>\(\)/);
+  for (const category of ["Care", "Play", "Relax"]) {
+    assert.match(source, new RegExp(`label="${category}"`));
+  }
+  assert.match(source, /accessibilityState=\{\{ expanded \}\}/);
+  assert.match(source, /expandedCategory === "care"/);
+  assert.match(source, /expandedCategory === "play" && playInteractionAvailable/);
+  assert.match(source, /expandedCategory === "relax"/);
+  assert.doesNotMatch(source, /<ActionGroup|function ActionGroup|Kitten moments|Tricks & adventures/);
+});
+
+test("each Cat category directly exposes its owned actions without another disclosure layer", () => {
+  const care = source.slice(
+    source.indexOf('{expandedCategory === "care" ? ('),
+    source.indexOf('{expandedCategory === "play" && playInteractionAvailable ? ('),
+  );
+  const play = source.slice(
+    source.indexOf('{expandedCategory === "play" && playInteractionAvailable ? ('),
+    source.indexOf('{expandedCategory === "relax" ? ('),
+  );
+  const relax = source.slice(
+    source.indexOf('{expandedCategory === "relax" ? ('),
+    source.indexOf('<Inventory room={room}'),
+  );
+
+  assert.match(care, /Sit together/);
+  assert.match(care, /room\.ownedFood\.map/);
+  for (const label of ["Play with yarn", "Chase toy mouse", "Play with teaser wand", "Scratch", "High-five", "Paw shake", "Follow butterfly"]) {
+    assert.match(play, new RegExp(label));
+  }
+  for (const label of ["Nap", "Explore room", "Watch from perch", "Climb \/ perch", "Visit garden", "Return to room", "Room furniture", "Clear furnishing"]) {
+    assert.match(relax, new RegExp(label));
+  }
+  assert.doesNotMatch(`${care}\n${play}\n${relax}`, /InteractionCategoryButton/);
+});
+
 test("transient Cat poses do not share the authenticated economic-write disable state", () => {
   assert.match(source, /pendingAuthenticatedWrite/);
   assert.match(source, /transientInteractionDisabled/);
@@ -117,9 +155,30 @@ test("transient Cat poses do not share the authenticated economic-write disable 
     /disabled=\{transientInteractionDisabled\}\s+label=\{garden \? "Return to room" : "Visit garden"\}/,
   );
 
-  assert.match(source, /disabled=\{previewSafeEconomicDisabled\}\s+key=\{item\.id\}\s+label=\{`Feed/);
+  assert.match(source, /<CompanionActionButton\s+disabled=\{previewSafeEconomicDisabled\}\s+key=\{item\.id\}\s+label=\{`Feed/);
   assert.match(source, /disabled=\{previewSafeEconomicDisabled \|\| room\.selectedFurniture/);
   assert.match(source, /<CatStore\s+disabled=\{economicWriteDisabled\}/);
+});
+
+test("food and furniture keep write-sensitive feedback separate from transient companion actions", () => {
+  const companionControls = source.slice(
+    source.indexOf('<View style={styles.companionSection}>'),
+    source.indexOf('<Inventory room={room}'),
+  );
+  assert.match(companionControls, /Current quantities are shown/);
+  assert.match(companionControls, /label=\{`Feed \$\{item\.name\} · \$\{quantity\}`\}/);
+  assert.match(companionControls, /disabled=\{previewSafeEconomicDisabled\}/);
+  assert.match(companionControls, /disabled=\{previewSafeEconomicDisabled \|\| room\.selectedFurniture\?\.id === item\.id\}/);
+  assert.match(companionControls, /disabled=\{transientInteractionDisabled\}/);
+  assert.match(source, /accessibilityState=\{\{ disabled: Boolean\(disabled\) \}\}/);
+});
+
+test("garden controls remain grouped and scene-aware", () => {
+  assert.match(source, /summary=\{garden \? "Garden active" : "Nap & explore"\}/);
+  assert.match(source, /label=\{garden \? "Return to room" : "Visit garden"\}/);
+  assert.match(source, /available\.butterfly && garden/);
+  assert.match(source, /label="Follow butterfly"/);
+  assert.match(source, /beginVisualCommand\(garden \? interactions\.returnToRoom : interactions\.visitGarden\)/);
 });
 
 test("Mobile Cat QA controls are __DEV__-only and feed the production room view", () => {

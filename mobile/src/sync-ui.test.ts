@@ -39,7 +39,7 @@ test("Mobile exposes honest authenticated sync states and manual retry", () => {
   assert.match(provider, /syncRuntimeRef\.current\?\.retry\(\)/);
   assert.match(provider, /runtime\.startFresh\(\)/);
   assert.match(provider, /owner\.kind === "guest"/);
-  assert.match(provider, /syncRuntimeRef\.current\?\.mutate\(recipe\)/);
+  assert.match(provider, /syncRuntimeRef\.current\?\.mutate\(trackedRecipe\)/);
   assert.match(provider, /useNetworkState\(\)/);
   assert.match(provider, /isConnected === false/);
   assert.match(provider, /isInternetReachable === false/);

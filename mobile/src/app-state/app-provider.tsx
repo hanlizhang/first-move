@@ -105,6 +105,7 @@ import {
   createWorkspaceStartupController,
   type WorkspaceStartupResult,
 } from "./workspace-startup.ts";
+import { useCelebrations } from "../components/celebration-provider.tsx";
 
 type LocalWorkspaceStatus = "loading" | "ready" | "error";
 
@@ -164,6 +165,7 @@ const defaultSyncDependencies = defaultMobileSyncDependencies();
 const guestWorkspaceKey = localWorkspaceKey({ kind: "guest" });
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { presentWorkspaceTransition, setCelebrationOwner } = useCelebrations();
   const networkState = useNetworkState();
   const networkKnownOffline =
     networkState.isConnected === false ||
@@ -541,6 +543,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [activeLocalOwnerKey]);
 
   useEffect(() => {
+    setCelebrationOwner(activeLocalOwnerKey);
+  }, [activeLocalOwnerKey, setCelebrationOwner]);
+
+  useEffect(() => {
     const wasOffline = previousNetworkKnownOfflineRef.current;
     networkKnownOfflineRef.current = networkKnownOffline;
     previousNetworkKnownOfflineRef.current = networkKnownOffline;
@@ -691,6 +697,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLocalWorkspaceStatus("ready");
         setLocalWorkspaceMessage(undefined);
       },
+      presentConfirmedTransition(before, after) {
+        if (isCurrent()) {
+          presentWorkspaceTransition(ownerKey, before, after);
+        }
+      },
       setCloudState(state) {
         if (isCurrent()) setCloud(state);
       },
@@ -707,7 +718,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       runtime.dispose();
       if (syncRuntimeRef.current === runtime) syncRuntimeRef.current = undefined;
     };
-  }, [auth, resolveClient]);
+  }, [auth, presentWorkspaceTransition, resolveClient]);
 
   const continueAsGuest = useCallback(() => {
     enterGuestBoundary();
@@ -969,11 +980,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!localOwner || !activeLocalOwnerKey) return undefined;
       const owner = localOwner;
       const ownerKey = activeLocalOwnerKey;
+      let transitionBefore: AppState | undefined;
+      const trackedRecipe = (current: AppState) => {
+        transitionBefore ??= current;
+        return recipe(current);
+      };
       try {
         const next =
           owner.kind === "guest"
-            ? await repository.updateLocalWorkspace(owner, recipe)
-            : await syncRuntimeRef.current?.mutate(recipe);
+            ? await repository.updateLocalWorkspace(owner, trackedRecipe)
+            : await syncRuntimeRef.current?.mutate(trackedRecipe);
         if (!next) {
           if (activeLocalOwnerKeyRef.current === ownerKey) {
             setLocalWorkspaceMessage(
@@ -987,6 +1003,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLoadedLocalOwnerKey(ownerKey);
         setLocalWorkspaceStatus("ready");
         setLocalWorkspaceMessage(undefined);
+        if (owner.kind === "guest" && transitionBefore) {
+          presentWorkspaceTransition(ownerKey, transitionBefore, next);
+        }
         return next;
       } catch {
         if (activeLocalOwnerKeyRef.current !== ownerKey) return undefined;
@@ -997,7 +1016,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return undefined;
       }
     },
-    [activeLocalOwnerKey, localOwner],
+    [activeLocalOwnerKey, localOwner, presentWorkspaceTransition],
   );
 
   const buyCatItem = useCallback(

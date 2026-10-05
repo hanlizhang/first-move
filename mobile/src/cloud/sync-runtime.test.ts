@@ -408,6 +408,7 @@ function harness(options: {
   cloud?: FakeCloud;
   userId?: string;
   online?: boolean;
+  presentationThrows?: boolean;
 } = {}) {
   const store = options.store ?? memoryStore();
   const cloud = options.cloud ?? new FakeCloud();
@@ -419,6 +420,7 @@ function harness(options: {
   let mutationIndex = 0;
   const workingStates: AppState[] = [];
   const canonicalStates: AppState[] = [];
+  const confirmedTransitions: { before: AppState; after: AppState }[] = [];
   const cloudStates: unknown[] = [];
   const client: MobileSyncClient = {
     auth: {
@@ -451,6 +453,13 @@ function harness(options: {
     applyWorkingState(state) {
       workingStates.push(structuredClone(state));
     },
+    presentConfirmedTransition(before, after) {
+      confirmedTransitions.push({
+        before: structuredClone(before),
+        after: structuredClone(after),
+      });
+      if (options.presentationThrows) throw new Error("presentation failed");
+    },
     setCloudState(state) {
       cloudStates.push(state);
     },
@@ -463,6 +472,7 @@ function harness(options: {
     client,
     cloud,
     cloudStates,
+    confirmedTransitions,
     current: (value: boolean) => {
       current = value;
     },
@@ -820,6 +830,34 @@ test("a verified toothbrush check receives the existing server-derived Morning r
   assert.equal(canonical.morningChecks.length, 1);
   assert.equal(canonical.rewardEvents[0]?.source, "morning");
   assert.equal(canonical.progress.points, 5);
+  assert.equal(fixture.confirmedTransitions.length, 1);
+  assert.equal(fixture.confirmedTransitions[0]?.before.rewardEvents.length, 0);
+  assert.equal(
+    fixture.confirmedTransitions[0]?.after.rewardEvents[0]?.source,
+    "morning",
+  );
+});
+
+test("presentation failure cannot change confirmed sync or reward semantics", async () => {
+  const fixture = harness({ presentationThrows: true });
+  await fixture.runtime.start();
+  fixture.online(false);
+  await fixture.runtime.mutate((state) =>
+    completeMorningCheck(state, TODAY, "camera", "live", {
+      clock: () => NOW,
+    }),
+  );
+
+  fixture.online(true);
+  await fixture.runtime.retry();
+
+  const canonical = await fixture.repository.loadLocalWorkspace({
+    kind: "account",
+    userId: USER_A,
+  });
+  assert.equal(fixture.runtime.getSnapshot().status, "synced");
+  assert.equal((await fixture.queue.load(USER_A)).pending.length, 0);
+  assert.equal(canonical.rewardEvents[0]?.source, "morning");
 });
 
 test("pending Intent and complete Session lifecycle/review changes are queued parent-first", async () => {
