@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useFirstMoveApp } from "../../app-state/app-provider.tsx";
 import { useCelebrations } from "../../components/celebration-provider.tsx";
@@ -16,6 +25,7 @@ import {
 } from "../../components/ui.tsx";
 import { FocusLinkPicker } from "../../components/focus-link-picker.tsx";
 import { PixelKitten } from "../../components/pixel-kitten.tsx";
+import { PixelFocusRing } from "../../components/pixel-scenes.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import { getPendingIntent } from "../../domain/app-state.ts";
 import {
@@ -34,7 +44,6 @@ import {
   type ActivitySession,
   type AppState,
   type Direction,
-  type SessionStatus,
 } from "../../domain/models.ts";
 import {
   cancelSession,
@@ -62,6 +71,8 @@ import {
 
 export default function FocusScreen() {
   const { presentFocusCompletion } = useCelebrations();
+  const { width: viewportWidth } = useWindowDimensions();
+  const { visualPreview } = useLocalSearchParams<{ visualPreview?: string }>();
   const {
     localWorkspace,
     localWorkspaceMessage,
@@ -72,6 +83,20 @@ export default function FocusScreen() {
   const [nowMs, setNowMs] = useState(Date.now);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [visualPreviewSession] = useState<ActivitySession>(() => {
+    const startedAt = new Date().toISOString();
+    return {
+      accumulatedElapsedMs: 0,
+      direction: "Daily Life",
+      id: "visual-preview-running-focus",
+      label: "One small step",
+      lastResumedAt: startedAt,
+      mode: "countdown",
+      startedAt,
+      status: "running",
+      targetDurationMinutes: 25,
+    };
+  });
   const completionRequested = useRef<string | undefined>(undefined);
   const today = useCurrentLocalDate();
   const linkOptions = useMemo(
@@ -85,6 +110,11 @@ export default function FocusScreen() {
   const pendingIntent = getPendingIntent(localWorkspace);
   const openSession = getOpenSession(localWorkspace);
   const latestClosedSession = getLatestClosedSession(localWorkspace);
+  const focusParentWidth = Math.min(viewportWidth - spacing.md * 2, 420);
+  const focusRingSize = Math.min(
+    264,
+    Math.max(220, Math.round(focusParentWidth * 0.65)),
+  );
 
   useEffect(() => {
     if (openSession?.status !== "running") {
@@ -142,16 +172,26 @@ export default function FocusScreen() {
     );
   }
 
+  if (__DEV__ && visualPreview === "running") {
+    return (
+      <FocusPage>
+        <ActiveSessionCard
+          parentWidth={focusParentWidth}
+          ringSize={focusRingSize}
+          nowMs={new Date(visualPreviewSession.startedAt).getTime() + 1_000}
+          onCancel={() => undefined}
+          onPause={() => undefined}
+          onResume={() => undefined}
+          onStop={() => undefined}
+          saving={false}
+          session={visualPreviewSession}
+        />
+      </FocusPage>
+    );
+  }
+
   return (
-    <Screen
-      eyebrow="Focus"
-      title={focusTitle(openSession?.status, latestClosedSession?.status)}
-      description={
-        openSession
-          ? undefined
-          : "Choose a countdown or stopwatch, or continue a pending First Move."
-      }
-    >
+    <FocusPage>
       {localWorkspaceMessage ? (
         <Card tone="danger">
           <Body>{localWorkspaceMessage}</Body>
@@ -165,6 +205,8 @@ export default function FocusScreen() {
 
       {openSession ? (
         <ActiveSessionCard
+          parentWidth={focusParentWidth}
+          ringSize={focusRingSize}
           nowMs={nowMs}
           onCancel={() => {
             const assisted = Boolean(openSession.linkedIntentId);
@@ -202,18 +244,6 @@ export default function FocusScreen() {
         />
       ) : (
         <>
-          {latestClosedSession ? (
-            <SessionReview
-              key={latestClosedSession.id}
-              linkOptions={linkOptions}
-              references={references}
-              session={latestClosedSession}
-              state={localWorkspace}
-              updateLocalWorkspace={updateLocalWorkspace}
-              workspaceEditable={workspaceEditable}
-            />
-          ) : null}
-
           {pendingIntent ? (
             <PendingFirstMoveCard
               disabled={saving || !workspaceEditable}
@@ -233,6 +263,8 @@ export default function FocusScreen() {
           <FocusSetup
             disabled={saving || !workspaceEditable}
             linkOptions={linkOptions}
+            parentWidth={focusParentWidth}
+            ringSize={focusRingSize}
             onStartCountdown={(input) =>
               void saveChange(
                 (state, current) =>
@@ -248,10 +280,21 @@ export default function FocusScreen() {
               )
             }
           />
+          {latestClosedSession ? (
+            <SessionReview
+              key={latestClosedSession.id}
+              linkOptions={linkOptions}
+              references={references}
+              session={latestClosedSession}
+              state={localWorkspace}
+              updateLocalWorkspace={updateLocalWorkspace}
+              workspaceEditable={workspaceEditable}
+            />
+          ) : null}
         </>
       )}
 
-    </Screen>
+    </FocusPage>
   );
 
   async function saveChange(
@@ -291,12 +334,30 @@ export default function FocusScreen() {
   }
 }
 
+function FocusPage({ children }: { children: ReactNode }) {
+  return (
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.focusSafeArea}>
+      <ScrollView
+        contentContainerStyle={styles.focusPageContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text accessibilityRole="header" style={styles.focusPageTitle}>
+          Focus Time
+        </Text>
+        <View style={styles.focusPageBody}>{children}</View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 function ActiveSessionCard({
   nowMs,
   onCancel,
   onPause,
   onResume,
   onStop,
+  parentWidth,
+  ringSize,
   saving,
   session,
 }: {
@@ -305,6 +366,8 @@ function ActiveSessionCard({
   onPause(): void;
   onResume(): void;
   onStop(): void;
+  parentWidth: number;
+  ringSize: number;
   saving: boolean;
   session: ActivitySession;
 }) {
@@ -318,26 +381,18 @@ function ActiveSessionCard({
       : undefined;
 
   return (
-    <View style={styles.activeSessionCard}>
-      <View style={styles.timerPresentation}>
-        <FocusRing progress={progress} />
-        <View style={styles.timerContent}>
-          <Text style={styles.timerStatus}>
-            {session.mode === "countdown" ? "Countdown" : "Stopwatch"} · {session.status}
-          </Text>
-          <Text
-            adjustsFontSizeToFit
-            accessibilityLabel={`${formatDuration(displayMs)} ${
-              session.mode === "countdown" ? "remaining" : "elapsed"
-            }`}
-            accessibilityLiveRegion="polite"
-            minimumFontScale={0.8}
-            numberOfLines={1}
-            style={styles.timer}
-          >
-            {formatDuration(displayMs)}
-          </Text>
-        </View>
+    <View style={[styles.activeSessionCard, { width: parentWidth }]}>
+      <View style={[styles.timerPresentation, { height: ringSize, width: "100%" }]}>
+        <PixelFocusRing
+          accessibilityLabel={`${formatDuration(displayMs)} ${
+            session.mode === "countdown" ? "remaining" : "elapsed"
+          }`}
+          label={session.mode === "countdown" ? "Focus" : "Stopwatch"}
+          live
+          progress={progress}
+          size={ringSize}
+          value={formatDuration(displayMs)}
+        />
       </View>
       <View style={styles.sleepingKitten}>
         <PixelKitten
@@ -399,45 +454,6 @@ function ActiveSessionCard({
   );
 }
 
-const FOCUS_RING_SIZE = 232;
-const FOCUS_RING_STROKE = 12;
-const FOCUS_RING_RADIUS = (FOCUS_RING_SIZE - FOCUS_RING_STROKE) / 2;
-const FOCUS_RING_CIRCUMFERENCE = 2 * Math.PI * FOCUS_RING_RADIUS;
-
-function FocusRing({ progress }: { progress?: number }) {
-  return (
-    <Svg
-      accessible={false}
-      height={FOCUS_RING_SIZE}
-      viewBox={`0 0 ${FOCUS_RING_SIZE} ${FOCUS_RING_SIZE}`}
-      width={FOCUS_RING_SIZE}
-    >
-      <Circle
-        cx={FOCUS_RING_SIZE / 2}
-        cy={FOCUS_RING_SIZE / 2}
-        fill="none"
-        r={FOCUS_RING_RADIUS}
-        stroke="#EFCBA2"
-        strokeWidth={FOCUS_RING_STROKE}
-      />
-      {progress !== undefined && progress > 0 ? (
-        <Circle
-          cx={FOCUS_RING_SIZE / 2}
-          cy={FOCUS_RING_SIZE / 2}
-          fill="none"
-          r={FOCUS_RING_RADIUS}
-          stroke="#8B5A35"
-          strokeDasharray={`${FOCUS_RING_CIRCUMFERENCE} ${FOCUS_RING_CIRCUMFERENCE}`}
-          strokeDashoffset={FOCUS_RING_CIRCUMFERENCE * (1 - progress)}
-          strokeLinecap="round"
-          strokeWidth={FOCUS_RING_STROKE}
-          transform={`rotate(-90 ${FOCUS_RING_SIZE / 2} ${FOCUS_RING_SIZE / 2})`}
-        />
-      ) : null}
-    </Svg>
-  );
-}
-
 function countdownProgress(
   targetDurationMinutes: number | undefined,
   remainingMilliseconds: number,
@@ -484,20 +500,22 @@ type FocusSetupMode = "countdown" | "stopwatch";
 function FocusSetup({
   disabled,
   linkOptions,
+  parentWidth,
+  ringSize,
   onStartCountdown,
   onStartStopwatch,
 }: {
   disabled: boolean;
   linkOptions: readonly FocusLinkOption[];
+  parentWidth: number;
+  ringSize: number;
   onStartCountdown(input: Parameters<typeof startCountdown>[1]): void;
   onStartStopwatch(input: Parameters<typeof startStopwatch>[1]): void;
 }) {
   const [mode, setMode] = useState<FocusSetupMode>("countdown");
 
   return (
-    <View style={styles.focusSetup}>
-      <Label>Focus setup</Label>
-      <FocusModeSelector mode={mode} onSelect={setMode} />
+    <View style={[styles.focusSetup, { width: parentWidth }]}>
       <View
         accessibilityElementsHidden={mode !== "countdown"}
         importantForAccessibility={mode === "countdown" ? "auto" : "no-hide-descendants"}
@@ -506,7 +524,10 @@ function FocusSetup({
         <CountdownSetup
           disabled={disabled}
           linkOptions={linkOptions}
+          mode={mode}
+          onModeSelect={setMode}
           onStart={onStartCountdown}
+          ringSize={ringSize}
         />
       </View>
       <View
@@ -517,7 +538,10 @@ function FocusSetup({
         <StopwatchSetup
           disabled={disabled}
           linkOptions={linkOptions}
+          mode={mode}
+          onModeSelect={setMode}
           onStart={onStartStopwatch}
+          ringSize={ringSize}
         />
       </View>
     </View>
@@ -561,11 +585,17 @@ function FocusModeSelector({
 function CountdownSetup({
   disabled,
   linkOptions,
+  mode,
+  onModeSelect,
   onStart,
+  ringSize,
 }: {
   disabled: boolean;
   linkOptions: readonly FocusLinkOption[];
+  mode: FocusSetupMode;
+  onModeSelect(mode: FocusSetupMode): void;
   onStart(input: Parameters<typeof startCountdown>[1]): void;
+  ringSize: number;
 }) {
   const [label, setLabel] = useState("");
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
@@ -573,6 +603,7 @@ function CountdownSetup({
   const [preset, setPreset] = useState<number>(25);
   const [customMinutes, setCustomMinutes] = useState("");
   const [customExpanded, setCustomExpanded] = useState(false);
+  const [customizeExpanded, setCustomizeExpanded] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const customDuration = customMinutes
     ? parseFocusDurationInput(customMinutes)
@@ -590,83 +621,114 @@ function CountdownSetup({
 
   return (
     <View style={styles.setupContent}>
-      <View style={styles.setupIntro}>
-        <Heading>Choose a duration</Heading>
-        <Body muted>Pick a starting point. You can stop whenever you need.</Body>
-      </View>
-      <View accessibilityRole="radiogroup" style={styles.durationChoices}>
-        {FOCUS_COUNTDOWN_PRESETS.map((minutes) => (
-          <ChoiceButton
-            balanced
-            compact
-            key={minutes}
-            label={`${minutes} min`}
-            onPress={() => {
-              setPreset(minutes);
-              setCustomMinutes("");
-              setCustomExpanded(false);
-            }}
-            selected={!customMinutes && preset === minutes}
-          />
-        ))}
-      </View>
-      <DisclosureButton
-        expanded={customExpanded}
-        label={customMinutes && customDuration
-          ? `Custom · ${customDuration} min`
-          : "Custom duration"}
-        onPress={() => setCustomExpanded((current) => !current)}
-      />
-      {customExpanded ? (
-        <View style={styles.customDurationPanel}>
-          <Text style={styles.inputLabel}>Custom minutes</Text>
-          <TextInput
-            accessibilityLabel="Custom countdown minutes"
-            keyboardType="number-pad"
-            maxLength={3}
-            onChangeText={setCustomMinutes}
-            placeholder="1–720"
-            placeholderTextColor={colors.textMuted}
-            style={[styles.textInput, styles.minutesInput]}
-            value={customMinutes}
-          />
-          {customMinutes && customDuration === undefined ? (
-            <Text accessibilityLiveRegion="polite" style={styles.validationText}>
-              Enter a whole number from 1 to 720.
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-      <PrimaryButton
-        accessibilityLabel="Start countdown focus"
-        disabled={disabled || duration === undefined}
-        title="Start Focus"
-        onPress={() => {
-          if (duration === undefined) return;
-          onStart({
-            direction,
-            label: label || undefined,
-            durationMinutes: duration,
-            ...focusLinkFields(linkKey),
-          });
-        }}
-      />
-      <DetailsDisclosure
-        expanded={detailsExpanded}
-        summary={focusDetailsSummary(label, direction, linkKey, linkOptions)}
-        onPress={() => setDetailsExpanded((current) => !current)}
-      >
-        <SetupDetails
-          direction={direction}
-          label={label}
-          linkKey={linkKey}
-          linkOptions={linkOptions}
-          mode="countdown"
-          onDirectionChange={setDirection}
-          onLabelChange={setLabel}
-          onLinkChange={chooseLink}
+      <View style={styles.idleFocusHero}>
+        <PixelFocusRing
+          accessibilityLabel={
+            duration === undefined
+              ? "Custom countdown duration is invalid"
+              : `${duration} minute countdown selected`
+          }
+          label="Focus"
+          size={ringSize}
+          value={duration === undefined ? "--:--" : formatDuration(duration * 60_000)}
         />
-      </DetailsDisclosure>
+        <View style={styles.focusStartButton}>
+          <PrimaryButton
+            accessibilityLabel="Start countdown focus"
+            disabled={disabled || duration === undefined}
+            title="Start Focus"
+            onPress={() => {
+              if (duration === undefined) return;
+              onStart({
+                direction,
+                label: label || undefined,
+                durationMinutes: duration,
+                ...focusLinkFields(linkKey),
+              });
+            }}
+          />
+        </View>
+        <View style={styles.idleSleepingKitten}>
+          <PixelKitten
+            accessibilityLabel="Sleeping pixel kitten beside the Focus ring"
+            pose="sleeping"
+            showFloor={false}
+          />
+        </View>
+      </View>
+      <View style={styles.secondaryConfiguration}>
+        <DisclosureButton
+          expanded={customizeExpanded}
+          label="Customize"
+          onPress={() => setCustomizeExpanded((current) => !current)}
+          summary={duration === undefined ? "Check custom time" : `${duration} min · Countdown`}
+        />
+        {customizeExpanded ? (
+          <View style={styles.customizePanel}>
+            <Text style={styles.configurationLabel}>Duration</Text>
+            <View accessibilityRole="radiogroup" style={styles.durationChoices}>
+              {FOCUS_COUNTDOWN_PRESETS.map((minutes) => (
+                <ChoiceButton
+                  balanced
+                  compact
+                  key={minutes}
+                  label={`${minutes} min`}
+                  onPress={() => {
+                    setPreset(minutes);
+                    setCustomMinutes("");
+                    setCustomExpanded(false);
+                  }}
+                  selected={!customMinutes && preset === minutes}
+                />
+              ))}
+            </View>
+            <DisclosureButton
+              expanded={customExpanded}
+              label="Custom"
+              onPress={() => setCustomExpanded((current) => !current)}
+              summary={customMinutes && customDuration ? `${customDuration} min` : undefined}
+            />
+            {customExpanded ? (
+              <View style={styles.customDurationPanel}>
+                <Text style={styles.inputLabel}>Custom minutes</Text>
+                <TextInput
+                  accessibilityLabel="Custom countdown minutes"
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  onChangeText={setCustomMinutes}
+                  placeholder="1–720"
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.textInput, styles.minutesInput]}
+                  value={customMinutes}
+                />
+                {customMinutes && customDuration === undefined ? (
+                  <Text accessibilityLiveRegion="polite" style={styles.validationText}>
+                    Enter a whole number from 1 to 720.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            <Text style={styles.configurationLabel}>Mode</Text>
+            <FocusModeSelector mode={mode} onSelect={onModeSelect} />
+            <DetailsDisclosure
+              expanded={detailsExpanded}
+              summary={focusDetailsSummary(label, direction, linkKey, linkOptions)}
+              onPress={() => setDetailsExpanded((current) => !current)}
+            >
+              <SetupDetails
+                direction={direction}
+                label={label}
+                linkKey={linkKey}
+                linkOptions={linkOptions}
+                mode="countdown"
+                onDirectionChange={setDirection}
+                onLabelChange={setLabel}
+                onLinkChange={chooseLink}
+              />
+            </DetailsDisclosure>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -674,15 +736,22 @@ function CountdownSetup({
 function StopwatchSetup({
   disabled,
   linkOptions,
+  mode,
+  onModeSelect,
   onStart,
+  ringSize,
 }: {
   disabled: boolean;
   linkOptions: readonly FocusLinkOption[];
+  mode: FocusSetupMode;
+  onModeSelect(mode: FocusSetupMode): void;
   onStart(input: Parameters<typeof startStopwatch>[1]): void;
+  ringSize: number;
 }) {
   const [label, setLabel] = useState("");
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
   const [linkKey, setLinkKey] = useState("");
+  const [customizeExpanded, setCustomizeExpanded] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   function chooseLink(key: string): void {
@@ -696,38 +765,65 @@ function StopwatchSetup({
 
   return (
     <View style={styles.setupContent}>
-      <View style={styles.setupIntro}>
-        <Heading>Open-ended focus</Heading>
-        <Body muted>Start now and stop when the activity is finished.</Body>
-      </View>
-      <PrimaryButton
-        accessibilityLabel="Start stopwatch focus"
-        disabled={disabled}
-        title="Start Focus"
-        onPress={() =>
-          onStart({
-            direction,
-            label: label || undefined,
-            ...focusLinkFields(linkKey),
-          })
-        }
-      />
-      <DetailsDisclosure
-        expanded={detailsExpanded}
-        summary={focusDetailsSummary(label, direction, linkKey, linkOptions)}
-        onPress={() => setDetailsExpanded((current) => !current)}
-      >
-        <SetupDetails
-          direction={direction}
-          label={label}
-          linkKey={linkKey}
-          linkOptions={linkOptions}
-          mode="stopwatch"
-          onDirectionChange={setDirection}
-          onLabelChange={setLabel}
-          onLinkChange={chooseLink}
+      <View style={styles.idleFocusHero}>
+        <PixelFocusRing
+          accessibilityLabel="Stopwatch ready at zero minutes"
+          label="Stopwatch"
+          size={ringSize}
+          value="00:00"
         />
-      </DetailsDisclosure>
+        <View style={styles.focusStartButton}>
+          <PrimaryButton
+            accessibilityLabel="Start stopwatch focus"
+            disabled={disabled}
+            title="Start Focus"
+            onPress={() =>
+              onStart({
+                direction,
+                label: label || undefined,
+                ...focusLinkFields(linkKey),
+              })
+            }
+          />
+        </View>
+        <View style={styles.idleSleepingKitten}>
+          <PixelKitten
+            accessibilityLabel="Sleeping pixel kitten beside the Focus ring"
+            pose="sleeping"
+            showFloor={false}
+          />
+        </View>
+      </View>
+      <View style={styles.secondaryConfiguration}>
+        <DisclosureButton
+          expanded={customizeExpanded}
+          label="Customize"
+          onPress={() => setCustomizeExpanded((current) => !current)}
+          summary="Stopwatch"
+        />
+        {customizeExpanded ? (
+          <View style={styles.customizePanel}>
+            <Text style={styles.configurationLabel}>Mode</Text>
+            <FocusModeSelector mode={mode} onSelect={onModeSelect} />
+            <DetailsDisclosure
+              expanded={detailsExpanded}
+              summary={focusDetailsSummary(label, direction, linkKey, linkOptions)}
+              onPress={() => setDetailsExpanded((current) => !current)}
+            >
+              <SetupDetails
+                direction={direction}
+                label={label}
+                linkKey={linkKey}
+                linkOptions={linkOptions}
+                mode="stopwatch"
+                onDirectionChange={setDirection}
+                onLabelChange={setLabel}
+                onLinkChange={chooseLink}
+              />
+            </DetailsDisclosure>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -789,7 +885,7 @@ function DetailsDisclosure({
     <View style={styles.detailsDisclosure}>
       <DisclosureButton
         expanded={expanded}
-        label={expanded ? "Hide details" : "Add details"}
+        label="Details"
         onPress={onPress}
         summary={expanded ? undefined : summary}
       />
@@ -821,7 +917,7 @@ function DisclosureButton({
         {summary ? <Text style={styles.disclosureSummary}>{summary}</Text> : null}
       </View>
       <Text accessibilityElementsHidden style={styles.disclosureIcon}>
-        {expanded ? "−" : "+"}
+        {expanded ? "⌃" : "›"}
       </Text>
     </Pressable>
   );
@@ -1055,18 +1151,6 @@ function ChoiceButton({
   );
 }
 
-function focusTitle(
-  openStatus?: SessionStatus,
-  closedStatus?: SessionStatus,
-): string {
-  if (openStatus === "running") return "Track this time";
-  if (openStatus === "paused") return "Paused where you left it";
-  if (closedStatus === "completed" || closedStatus === "stopped") {
-    return "Ready for what’s next";
-  }
-  return "Choose how to focus";
-}
-
 function focusDetailsSummary(
   label: string,
   direction: Direction,
@@ -1145,6 +1229,27 @@ function formatDuration(milliseconds: number): string {
 }
 
 const styles = StyleSheet.create({
+  focusSafeArea: { backgroundColor: colors.background, flex: 1 },
+  focusPageContent: {
+    alignItems: "center",
+    flexGrow: 1,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  focusPageTitle: {
+    color: colors.text,
+    fontSize: typography.heading,
+    fontWeight: "900",
+    lineHeight: 28,
+    textAlign: "center",
+  },
+  focusPageBody: {
+    gap: spacing.md,
+    marginTop: spacing.md,
+    maxWidth: 420,
+    width: "100%",
+  },
   sessionReview: {
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1204,59 +1309,25 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   focusSetup: {
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
-    paddingTop: spacing.md,
   },
   activeSessionCard: {
-    alignItems: "stretch",
-    backgroundColor: "#FFFCF6",
-    borderColor: "#E4D3BE",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    gap: 12,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
+    alignItems: "center",
+    alignSelf: "center",
+    gap: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   timerPresentation: {
     alignItems: "center",
     alignSelf: "center",
-    height: FOCUS_RING_SIZE,
     justifyContent: "center",
     position: "relative",
-    width: FOCUS_RING_SIZE,
-  },
-  timerContent: {
-    alignItems: "center",
-    bottom: 0,
-    justifyContent: "center",
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  timerStatus: {
-    color: "#7A6354",
-    fontSize: typography.label,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    marginBottom: spacing.sm,
-    textTransform: "uppercase",
-  },
-  timer: {
-    color: "#4A2F21",
-    fontSize: 56,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "800",
-    letterSpacing: -1,
-    textAlign: "center",
   },
   sleepingKitten: {
     alignSelf: "center",
-    height: 128,
-    marginTop: -84,
-    width: 186,
+    height: 118,
+    marginTop: -36,
+    width: 192,
   },
   activeSessionInfo: {
     alignItems: "center",
@@ -1276,7 +1347,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
-  focusActions: { gap: spacing.sm, marginTop: spacing.sm },
+  focusActions: { alignSelf: "stretch", gap: spacing.sm, marginTop: spacing.sm },
   focusPrimaryButton: {
     alignItems: "center",
     backgroundColor: "#8B5A35",
@@ -1324,12 +1395,31 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   focusActionDisabled: { opacity: 0.55 },
+  idleFocusHero: {
+    alignItems: "center",
+    alignSelf: "center",
+    gap: spacing.sm,
+    width: "100%",
+  },
+  focusStartButton: { width: 176 },
+  idleSleepingKitten: {
+    alignSelf: "center",
+    height: 96,
+    marginTop: -22,
+    overflow: "hidden",
+    width: 174,
+  },
   modeSelector: {
-    backgroundColor: colors.surfaceMuted,
+    alignSelf: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
     borderRadius: radii.pill,
     flexDirection: "row",
     gap: spacing.xs,
+    maxWidth: 360,
     padding: spacing.xs,
+    width: "100%",
   },
   modeOption: {
     alignItems: "center",
@@ -1347,8 +1437,22 @@ const styles = StyleSheet.create({
   },
   modeOptionTextSelected: { color: "#FFFFFF" },
   hiddenSetup: { display: "none" },
-  setupContent: { gap: spacing.md, paddingTop: spacing.sm },
-  setupIntro: { gap: spacing.xs },
+  setupContent: { gap: spacing.lg },
+  secondaryConfiguration: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  customizePanel: { gap: spacing.sm, paddingBottom: spacing.md },
+  configurationLabel: {
+    color: colors.textMuted,
+    fontSize: typography.label,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginTop: spacing.xs,
+    textTransform: "uppercase",
+  },
   durationChoices: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1361,10 +1465,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   detailsDisclosure: {
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.md,
-    paddingTop: spacing.sm,
   },
   disclosureButton: {
     alignItems: "center",
@@ -1372,6 +1473,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     justifyContent: "space-between",
     minHeight: touchTarget,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   disclosureCopy: { flex: 1, gap: 2 },

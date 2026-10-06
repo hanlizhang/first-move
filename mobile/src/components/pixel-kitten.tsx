@@ -13,7 +13,9 @@ import type { CatFacing } from "../domain/cat-interactions.ts";
 interface PixelKittenProps {
   accessibilityLabel: string;
   blinking?: boolean;
+  centerArtwork?: boolean;
   facing?: CatFacing;
+  hero?: boolean;
   pose: CatPose;
   showFloor?: boolean;
 }
@@ -23,7 +25,9 @@ interface PixelKittenProps {
 export function PixelKitten({
   accessibilityLabel,
   blinking = false,
+  centerArtwork = false,
   facing = "right",
+  hero = false,
   pose,
   showFloor = true,
 }: PixelKittenProps) {
@@ -75,9 +79,14 @@ export function PixelKitten({
     <View
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="image"
-      style={styles.sprite}
+      style={[styles.sprite, hero && styles.heroSprite]}
     >
-      <Svg accessibilityElementsHidden viewBox="0 0 160 110" width="100%" height="100%">
+      <Svg
+        accessibilityElementsHidden
+        viewBox={centerArtwork ? "10.5 0 160 110" : "0 0 160 110"}
+        width="100%"
+        height="100%"
+      >
         {showFloor ? (
           <>
             <Rect x={8} y={94} width={144} height={4} fill="#b08968" />
@@ -100,12 +109,14 @@ const ink = "#3f2d24";
 function CatFace({
   blinking = false,
   happy = false,
+  lookingRight = false,
   sleepy = false,
   x,
   y,
 }: {
   blinking?: boolean;
   happy?: boolean;
+  lookingRight?: boolean;
   sleepy?: boolean;
   x: number;
   y: number;
@@ -126,8 +137,8 @@ function CatFace({
         </>
       ) : (
         <>
-          <Rect x={x + 10} y={y + 17} width={4} height={5} fill={ink} />
-          <Rect x={x + 26} y={y + 17} width={4} height={5} fill={ink} />
+          <Rect x={x + (lookingRight ? 11 : 10)} y={y + 17} width={4} height={5} fill={ink} />
+          <Rect x={x + (lookingRight ? 27 : 26)} y={y + 17} width={4} height={5} fill={ink} />
         </>
       )}
       <Rect x={x + 18} y={y + 23} width={4} height={3} fill={furDark} />
@@ -362,18 +373,18 @@ function MouseKitten() {
 }
 
 function ScratchingKitten({ alternate }: { alternate: boolean }) {
+  const reachingArmY = alternate ? 49 : 42;
   return (
     <G>
       <CurvedTail x={57} y={81} />
-      <Rect x={70} y={50} width={35} height={40} fill={fur} />
-      <Rect x={77} y={56} width={20} height={32} fill={furLight} />
-      <CatFace x={68} y={18} />
-      <Rect x={75} y={84} width={10} height={10} fill={furDark} />
-      <Rect x={92} y={84} width={10} height={10} fill={furDark} />
-      <Rect x={98} y={alternate ? 47 : 39} width={29} height={7} fill={fur} />
-      <Rect x={119} y={alternate ? 43 : 35} width={10} height={8} fill={furDark} />
-      <Rect x={98} y={alternate ? 35 : 49} width={27} height={7} fill={fur} />
-      <Rect x={117} y={alternate ? 31 : 45} width={10} height={8} fill={furDark} />
+      <Rect x={65} y={49} width={39} height={39} fill={fur} />
+      <Rect x={71} y={55} width={22} height={33} fill={furLight} />
+      <CatFace lookingRight x={62} y={17} />
+      <Rect x={64} y={82} width={10} height={12} fill={furDark} />
+      <Rect x={77} y={82} width={10} height={12} fill={fur} />
+      <Rect x={95} y={62} width={9} height={32} fill={furDark} />
+      <Rect x={98} y={reachingArmY} width={18} height={7} fill={fur} />
+      <Rect x={111} y={reachingArmY - 3} width={10} height={9} fill={furDark} />
     </G>
   );
 }
@@ -494,4 +505,5 @@ const styles = StyleSheet.create({
     width: "100%",
     zIndex: 3,
   },
+  heroSprite: { maxWidth: 320 },
 });

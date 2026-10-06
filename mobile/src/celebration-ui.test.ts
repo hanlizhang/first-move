@@ -30,6 +30,10 @@ const focusSource = readFileSync(
   new URL("./app/(tabs)/focus.tsx", import.meta.url),
   "utf8",
 );
+const pixelScenesSource = readFileSync(
+  new URL("./components/pixel-scenes.tsx", import.meta.url),
+  "utf8",
+);
 
 test("one global renderer presents compact, daily, and milestone levels", () => {
   assert.equal((providerSource.match(/<CelebrationRenderer/g) ?? []).length, 1);
@@ -50,19 +54,20 @@ test("reduced motion retains content while removing scale and rise motion", () =
   assert.match(providerSource, /reduceMotion \? 0 : 8/);
   assert.match(providerSource, /duration: reduceMotion \? 0 : 220/);
   assert.match(providerSource, /duration: reduceMotion \? 140 : 240/);
-  assert.match(providerSource, /duration: reduceMotion \? 0 : 420/);
-  assert.match(providerSource, /translateY: reduceMotion[\s\S]*?\? 0/);
+  assert.match(pixelScenesSource, /duration: reduceMotion \? 0 : 420/);
+  assert.match(pixelScenesSource, /translateY: reduceMotion[\s\S]*?\? 0/);
   assert.match(providerSource, /forceReduceMotion=\{__DEV__ && previewReducedMotion\}/);
   assert.match(qaSource, /setPreviewReducedMotion\(!previewReducedMotion\)/);
 });
 
-test("Active Day and milestone moments use the pixel step scene and full-screen warm surfaces", () => {
-  assert.match(providerSource, /function PixelStepScene/);
-  assert.match(providerSource, /<PixelKitten/);
-  assert.match(providerSource, /styles\.pixelPlatformOne/);
-  assert.match(providerSource, /styles\.pixelPlatformTwo/);
-  assert.match(providerSource, /styles\.pixelPlatformThree/);
-  assert.match(providerSource, /styles\.rewardReveal/);
+test("Active Day and milestone moments use the shared pixel step scene and full-screen warm surfaces", () => {
+  assert.match(providerSource, /import \{ PixelStepScene \} from "\.\/pixel-scenes\.tsx"/);
+  assert.match(pixelScenesSource, /export function PixelStepScene/);
+  assert.match(pixelScenesSource, /<PixelKitten/);
+  assert.match(pixelScenesSource, /styles\.pixelPlatformOne/);
+  assert.match(pixelScenesSource, /styles\.pixelPlatformTwo/);
+  assert.match(pixelScenesSource, /styles\.pixelPlatformThree/);
+  assert.match(pixelScenesSource, /styles\.rewardReveal/);
   assert.match(providerSource, /presentationStyle="overFullScreen"/);
   assert.match(providerSource, /styles\.dailyBackground/);
   assert.match(providerSource, /styles\.milestoneBackground/);

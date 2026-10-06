@@ -10,6 +10,10 @@ const pixelKittenSource = readFileSync(
   new URL("./components/pixel-kitten.tsx", import.meta.url),
   "utf8",
 );
+const pixelScenesSource = readFileSync(
+  new URL("./components/pixel-scenes.tsx", import.meta.url),
+  "utf8",
+);
 const domainSource = readFileSync(
   new URL("./domain/cat.ts", import.meta.url),
   "utf8",
@@ -19,35 +23,92 @@ const providerSource = readFileSync(
   "utf8",
 );
 
-test("Mobile Cat presents a real room, store, balance, progress, and inventory", () => {
+test("Mobile Cat presents a room-first screen with compact HUD utilities", () => {
   for (const label of [
     "Cat Room",
-    "Current points",
-    "Growth chapter",
+    "Available points",
+    "Growth and milestones",
     "active day",
-    "Owned things",
     "Store",
     "Food",
     "Toys",
     "Furniture",
-    "Tricks",
+    "Activities",
   ]) {
     assert.match(source, new RegExp(label));
   }
   assert.match(source, /getCatRoomView\(localWorkspace, today\)/);
   assert.match(source, /PixelKitten/);
+  assert.match(source, /PixelCoinIcon/);
+  assert.match(source, /PixelMilestoneIcon/);
+  assert.match(source, /PixelCollectionIcon/);
+  assert.match(source, /PixelStoreIcon/);
+  assert.match(source, /const \[growthExpanded, setGrowthExpanded\]/);
+  assert.match(source, /useWindowDimensions\(\)/);
+  assert.match(source, /roomHeight = Math\.min\(600, Math\.max\(460, windowHeight - 220\)\)/);
+  assert.match(source, /<SafeAreaView[^>]+style=\{styles\.roomSafeArea\}/);
+  assert.doesNotMatch(source, /<Stat label="Current points"|<Stat label="Growth chapter"/);
+  assert.doesNotMatch(source, /Your collection|Owned things|Owned items/);
 });
 
-test("Owned things uses a compact visual shelf with consumable quantity badges", () => {
-  assert.match(source, /styles\.inventoryShelf/);
-  assert.match(source, /styles\.inventoryTiles/);
-  assert.match(source, /inventoryMarkStyle\(item\.kind\)/);
-  assert.match(source, /<Text style=\{styles\.inventoryQuantityText\}>×\{quantity\}<\/Text>/);
-  assert.match(source, /accessibilityLabel=\{item\.durable \? item\.name : `\$\{item\.name\}, quantity \$\{quantity\}`\}/);
-  assert.doesNotMatch(source, /styles\.inventoryText/);
+test("Cat Room keeps one Store entry and gives Store and milestones distinct pixel symbols", () => {
+  assert.equal((source.match(/accessibilityLabel="Open Cat Store"/g) ?? []).length, 1);
+  assert.match(pixelScenesSource, /storeBuilding/);
+  assert.match(pixelScenesSource, /storeAwning/);
+  assert.match(pixelScenesSource, /medalDisc/);
+  assert.match(pixelScenesSource, /medalRibbonLeft/);
+  assert.doesNotMatch(pixelScenesSource, /storeHandle|storeBag|bookLeft|bookRight/);
+  assert.doesNotMatch(pixelScenesSource, /storeStepOne|storeStepTwo|storeStepThree/);
 });
 
-test("approved furnishings are selectable and render as static room objects", () => {
+test("food and treat thumbnails render objects without a kitten performer", () => {
+  const itemPoseMapping = pixelScenesSource.slice(
+    pixelScenesSource.indexOf("function itemKittenPose"),
+    pixelScenesSource.indexOf("function Bowl"),
+  );
+  assert.doesNotMatch(itemPoseMapping, /kitten-milk|wet-kitten-food|cat-food|cat-treat|freeze-dried-treat/);
+  for (const visual of [
+    "MilkBowlVisual",
+    "WetFoodBowlVisual",
+    "KibbleBowlVisual",
+    "TreatStickVisual",
+    "TreatCubesVisual",
+  ]) {
+    assert.match(pixelScenesSource, new RegExp(`<${visual} \\/>`));
+  }
+  assert.match(pixelScenesSource, /export function PixelFoodIcon/);
+  assert.match(pixelScenesSource, /if \(isFoodItemId\(itemId\)\)/);
+  assert.doesNotMatch(pixelScenesSource, /skewX|treatNotch/);
+});
+
+test("Items is a compact owned-object tray with reusable artwork and quantity badges", () => {
+  assert.match(source, /accessibilityLabel="Open Items"/);
+  assert.match(source, /const \[itemsExpanded, setItemsExpanded\] = useState\(initialItemsExpanded\)/);
+  assert.match(source, /accessibilityLabel="Items tray"/);
+  assert.match(pixelScenesSource, /export function PixelCollectionIcon/);
+  assert.match(source, /<PixelItemIcon itemId=\{item\.id\} size=\{48\} \/>/);
+  assert.match(source, /<Text style=\{styles\.itemTrayQuantityText\}>×\{quantity\}<\/Text>/);
+  for (const section of ["Food", "Toys", "Furniture", "Activities"]) {
+    assert.match(source, new RegExp(`ItemTraySection label="${section}"`));
+  }
+  assert.doesNotMatch(source, /function Inventory|styles\.inventoryShelf|Your collection/);
+  assert.doesNotMatch(source, /item\.name\.slice\(0, 1\)/);
+  for (const itemId of ["yarn-toy", "toy-mouse", "teaser-wand", "scratching-post"]) {
+    assert.match(pixelScenesSource, new RegExp(`itemId === "${itemId}"`));
+  }
+});
+
+test("Cat Store keeps item imagery beside name, description, price, unlock, and ownership", () => {
+  const store = source.slice(source.indexOf("function CatStore"), source.indexOf("function purchaseButtonLabel"));
+  assert.match(store, /<PixelItemIcon itemId=\{item\.id\} size=\{64\} \/>/);
+  assert.match(store, /item\.name/);
+  assert.match(store, /item\.description/);
+  assert.match(store, /Unlocks at \$\{item\.unlockActiveDays\} active days/);
+  assert.match(store, /formatPoints\(item\.price\)/);
+  assert.match(store, /purchaseButtonLabel\(availability\)/);
+});
+
+test("approved furnishings are selectable and render as directly interactive room objects", () => {
   for (const itemId of [
     "cat-bed",
     "window-cushion",
@@ -64,72 +125,53 @@ test("approved furnishings are selectable and render as static room objects", ()
   ]) {
     assert.match(source, new RegExp(label));
   }
+  assert.match(source, /<FurnitureVisual\s+itemId=\{room\.selectedFurniture\?\.id\}\s+onPress=\{activatePlacedFurniture\}/);
+  assert.match(source, /accessibilityHint="Starts a nap"/);
+  assert.match(source, /accessibilityHint="Shows watch and nap choices"/);
+  assert.match(source, /accessibilityHint="Starts scratching"/);
+  assert.match(source, /accessibilityHint="Starts climbing and perching"/);
 });
 
-test("owned Cat v1B items expose visible, ownership-gated actions", () => {
-  for (const label of [
-    "Feed ",
-    "Sit together",
-    "Explore room",
-    "Nap",
-    "Play with yarn",
-    "Chase toy mouse",
-    "Play with teaser wand",
-    "End wand play",
-    "Scratch",
-    "Watch from perch",
-    "Climb / perch",
-    "High-five",
-    "Paw shake",
-    "Visit garden",
-    "Return to room",
-    "Follow butterfly",
-    "Room furniture",
-    "Clear furnishing",
-  ]) {
-    assert.match(source, new RegExp(label));
-  }
+test("owned Cat items route directly to existing interaction and placement handlers", () => {
+  assert.match(source, /const feedAndClose[\s\S]*?onFeed\(item\)/);
+  assert.match(source, /itemId === "yarn-toy"[\s\S]*?playSequence\("yarn"\)/);
+  assert.match(source, /itemId === "toy-mouse"[\s\S]*?playSequence\("mouse"\)/);
+  assert.match(source, /itemId === "teaser-wand"[\s\S]*?toggleWand\(\)/);
+  assert.match(source, /onPress=\{\(\) => chooseFurnitureAndClose\(item\.id\)\}/);
+  assert.match(source, /itemId === "scratching-post"[\s\S]*?playSequence\("scratch"\)/);
+  assert.match(source, /itemId === "cat-tree"[\s\S]*?playSequence\("tree"\)/);
+  assert.match(source, /itemId === "window-cushion"[\s\S]*?setFurnitureChoice\("window-cushion"\)/);
   assert.match(source, /selectCatFurniture/);
   assert.match(source, /foodPose/);
   assert.match(source, /catInteractionAvailability\(ownedItemIds, room\.selectedFurniture\?\.id\)/);
 });
 
-test("Cat interactions start as accessible Care, Play, and Relax disclosures", () => {
-  assert.match(source, /type CatInteractionCategory = "care" \| "play" \| "relax"/);
-  assert.match(source, /const \[expandedCategory, setExpandedCategory\] = useState<CatInteractionCategory>\(\)/);
+test("Cat Room keeps only Items and Store as top-level action controls", () => {
+  assert.match(source, /accessibilityLabel="Open Items"/);
+  assert.match(source, /accessibilityLabel="Open Cat Store"/);
+  assert.match(source, /accessibilityState=\{\{ expanded: itemsExpanded \}\}/);
+  assert.match(source, /style=\{styles\.floatingSheet\}/);
+  assert.doesNotMatch(source, /CatInteractionCategory|InteractionCategoryButton|styles\.categoryRow/);
   for (const category of ["Care", "Play", "Relax"]) {
-    assert.match(source, new RegExp(`label="${category}"`));
+    assert.doesNotMatch(source, new RegExp(`label="${category}"`));
   }
-  assert.match(source, /accessibilityState=\{\{ expanded \}\}/);
-  assert.match(source, /expandedCategory === "care"/);
-  assert.match(source, /expandedCategory === "play" && playInteractionAvailable/);
-  assert.match(source, /expandedCategory === "relax"/);
-  assert.doesNotMatch(source, /<ActionGroup|function ActionGroup|Kitten moments|Tricks & adventures/);
 });
 
-test("each Cat category directly exposes its owned actions without another disclosure layer", () => {
-  const care = source.slice(
-    source.indexOf('{expandedCategory === "care" ? ('),
-    source.indexOf('{expandedCategory === "play" && playInteractionAvailable ? ('),
-  );
-  const play = source.slice(
-    source.indexOf('{expandedCategory === "play" && playInteractionAvailable ? ('),
-    source.indexOf('{expandedCategory === "relax" ? ('),
-  );
-  const relax = source.slice(
-    source.indexOf('{expandedCategory === "relax" ? ('),
-    source.indexOf('<Inventory room={room}'),
+test("the temporary Items tray groups owned objects and dismisses on selection", () => {
+  const items = source.slice(
+    source.indexOf("{itemsExpanded ? ("),
+    source.indexOf("</ScrollView>", source.indexOf("{itemsExpanded ? (")),
   );
 
-  assert.match(care, /Sit together/);
-  assert.match(care, /room\.ownedFood\.map/);
-  for (const label of ["Play with yarn", "Chase toy mouse", "Play with teaser wand", "Scratch", "High-five", "Paw shake", "Follow butterfly"]) {
-    assert.match(play, new RegExp(label));
+  assert.match(items, /room\.ownedFood\.map/);
+  assert.match(items, /room\.ownedToys\.map/);
+  assert.match(items, /room\.ownedFurniture\.map/);
+  assert.match(items, /room\.ownedTricks/);
+  for (const handler of ["feedAndClose", "activateToy", "chooseFurnitureAndClose", "activateActivity"]) {
+    assert.match(items, new RegExp(handler));
   }
-  for (const label of ["Nap", "Explore room", "Watch from perch", "Climb \/ perch", "Visit garden", "Return to room", "Room furniture", "Clear furnishing"]) {
-    assert.match(relax, new RegExp(label));
-  }
-  assert.doesNotMatch(`${care}\n${play}\n${relax}`, /InteractionCategoryButton/);
+  assert.match(source, /const beginVisualCommand = \(command: \(\) => void\) => \{\s*setFurnitureChoice\(undefined\);\s*setItemsExpanded\(false\);/);
+  assert.doesNotMatch(items, /CompanionActionButton|Inventory/);
 });
 
 test("transient Cat poses do not share the authenticated economic-write disable state", () => {
@@ -138,61 +180,33 @@ test("transient Cat poses do not share the authenticated economic-write disable 
   assert.match(source, /economicWriteDisabled/);
   assert.match(source, /localWorkspaceLoaded: localWorkspaceStatus === "ready"/);
 
-  for (const label of [
-    "Sit together",
-    "Explore room",
-    "Nap",
-    "Play with yarn",
-    "High-five",
-    "Paw shake",
-    "Follow butterfly",
-  ]) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    assert.match(
-      source,
-      new RegExp(`disabled=\\{transientInteractionDisabled\\}[^>]+label="${escaped}"|label="${escaped}"[^>]+disabled=\\{transientInteractionDisabled\\}`),
-      label,
-    );
-  }
-
-  assert.match(
-    source,
-    /disabled=\{transientInteractionDisabled\}\s+label=\{visual\.action === "wand" \? "End wand play" : "Play with teaser wand"\}/,
-  );
-  assert.match(
-    source,
-    /disabled=\{transientInteractionDisabled\}\s+label=\{garden \? "Return to room" : "Visit garden"\}/,
-  );
-
-  assert.match(source, /<CompanionActionButton\s+disabled=\{previewSafeEconomicDisabled\}\s+key=\{item\.id\}\s+label=\{`Feed/);
-  assert.match(source, /disabled=\{previewSafeEconomicDisabled \|\| room\.selectedFurniture/);
+  assert.match(source, /room\.ownedToys\.map[\s\S]*?disabled=\{transientInteractionDisabled\}/);
+  assert.match(source, /room\.ownedFood\.map[\s\S]*?disabled=\{previewSafeEconomicDisabled\}/);
+  assert.match(source, /room\.ownedFurniture\.map[\s\S]*?disabled=\{previewSafeEconomicDisabled \|\| room\.selectedFurniture/);
   assert.match(source, /<CatStore\s+disabled=\{economicWriteDisabled\}/);
 });
 
 test("food and furniture keep write-sensitive feedback separate from transient companion actions", () => {
   const companionControls = source.slice(
-    source.indexOf('<View style={styles.companionSection}>'),
-    source.indexOf('<Inventory room={room}'),
+    source.indexOf('{itemsExpanded ? ('),
+    source.indexOf('</ScrollView>', source.indexOf('{itemsExpanded ? (')),
   );
-  assert.match(companionControls, /Current quantities are shown/);
-  assert.match(companionControls, /label=\{`Feed \$\{item\.name\} · \$\{quantity\}`\}/);
+  assert.match(companionControls, /quantity=\{quantity\}/);
   assert.match(companionControls, /disabled=\{previewSafeEconomicDisabled\}/);
   assert.match(companionControls, /disabled=\{previewSafeEconomicDisabled \|\| room\.selectedFurniture\?\.id === item\.id\}/);
   assert.match(companionControls, /disabled=\{transientInteractionDisabled\}/);
-  assert.match(source, /accessibilityState=\{\{ disabled: Boolean\(disabled\) \}\}/);
+  assert.match(source, /accessibilityState=\{\{ disabled, selected \}\}/);
 });
 
 test("garden controls remain grouped and scene-aware", () => {
-  assert.match(source, /summary=\{garden \? "Garden active" : "Nap & explore"\}/);
-  assert.match(source, /label=\{garden \? "Return to room" : "Visit garden"\}/);
-  assert.match(source, /available\.butterfly && garden/);
-  assert.match(source, /label="Follow butterfly"/);
-  assert.match(source, /beginVisualCommand\(garden \? interactions\.returnToRoom : interactions\.visitGarden\)/);
+  assert.match(source, /itemId === "outdoor-garden"[\s\S]*?garden \? interactions\.returnToRoom : interactions\.visitGarden/);
+  assert.match(source, /itemId === "butterfly" && garden/);
+  assert.match(source, /item\.id !== "butterfly" \|\| garden/);
 });
 
 test("Mobile Cat QA controls are __DEV__-only and feed the production room view", () => {
   assert.match(source, /catQaPreviewEnabled\(__DEV__\)/);
-  assert.match(source, /\{__DEV__ \? \(\s*<CatQaPreviewPanel/);
+  assert.match(source, /\{__DEV__ && !visualPreview \? \(\s*<CatQaPreviewPanel/);
   assert.match(source, /Cat QA · DEV ONLY/);
   assert.match(source, /accessibilityState=\{\{ expanded \}\}/);
   assert.match(source, /Preview only\. Does not change your real account, points, inventory, or cloud data\./);
@@ -242,15 +256,21 @@ test("target-based phases face from the listener-backed rendered Cat point", () 
   );
 });
 
-test("Cat Room caption is a wrapping sibling outside the clipped animation scene", () => {
+test("Cat Room caption is transient and remains outside the clipped animation scene", () => {
   assert.match(source, /testID="cat-room-scene"/);
   assert.match(source, /testID="cat-room-caption"/);
   assert.match(
     source,
-    /<\/Animated\.View>\s*<\/View>\s*<View style=\{styles\.roomCaption\} testID="cat-room-caption">/,
+    /<\/View>\s*<TransientCatCaption/,
   );
-  assert.match(source, /room: \{[^}]*height: CAT_ROOM_HEIGHT[^}]*overflow: "hidden"/);
+  assert.match(source, /style=\{\[styles\.room, \{ height: roomHeight \}/);
+  assert.match(source, /room: \{[^}]*overflow: "hidden"/);
+  assert.match(source, /roomCaption: \{[^}]*alignSelf: "center"/);
+  assert.doesNotMatch(source, /roomCaption: \{[^}]*position: "absolute"/);
   assert.match(source, /roomCaptionText: \{[^}]*flexShrink: 1[^}]*lineHeight: 20/);
+  assert.match(source, /visible=\{Boolean\(visual\.action\)\}/);
+  assert.match(source, /duration: 260/);
+  assert.match(source, /if \(reducedMotion\) \{\s*opacity\.setValue\(0\)/);
   assert.doesNotMatch(source, /roomMessage|zIndex: 10/);
 });
 
@@ -277,6 +297,15 @@ test("scratch uses a fixed paw-contact calibration without changing global sprit
   assert.match(source, /sequence === "scratch"[\s\S]*?facing: "right" as const/);
   assert.match(source, /baseTranslation\.x \+ pixelOffset\.x/);
   assert.match(pixelKittenSource, /facing === "left" \? "translate\(160 0\) scale\(-1 1\)"/);
+  const scratchPose = pixelKittenSource.slice(
+    pixelKittenSource.indexOf("function ScratchingKitten"),
+    pixelKittenSource.indexOf("function WatchingKitten"),
+  );
+  assert.match(scratchPose, /<CatFace lookingRight x=\{62\} y=\{17\} \/>/);
+  assert.match(scratchPose, /x=\{95\} y=\{62\} width=\{9\} height=\{32\}/);
+  assert.match(scratchPose, /x=\{111\} y=\{reachingArmY - 3\}/);
+  assert.match(scratchPose, /width=\{18\} height=\{7\}/);
+  assert.doesNotMatch(scratchPose, /ScratchingFace|width=\{28\}|width=\{30\}/);
 });
 
 test("room layers keep furniture behind the Cat and moving targets above it", () => {
@@ -375,8 +404,10 @@ test("yarn and mouse use visible, meaningfully distinct sequences", () => {
   assert.match(source, /"anticipating" : index === 1 \? "walking" : "mouse"/);
   assert.match(source, /Yarn ball in room/);
   assert.match(source, /Toy mouse in room/);
-  assert.match(source, /styles\.yarnBall/);
-  assert.match(source, /styles\.mouseBody/);
+  assert.match(source, /<PixelItemIcon itemId="yarn-toy" size=\{42\} \/>/);
+  assert.match(source, /<PixelItemIcon itemId="toy-mouse" size=\{46\} \/>/);
+  assert.match(pixelScenesSource, /function YarnVisual/);
+  assert.match(pixelScenesSource, /function MouseVisual/);
 });
 
 test("furniture interactions place the kitten at bed, perch, post, and tree targets", () => {
@@ -388,8 +419,9 @@ test("furniture interactions place the kitten at bed, perch, post, and tree targ
   assert.match(source, /sequence === "perch"[\s\S]*?pose: "watching" as const/);
   assert.match(source, /temporaryFurniture: "scratching-post"/);
   assert.match(source, /pose: index % 2 === 0 \? "scratching-left" : "scratching-right"/);
-  assert.match(source, /CAT_ROOM_LAYOUT\.catTreeMidAnchor/);
-  assert.match(source, /CAT_ROOM_LAYOUT\.catTreeTopAnchor/);
+  assert.match(source, /MOBILE_TREE_STEPS = catTreePlacementSteps\(\)/);
+  assert.match(source, /sequence === "tree"[\s\S]*?catOffsetPx: placement\.catOffsetPx/);
+  assert.match(source, /sequence === "tree"[\s\S]*?point: placement\.cat/);
   assert.match(source, /pose: index === 0 \? "climbing" : "perched"/);
   assert.match(source, /visual\.temporaryFurniture && visual\.temporaryFurniture !== room\.selectedFurniture\?\.id/);
 });
@@ -398,7 +430,7 @@ test("Mobile commands measure the Cat Room and request at most one scroll at com
   assert.match(source, /catRoomRef\.current\?\.measureInWindow/);
   assert.match(source, /catRoomScrollTarget\(/);
   assert.match(source, /scrollViewRef\.current\?\.scrollTo\(/);
-  assert.match(source, /const beginVisualCommand = \(command: \(\) => void\) => \{\s*onVisualCommandStart\(\);\s*command\(\);/);
+  assert.match(source, /const beginVisualCommand = \(command: \(\) => void\) => \{\s*setFurnitureChoice\(undefined\);\s*setItemsExpanded\(false\);\s*onVisualCommandStart\(\);\s*command\(\);/);
   const controller = source.slice(source.indexOf("function useCatRoomInteractions"), source.indexOf("function catVisualSteps"));
   assert.doesNotMatch(controller, /onVisualCommandStart|scrollTo\(/);
 });
@@ -423,7 +455,7 @@ test("tricks settle automatically and butterfly stays in an explicit garden scen
   assert.match(source, /sequence === "paw-shake"/);
   assert.match(source, /sequence === "butterfly" \? "garden" : "room"/);
   assert.match(source, /activeActionRef\.current = scene === "garden" \? "garden" : undefined/);
-  assert.match(source, /available\.butterfly && garden/);
+  assert.match(source, /item\.id !== "butterfly" \|\| garden/);
   assert.match(source, /Butterfly in garden/);
   assert.match(source, /ownsMouse=\{available\.mouse && !garden\}/);
   assert.match(source, /ownsYarn=\{available\.yarn && !garden\}/);
@@ -443,7 +475,10 @@ test("idle behavior starts after five minutes and all transient state stays loca
 
 test("Mobile PixelKitten carries over the Web SVG canvas, baseline, palette, and poses", () => {
   assert.match(pixelKittenSource, /from "react-native-svg"/);
-  assert.match(pixelKittenSource, /viewBox="0 0 160 110"/);
+  assert.match(
+    pixelKittenSource,
+    /viewBox=\{centerArtwork \? "10\.5 0 160 110" : "0 0 160 110"\}/,
+  );
   assert.match(pixelKittenSource, /x=\{8\} y=\{94\} width=\{144\} height=\{4\} fill="#b08968"/);
   for (const color of ["#b77945", "#7c4a2d", "#e7bd8c", "#3f2d24"]) {
     assert.match(pixelKittenSource, new RegExp(color));

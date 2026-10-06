@@ -13,6 +13,8 @@ import {
   CAT_SCRATCH_PAW_CONTACT_OFFSET_PX,
   CAT_FOOD_VISUAL_BY_ITEM_ID,
   CAT_TARGET_PADDING,
+  CAT_TREE_MID_SUPPORT_OFFSET_PX,
+  CAT_TREE_TOP_SUPPORT_OFFSET_PX,
   CAT_WAND_POUNCE_DISTANCE,
   CAT_WAND_STEP,
   FIRST_CAT_IDLE_DELAY_MS,
@@ -25,6 +27,7 @@ import {
   catMouseChaseSteps,
   catRoomScrollTarget,
   catScratchingPostPlacement,
+  catTreePlacementSteps,
   catYarnPlaySteps,
   clampRoomPointToArea,
   clampNormalizedRoomPoint,
@@ -235,6 +238,22 @@ test("perch and tree pose anchors remain inside visible room and support bounds"
     ),
   );
   assert.ok(CAT_ROOM_LAYOUT.windowPerchAnchor.y < CAT_ROOM_LAYOUT.floorY);
+
+  const tree = catTreePlacementSteps();
+  assert.equal(tree.length, 2);
+  assert.deepEqual(tree.map(({ cat }) => cat), [
+    CAT_ROOM_LAYOUT.catTreeFloorAnchor,
+    CAT_ROOM_LAYOUT.catTreeFloorAnchor,
+  ]);
+  assert.deepEqual(tree.map(({ catOffsetPx }) => catOffsetPx), [
+    CAT_TREE_MID_SUPPORT_OFFSET_PX,
+    CAT_TREE_TOP_SUPPORT_OFFSET_PX,
+  ]);
+  assert.deepEqual(tree.map(({ target }) => target), [
+    CAT_ROOM_LAYOUT.catTreeMidAnchor,
+    CAT_ROOM_LAYOUT.catTreeTopAnchor,
+  ]);
+  assert.ok(CAT_TREE_TOP_SUPPORT_OFFSET_PX.y < CAT_TREE_MID_SUPPORT_OFFSET_PX.y);
 });
 
 test("five Cat food IDs use five distinct production visual treatments", () => {

@@ -4,9 +4,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from "react";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   AccessibilityInfo,
   Animated,
@@ -15,10 +16,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   useFirstMoveApp,
@@ -27,6 +30,13 @@ import {
 } from "../../app-state/app-provider.tsx";
 import { formatMobileSyncDiagnostic } from "../../cloud/sync-runtime.ts";
 import { PixelKitten } from "../../components/pixel-kitten.tsx";
+import {
+  PixelCollectionIcon,
+  PixelCoinIcon,
+  PixelItemIcon,
+  PixelMilestoneIcon,
+  PixelStoreIcon,
+} from "../../components/pixel-scenes.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import { Body, Card, LoadingState, Screen } from "../../components/ui.tsx";
 import {
@@ -53,6 +63,7 @@ import {
   catQaPreviewEnabled,
   catRoomScrollTarget,
   catScratchingPostPlacement,
+  catTreePlacementSteps,
   catInteractionAvailability,
   catYarnPlaySteps,
   clampNormalizedRoomPoint,
@@ -88,7 +99,6 @@ import { colors, radii, spacing, touchTarget, typography } from "../../theme/tok
 
 type CatSection = "room" | "store";
 type CatScene = "room" | "garden";
-type CatInteractionCategory = "care" | "play" | "relax";
 type CatTargetVisual = "wand" | "yarn" | "mouse" | "butterfly";
 type CatActiveAction =
   | CatInteractionSequence
@@ -136,14 +146,16 @@ const INITIAL_CAT_VISUAL: CatVisualState = {
 
 const WAND_POUNCE_COOLDOWN_MS = 1_200;
 const WAND_POUNCE_DURATION_MS = 520;
-const CAT_ROOM_HEIGHT = 310;
 const CAT_SPRITE_WIDTH = 160;
 const MOBILE_MOUSE_STEPS = catMouseChaseSteps();
 const MOBILE_YARN_STEPS = catYarnPlaySteps();
 const MOBILE_SCRATCH_PLACEMENT = catScratchingPostPlacement();
+const MOBILE_TREE_STEPS = catTreePlacementSteps();
 const MOBILE_BUTTERFLY_STEPS = catButterflyFollowSteps();
 
 export default function CatScreen() {
+  const { height: windowHeight } = useWindowDimensions();
+  const { visualPreview } = useLocalSearchParams<{ visualPreview?: string }>();
   const {
     auth,
     buyCatItem,
@@ -161,7 +173,9 @@ export default function CatScreen() {
     () => getCatRoomView(localWorkspace, today),
     [localWorkspace, today],
   );
-  const [section, setSection] = useState<CatSection>("room");
+  const [section, setSection] = useState<CatSection>(
+    __DEV__ && visualPreview === "store-food" ? "store" : "room",
+  );
   const [savingId, setSavingId] = useState<string>();
   const [queuedPurchase, setQueuedPurchase] = useState<{
     itemId: string;
@@ -211,6 +225,59 @@ export default function CatScreen() {
   const catRoomRef = useRef<View>(null);
   const scrollYRef = useRef(0);
   const viewportHeightRef = useRef(0);
+  const roomHeight = Math.min(600, Math.max(460, windowHeight - 220));
+
+  const playVisualPreviewFood = catInteractions.playFood;
+  const playVisualPreviewSequence = catInteractions.playSequence;
+  useEffect(() => {
+    if (!__DEV__ || !visualPreview || localWorkspaceStatus !== "ready") return undefined;
+    let secondFrame: number | undefined;
+    const firstFrame = requestAnimationFrame(() => {
+      if (["collection", "food", "furniture", "scratch", "tree", "yarn"].includes(visualPreview)) {
+        setQaPreviewActiveDay(100);
+        setQaPreviewOwnedItemIds(
+          visualPreview === "collection"
+            ? [...CAT_QA_PREVIEW_ITEM_IDS]
+            : [
+              visualPreview === "food"
+                ? "kitten-milk"
+                : visualPreview === "yarn"
+                  ? "yarn-toy"
+                  : visualPreview === "scratch"
+                    ? "scratching-post"
+                    : "cat-tree",
+            ],
+        );
+        setQaPreviewFurnitureId(
+          visualPreview === "scratch"
+            ? "scratching-post"
+            : visualPreview === "tree" || visualPreview === "furniture"
+              ? "cat-tree"
+              : null,
+        );
+      }
+      setSection(visualPreview === "store-food" ? "store" : "room");
+      secondFrame = requestAnimationFrame(() => {
+        if (visualPreview === "food") {
+          playVisualPreviewFood("milk");
+          scrollViewRef.current?.scrollTo({ animated: false, y: 0 });
+        } else if (visualPreview === "scratch" || visualPreview === "tree" || visualPreview === "yarn") {
+          playVisualPreviewSequence(visualPreview);
+          scrollViewRef.current?.scrollTo({ animated: false, y: 0 });
+        } else if (visualPreview === "collection") {
+          scrollViewRef.current?.scrollTo({ animated: false, y: 0 });
+        } else if (visualPreview === "store-food") {
+          scrollViewRef.current?.scrollTo({ animated: false, y: 330 });
+        } else {
+          scrollViewRef.current?.scrollTo({ animated: false, y: 0 });
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      if (secondFrame !== undefined) cancelAnimationFrame(secondFrame);
+    };
+  }, [localWorkspaceStatus, playVisualPreviewFood, playVisualPreviewSequence, visualPreview]);
   const bringCatRoomIntoView = useCallback(() => {
     catRoomRef.current?.measureInWindow((_x, roomTop, _width, roomHeight) => {
       const targetY = catRoomScrollTarget({
@@ -356,42 +423,19 @@ export default function CatScreen() {
     setNotice("");
   }
 
-  return (
-    <Screen
-      eyebrow="Cat"
-      title="Cat Room"
-      description="A cozy companion and a few rewards for the steps you choose to take."
-      onScroll={(event) => {
-        scrollYRef.current = event.nativeEvent.contentOffset.y;
-      }}
-      onScrollViewLayout={(event) => {
-        viewportHeightRef.current = event.nativeEvent.layout.height;
-      }}
-      scrollViewRef={scrollViewRef}
-    >
-      <View accessibilityRole="tablist" style={styles.sectionTabs}>
-        <SectionTab active={section === "room"} label="Room" onPress={() => setSection("room")} />
-        <SectionTab
-          active={section === "store"}
-          label="Store"
-          onPress={() => {
-            catInteractions.returnToRoom();
-            setSection("store");
-          }}
-        />
-      </View>
+  function showSection(nextSection: CatSection) {
+    if (nextSection === "store") catInteractions.returnToRoom();
+    setSection(nextSection);
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({
+        animated: !catInteractions.reducedMotion,
+        y: 0,
+      });
+    });
+  }
 
-      {__DEV__ ? (
-        <CatQaPreviewPanel
-          active={qaPreviewActive}
-          activeDay={qaPreviewActiveDay}
-          onActiveDayChange={setQaPreviewActiveDay}
-          onReset={resetQaPreview}
-          onToggleOwnership={toggleQaPreviewOwnership}
-          ownedItemIds={qaPreviewOwnedItemIds}
-        />
-      ) : null}
-
+  const statusNotices = (
+    <>
       {localWorkspaceMessage ? (
         <Card tone="warning"><Body>{localWorkspaceMessage}</Body></Card>
       ) : null}
@@ -410,20 +454,26 @@ export default function CatScreen() {
       {notice ? (
         <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>
       ) : null}
+    </>
+  );
 
-      {section === "room" ? (
-        <CatRoom
-          economicWriteDisabled={economicWriteDisabled}
-          transientInteractionDisabled={transientInteractionDisabled}
-          onChooseFurniture={(itemId) => void chooseFurniture(itemId)}
-          onFeed={(item) => void feed(item)}
-          interactions={catInteractions}
-          onVisualCommandStart={bringCatRoomIntoView}
-          previewActive={qaPreviewActive}
-          roomRef={catRoomRef}
-          room={room}
-        />
-      ) : (
+  if (section === "store") {
+    return (
+      <Screen
+        eyebrow="Cat"
+        title="Cat Store"
+        description="Choose something useful or cozy for your kitten."
+        scrollViewRef={scrollViewRef}
+      >
+        {statusNotices}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => showSection("room")}
+          style={({ pressed }) => [styles.backToRoom, pressed && styles.pressed]}
+        >
+          <Text style={styles.backToRoomArrow}>‹</Text>
+          <Text style={styles.backToRoomText}>Back to Cat Room</Text>
+        </Pressable>
         <CatStore
           disabled={economicWriteDisabled}
           onBuy={(item) => void buy(item)}
@@ -434,8 +484,54 @@ export default function CatScreen() {
           state={previewWorkspace}
           syncPending={pendingAuthenticatedWrite}
         />
-      )}
-    </Screen>
+      </Screen>
+    );
+  }
+
+  return (
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.roomSafeArea}>
+      <ScrollView
+        contentContainerStyle={styles.roomScreenContent}
+        onLayout={(event) => {
+          viewportHeightRef.current = event.nativeEvent.layout.height;
+        }}
+        onScroll={(event) => {
+          scrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        ref={scrollViewRef}
+        scrollEventThrottle={16}
+      >
+        <View style={styles.roomScreenHeader}>
+          <Text accessibilityRole="header" style={styles.roomScreenTitle}>Cat Room</Text>
+          <Text style={styles.roomScreenStage}>{room.stage}</Text>
+        </View>
+        {statusNotices}
+        <CatRoom
+          economicWriteDisabled={economicWriteDisabled}
+          transientInteractionDisabled={transientInteractionDisabled}
+          onChooseFurniture={(itemId) => void chooseFurniture(itemId)}
+          onFeed={(item) => void feed(item)}
+          interactions={catInteractions}
+          initialItemsExpanded={__DEV__ && visualPreview === "collection"}
+          onOpenStore={() => showSection("store")}
+          onVisualCommandStart={bringCatRoomIntoView}
+          previewActive={qaPreviewActive}
+          roomHeight={roomHeight}
+          roomRef={catRoomRef}
+          room={room}
+        />
+        {__DEV__ && !visualPreview ? (
+          <CatQaPreviewPanel
+            active={qaPreviewActive}
+            activeDay={qaPreviewActiveDay}
+            onActiveDayChange={setQaPreviewActiveDay}
+            onReset={resetQaPreview}
+            onToggleOwnership={toggleQaPreviewOwnership}
+            ownedItemIds={qaPreviewOwnedItemIds}
+          />
+        ) : null}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -1297,11 +1393,14 @@ function catVisualSteps(sequence: CatInteractionSequence): CatVisualStep[] {
       };
     }
     if (sequence === "tree") {
+      const placement = MOBILE_TREE_STEPS[index] ?? MOBILE_TREE_STEPS[0]!;
       return {
         ...common,
+        catOffsetPx: placement.catOffsetPx,
         facing: "left" as const,
-        point: index === 0 ? CAT_ROOM_LAYOUT.catTreeMidAnchor : CAT_ROOM_LAYOUT.catTreeTopAnchor,
+        point: placement.cat,
         pose: index === 0 ? "climbing" : "perched",
+        targetPoint: placement.target,
       };
     }
     if (sequence === "high-five") {
@@ -1348,21 +1447,27 @@ function targetTranslationFor(
 function CatRoom({
   economicWriteDisabled,
   interactions,
+  initialItemsExpanded,
   onChooseFurniture,
   onFeed,
+  onOpenStore,
   onVisualCommandStart,
   previewActive,
   room,
+  roomHeight,
   roomRef,
   transientInteractionDisabled,
 }: {
   economicWriteDisabled: boolean;
   interactions: ReturnType<typeof useCatRoomInteractions>;
+  initialItemsExpanded: boolean;
   onChooseFurniture(itemId?: CatItemId): void;
   onFeed(item: CatCatalogItem): void;
+  onOpenStore(): void;
   onVisualCommandStart(): void;
   previewActive: boolean;
   room: CatRoomView;
+  roomHeight: number;
   roomRef: RefObject<View | null>;
   transientInteractionDisabled: boolean;
 }) {
@@ -1377,50 +1482,65 @@ function CatRoom({
   const available = catInteractionAvailability(ownedItemIds, room.selectedFurniture?.id);
   const { visual } = interactions;
   const garden = visual.scene === "garden";
-  const [expandedCategory, setExpandedCategory] = useState<CatInteractionCategory>();
-  const playInteractionAvailable =
-    available.yarn ||
-    available.mouse ||
-    available.wand ||
-    available.scratch ||
-    available.highFive ||
-    available.pawShake ||
-    (available.butterfly && garden);
+  const [itemsExpanded, setItemsExpanded] = useState(initialItemsExpanded);
+  const [growthExpanded, setGrowthExpanded] = useState(false);
+  const [furnitureChoice, setFurnitureChoice] = useState<CatItemId>();
   const previewSafeEconomicDisabled = previewActive ? false : economicWriteDisabled;
   const beginVisualCommand = (command: () => void) => {
+    setFurnitureChoice(undefined);
+    setItemsExpanded(false);
     onVisualCommandStart();
     command();
   };
+  const chooseFurnitureAndClose = (itemId?: CatItemId) => {
+    setFurnitureChoice(undefined);
+    setItemsExpanded(false);
+    onChooseFurniture(itemId);
+  };
+  const feedAndClose = (item: CatCatalogItem) => {
+    setItemsExpanded(false);
+    onVisualCommandStart();
+    onFeed(item);
+  };
+  const activateToy = (itemId: CatItemId) => {
+    if (itemId === "yarn-toy") {
+      beginVisualCommand(() => interactions.playSequence("yarn"));
+    } else if (itemId === "toy-mouse") {
+      beginVisualCommand(() => interactions.playSequence("mouse"));
+    } else if (itemId === "teaser-wand") {
+      setFurnitureChoice(undefined);
+      setItemsExpanded(false);
+      if (visual.action !== "wand") onVisualCommandStart();
+      interactions.toggleWand();
+    }
+  };
+  const activateActivity = (itemId: CatItemId) => {
+    if (itemId === "high-five") {
+      beginVisualCommand(() => interactions.playSequence("high-five"));
+    } else if (itemId === "paw-shake") {
+      beginVisualCommand(() => interactions.playSequence("paw-shake"));
+    } else if (itemId === "outdoor-garden") {
+      beginVisualCommand(garden ? interactions.returnToRoom : interactions.visitGarden);
+    } else if (itemId === "butterfly" && garden) {
+      beginVisualCommand(() => interactions.playSequence("butterfly"));
+    }
+  };
+  const activatePlacedFurniture = (itemId: CatItemId) => {
+    if (itemId === "scratching-post") {
+      beginVisualCommand(() => interactions.playSequence("scratch"));
+    } else if (itemId === "cat-tree") {
+      beginVisualCommand(() => interactions.playSequence("tree"));
+    } else if (itemId === "cat-bed") {
+      beginVisualCommand(() => interactions.nap("cat-bed"));
+    } else if (itemId === "window-cushion") {
+      setGrowthExpanded(false);
+      setItemsExpanded(false);
+      setFurnitureChoice("window-cushion");
+    }
+  };
 
   return (
-    <>
-      <View style={styles.statGrid}>
-        <Stat label="Current points" value={formatPoints(room.points)} />
-        <Stat label="Growth chapter" value={room.stage} />
-      </View>
-      <Card>
-        <Text style={styles.progressTitle}>
-          {room.activeDays} active day{room.activeDays === 1 ? "" : "s"}{previewActive ? " · Preview" : ""}
-        </Text>
-        <Body muted>
-          {room.nextUnlock
-            ? `Next: ${room.nextUnlock.label} at ${room.nextUnlock.day} active days.`
-            : "All core Cat Room adventures are unlocked."}
-        </Body>
-        <View style={styles.growthStory}>
-          <Text style={styles.growthTitle}>{room.growthStory.title}</Text>
-          <Body>{room.growthStory.description}</Body>
-          {room.growthStory.nextMilestone ? (
-            <Body muted>
-              Next story chapter: {room.growthStory.nextMilestone.label} around day {room.growthStory.nextMilestone.day}.
-            </Body>
-          ) : null}
-          <Text style={styles.symbolicNote}>
-            Active days are a symbolic journey, not a literal kitten age.
-          </Text>
-        </View>
-      </Card>
-
+    <View style={styles.roomExperience}>
       {room.returnMessage ? (
         <Card tone="success">
           <Text accessibilityLiveRegion="polite" style={styles.returnMessage}>
@@ -1430,6 +1550,56 @@ function CatRoom({
       ) : null}
 
       <View style={[styles.roomFrame, garden && styles.gardenRoomFrame]}>
+        <View pointerEvents="box-none" style={styles.roomHud}>
+          <View
+            accessibilityLabel={`${formatPointAmount(room.points)} points`}
+            accessible
+            style={styles.pointsHud}
+          >
+            <PixelCoinIcon size={30} />
+            <Text style={styles.pointsHudValue}>{formatPointAmount(room.points)}</Text>
+          </View>
+          <View style={styles.roomHudActions}>
+            <Pressable
+              accessibilityHint="Shows Active Days and the kitten growth chapter"
+              accessibilityLabel="Growth and milestones"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: growthExpanded }}
+              onPress={() => {
+                setItemsExpanded(false);
+                setGrowthExpanded((current) => !current);
+              }}
+              style={({ pressed }) => [styles.hudButton, pressed && styles.pressed]}
+            >
+              <PixelMilestoneIcon size={28} />
+            </Pressable>
+            <Pressable
+              accessibilityHint="Shows owned actions, toys, food, and furniture"
+              accessibilityLabel="Open Items"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: itemsExpanded }}
+              onPress={() => {
+                setGrowthExpanded(false);
+                setItemsExpanded((current) => !current);
+              }}
+              style={({ pressed }) => [styles.hudButton, itemsExpanded && styles.hudButtonActive, pressed && styles.pressed]}
+            >
+              <PixelCollectionIcon size={28} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Open Cat Store"
+              accessibilityRole="button"
+              onPress={() => {
+                setGrowthExpanded(false);
+                setItemsExpanded(false);
+                onOpenStore();
+              }}
+              style={({ pressed }) => [styles.hudButton, pressed && styles.pressed]}
+            >
+              <PixelStoreIcon size={28} />
+            </Pressable>
+          </View>
+        </View>
         <View
           {...interactions.panHandlers}
           accessibilityHint={visual.action === "wand" ? "Drag anywhere inside the room to move the teaser." : undefined}
@@ -1437,7 +1607,7 @@ function CatRoom({
           accessibilityRole="image"
           onLayout={interactions.onRoomLayout}
           ref={roomRef}
-          style={[styles.room, garden && styles.gardenRoom]}
+          style={[styles.room, { height: roomHeight }, garden && styles.gardenRoom]}
           testID="cat-room-scene"
         >
           {garden ? (
@@ -1451,7 +1621,12 @@ function CatRoom({
           <View style={[styles.roomFloor, garden && styles.gardenFloor]}>
             <View style={[styles.roomFloorHighlight, garden && styles.gardenFloorHighlight]} />
           </View>
-          {!garden ? <FurnitureVisual itemId={room.selectedFurniture?.id} /> : null}
+          {!garden ? (
+            <FurnitureVisual
+              itemId={room.selectedFurniture?.id}
+              onPress={activatePlacedFurniture}
+            />
+          ) : null}
           {!garden && visual.temporaryFurniture && visual.temporaryFurniture !== room.selectedFurniture?.id ? (
             <FurnitureVisual itemId={visual.temporaryFurniture} />
           ) : null}
@@ -1482,186 +1657,330 @@ function CatRoom({
               showFloor={false}
             />
           </Animated.View>
-        </View>
-        <View style={styles.roomCaption} testID="cat-room-caption">
-          <Text accessibilityLiveRegion="polite" style={styles.roomCaptionText}>
-            {visual.caption}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.companionSection}>
-        <Text style={styles.cardTitle}>Spend time together</Text>
-        <Body muted>Choose a moment with your kitten.</Body>
-        <View style={styles.categoryRow}>
-          <InteractionCategoryButton
-            expanded={expandedCategory === "care"}
-            label="Care"
-            onPress={() => setExpandedCategory((current) => current === "care" ? undefined : "care")}
-            summary={room.ownedFood.length > 0 ? "Sit or feed" : "Sit together"}
-          />
-          {playInteractionAvailable ? (
-            <InteractionCategoryButton
-              expanded={expandedCategory === "play"}
-              label="Play"
-              onPress={() => setExpandedCategory((current) => current === "play" ? undefined : "play")}
-              summary="Toys & tricks"
-            />
-          ) : null}
-          <InteractionCategoryButton
-            expanded={expandedCategory === "relax"}
-            label="Relax"
-            onPress={() => setExpandedCategory((current) => current === "relax" ? undefined : "relax")}
-            summary={garden ? "Garden active" : "Nap & explore"}
-          />
-        </View>
-
-        {expandedCategory === "care" ? (
-          <View accessibilityLabel="Care interactions" style={styles.interactionPanel}>
-            <Text accessibilityRole="header" style={styles.interactionPanelTitle}>Care</Text>
-            <CompanionActionButton
-              disabled={transientInteractionDisabled}
-              label="Sit together"
-              onPress={() => beginVisualCommand(interactions.sitTogether)}
-            />
-            {room.ownedFood.length > 0 ? (
-              <View style={styles.interactionSubgroup}>
-                <Text style={styles.interactionSubheading}>Feed</Text>
-                <Text style={styles.interactionHelp}>Uses one owned food. Current quantities are shown.</Text>
-                {room.ownedFood.map(({ item, quantity }) => (
-                  <CompanionActionButton
-                    disabled={previewSafeEconomicDisabled}
-                    key={item.id}
-                    label={`Feed ${item.name} · ${quantity}`}
-                    onPress={() => beginVisualCommand(() => onFeed(item))}
-                  />
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.interactionHelp}>Food you buy will appear here.</Text>
-            )}
-          </View>
-        ) : null}
-
-        {expandedCategory === "play" && playInteractionAvailable ? (
-          <View accessibilityLabel="Play interactions" style={styles.interactionPanel}>
-            <Text accessibilityRole="header" style={styles.interactionPanelTitle}>Play</Text>
-            {available.yarn ? (
-              <CompanionActionButton
+          {furnitureChoice === "window-cushion" && !garden ? (
+            <View
+              accessibilityLabel="Window perch actions"
+              style={[styles.furnitureChoice, { top: roomHeight * 0.43 }]}
+            >
+              <ContextChoiceButton
                 disabled={transientInteractionDisabled}
-                label="Play with yarn"
-                onPress={() => beginVisualCommand(() => interactions.playSequence("yarn"))}
-              />
-            ) : null}
-            {available.mouse ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label="Chase toy mouse"
-                onPress={() => beginVisualCommand(() => interactions.playSequence("mouse"))}
-              />
-            ) : null}
-            {available.wand ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label={visual.action === "wand" ? "End wand play" : "Play with teaser wand"}
-                onPress={() => {
-                  if (visual.action !== "wand") onVisualCommandStart();
-                  interactions.toggleWand();
-                }}
-              />
-            ) : null}
-            {available.scratch ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label="Scratch"
-                onPress={() => beginVisualCommand(() => interactions.playSequence("scratch"))}
-              />
-            ) : null}
-            {available.highFive ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label="High-five"
-                onPress={() => beginVisualCommand(() => interactions.playSequence("high-five"))}
-              />
-            ) : null}
-            {available.pawShake ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label="Paw shake"
-                onPress={() => beginVisualCommand(() => interactions.playSequence("paw-shake"))}
-              />
-            ) : null}
-            {available.butterfly && garden ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label="Follow butterfly"
-                onPress={() => beginVisualCommand(() => interactions.playSequence("butterfly"))}
-              />
-            ) : null}
-          </View>
-        ) : null}
-
-        {expandedCategory === "relax" ? (
-          <View accessibilityLabel="Relax and explore interactions" style={styles.interactionPanel}>
-            <Text accessibilityRole="header" style={styles.interactionPanelTitle}>Relax & explore</Text>
-            <CompanionActionButton
-              disabled={transientInteractionDisabled}
-              label="Nap"
-              onPress={() => beginVisualCommand(() => interactions.nap(room.selectedFurniture?.id))}
-            />
-            <CompanionActionButton
-              disabled={transientInteractionDisabled}
-              label="Explore room"
-              onPress={() => beginVisualCommand(interactions.exploreRoom)}
-            />
-            {available.perch ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label="Watch from perch"
+                label="Watch"
                 onPress={() => beginVisualCommand(() => interactions.playSequence("perch"))}
               />
-            ) : null}
-            {available.tree ? (
-              <CompanionActionButton
+              <ContextChoiceButton
                 disabled={transientInteractionDisabled}
-                label="Climb / perch"
-                onPress={() => beginVisualCommand(() => interactions.playSequence("tree"))}
+                label="Nap"
+                onPress={() => beginVisualCommand(() => interactions.nap("window-cushion"))}
               />
-            ) : null}
-            {available.garden ? (
-              <CompanionActionButton
-                disabled={transientInteractionDisabled}
-                label={garden ? "Return to room" : "Visit garden"}
-                onPress={() => beginVisualCommand(garden ? interactions.returnToRoom : interactions.visitGarden)}
-              />
-            ) : null}
-            {room.ownedFurniture.length > 0 ? (
-              <View style={styles.interactionSubgroup}>
-                <Text style={styles.interactionSubheading}>Room furniture</Text>
-                <Text style={styles.interactionHelp}>Choose one owned furnishing to show in the room.</Text>
-                {room.ownedFurniture.map(({ item }) => (
-                  <CompanionActionButton
-                    disabled={previewSafeEconomicDisabled || room.selectedFurniture?.id === item.id}
-                    key={item.id}
-                    label={room.selectedFurniture?.id === item.id ? `${item.name} · In room` : item.name}
-                    onPress={() => onChooseFurniture(item.id)}
-                  />
-                ))}
-                {room.selectedFurniture ? (
-                  <CompanionActionButton
-                    disabled={previewSafeEconomicDisabled}
-                    label="Clear furnishing"
-                    onPress={() => onChooseFurniture(undefined)}
-                  />
-                ) : null}
+              <SheetCloseButton label="Close perch actions" onPress={() => setFurnitureChoice(undefined)} />
+            </View>
+          ) : null}
+        </View>
+        {growthExpanded ? (
+          <View accessibilityLabel="Growth and milestone details" style={styles.floatingSheet}>
+            <View style={styles.sheetHeader}>
+              <View style={styles.growthDetailHeader}>
+                <PixelMilestoneIcon size={34} />
+                <View style={styles.growthDetailTitleGroup}>
+                  <Text style={styles.growthTitle}>{room.growthStory.title}</Text>
+                  <Text style={styles.progressTitle}>
+                    {room.activeDays} active day{room.activeDays === 1 ? "" : "s"}{previewActive ? " · Preview" : ""}
+                  </Text>
+                </View>
               </View>
-            ) : null}
+              <SheetCloseButton label="Close milestones" onPress={() => setGrowthExpanded(false)} />
+            </View>
+            <Body>{room.growthStory.description}</Body>
+            <Body muted>
+              {room.nextUnlock
+                ? `Next: ${room.nextUnlock.label} at ${room.nextUnlock.day} active days.`
+                : "All core Cat Room adventures are unlocked."}
+            </Body>
+            <Text style={styles.symbolicNote}>Active days are a symbolic journey, not a literal kitten age.</Text>
+          </View>
+        ) : null}
+
+        {itemsExpanded ? (
+          <View accessibilityLabel="Items tray" style={[styles.floatingSheet, styles.itemTray]}>
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleGroup}>
+                <PixelCollectionIcon size={30} />
+                <Text accessibilityRole="header" style={styles.sheetTitle}>Items</Text>
+              </View>
+              <SheetCloseButton label="Close Items" onPress={() => setItemsExpanded(false)} />
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.itemTrayContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              style={styles.itemTrayScroll}
+            >
+              {room.ownedFood.length > 0 ? (
+                <ItemTraySection label="Food">
+                  {room.ownedFood.map(({ item, quantity }) => (
+                    <ItemTrayButton
+                      disabled={previewSafeEconomicDisabled}
+                      item={item}
+                      key={item.id}
+                      onPress={() => feedAndClose(item)}
+                      quantity={quantity}
+                    />
+                  ))}
+                </ItemTraySection>
+              ) : null}
+
+              {room.ownedToys.length > 0 ? (
+                <ItemTraySection label="Toys">
+                  {room.ownedToys.map(({ item }) => (
+                    <ItemTrayButton
+                      disabled={transientInteractionDisabled}
+                      item={item}
+                      key={item.id}
+                      onPress={() => activateToy(item.id)}
+                    />
+                  ))}
+                </ItemTraySection>
+              ) : null}
+
+              {room.ownedFurniture.length > 0 ? (
+                <ItemTraySection label="Furniture">
+                  {room.ownedFurniture.map(({ item }) => (
+                    <ItemTrayButton
+                      disabled={previewSafeEconomicDisabled || room.selectedFurniture?.id === item.id}
+                      item={item}
+                      key={item.id}
+                      onPress={() => chooseFurnitureAndClose(item.id)}
+                      selected={room.selectedFurniture?.id === item.id}
+                    />
+                  ))}
+                  {room.selectedFurniture ? (
+                    <TrayUtilityButton
+                      disabled={previewSafeEconomicDisabled}
+                      label="Clear room"
+                      onPress={() => chooseFurnitureAndClose(undefined)}
+                    />
+                  ) : null}
+                </ItemTraySection>
+              ) : null}
+
+              {[...room.ownedTricks, ...room.ownedScenes, ...room.ownedInteractions]
+                .filter(({ item }) => item.id !== "butterfly" || garden).length > 0 ? (
+                <ItemTraySection label="Activities">
+                  {[...room.ownedTricks, ...room.ownedScenes, ...room.ownedInteractions]
+                    .filter(({ item }) => item.id !== "butterfly" || garden)
+                    .map(({ item }) => (
+                      <ItemTrayButton
+                        disabled={transientInteractionDisabled}
+                        item={item}
+                        key={item.id}
+                        onPress={() => activateActivity(item.id)}
+                      />
+                    ))}
+                </ItemTraySection>
+              ) : null}
+            </ScrollView>
           </View>
         ) : null}
       </View>
 
-      <Inventory room={room} />
-    </>
+      <TransientCatCaption
+        caption={visual.caption}
+        reducedMotion={interactions.reducedMotion}
+        visible={Boolean(visual.action)}
+      />
+    </View>
+  );
+}
+
+function SheetCloseButton({ label, onPress }: { label: string; onPress(): void }) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.sheetCloseButton, pressed && styles.pressed]}
+    >
+      <Text style={styles.sheetCloseText}>×</Text>
+    </Pressable>
+  );
+}
+
+function ItemTraySection({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <View style={styles.itemTraySection}>
+      <Text style={styles.itemTraySectionLabel}>{label}</Text>
+      <View style={styles.itemTrayGrid}>{children}</View>
+    </View>
+  );
+}
+
+function ItemTrayButton({
+  disabled = false,
+  item,
+  onPress,
+  quantity,
+  selected = false,
+}: {
+  disabled?: boolean;
+  item: CatCatalogItem;
+  onPress(): void;
+  quantity?: number;
+  selected?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={quantity === undefined ? item.name : `${item.name}, quantity ${quantity}`}
+      accessibilityRole="button"
+      accessibilityState={{ disabled, selected }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.itemTrayButton,
+        selected && styles.itemTrayButtonSelected,
+        pressed && styles.pressed,
+        disabled && styles.disabled,
+      ]}
+    >
+      <View style={styles.itemTrayIcon}>
+        <PixelItemIcon itemId={item.id} size={48} />
+        {quantity !== undefined ? (
+          <View style={styles.itemTrayQuantity}>
+            <Text style={styles.itemTrayQuantityText}>×{quantity}</Text>
+          </View>
+        ) : null}
+      </View>
+      <Text numberOfLines={2} style={styles.itemTrayLabel}>{itemTrayLabel(item.id)}</Text>
+    </Pressable>
+  );
+}
+
+function TrayUtilityButton({
+  disabled = false,
+  label,
+  onPress,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress(): void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.trayUtilityButton, pressed && styles.pressed, disabled && styles.disabled]}
+    >
+      <Text style={styles.trayUtilityIcon}>×</Text>
+      <Text style={styles.itemTrayLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ContextChoiceButton({
+  disabled = false,
+  label,
+  onPress,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress(): void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.contextChoiceButton, pressed && styles.pressed, disabled && styles.disabled]}
+    >
+      <Text style={styles.contextChoiceText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function itemTrayLabel(itemId: CatItemId): string {
+  const labels: Partial<Record<CatItemId, string>> = {
+    "kitten-milk": "Milk",
+    "wet-kitten-food": "Wet food",
+    "cat-food": "Kibble",
+    "cat-treat": "Soft treat",
+    "freeze-dried-treat": "Freeze-dried",
+    "yarn-toy": "Yarn",
+    "toy-mouse": "Mouse",
+    "teaser-wand": "Wand",
+    "scratching-post": "Scratch post",
+    "window-cushion": "Window perch",
+    "cat-tree": "Cat tree",
+    "cat-bed": "Cat bed",
+    "high-five": "High-five",
+    "paw-shake": "Paw shake",
+    "outdoor-garden": "Garden",
+    butterfly: "Butterfly",
+  };
+  return labels[itemId] ?? catItem(itemId)?.name ?? itemId;
+}
+
+/*
+ * Item actions intentionally live in the temporary room tray above. Keeping the
+ * caption outside the artwork prevents it from obscuring the cat.
+ */
+function TransientCatCaption({
+  caption,
+  reducedMotion,
+  visible,
+}: {
+  caption: string;
+  reducedMotion: boolean;
+  visible: boolean;
+}) {
+  const [opacity] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    opacity.stopAnimation();
+    if (!visible) {
+      opacity.setValue(0);
+      return undefined;
+    }
+    opacity.setValue(reducedMotion ? 1 : 0);
+    const reveal = reducedMotion
+      ? undefined
+      : Animated.timing(opacity, {
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        toValue: 1,
+        useNativeDriver: true,
+      });
+    reveal?.start();
+    const timeout = setTimeout(() => {
+      if (reducedMotion) {
+        opacity.setValue(0);
+        return;
+      }
+      Animated.timing(opacity, {
+        duration: 260,
+        easing: Easing.in(Easing.quad),
+        toValue: 0,
+        useNativeDriver: true,
+      }).start();
+    }, 4_500);
+    return () => {
+      clearTimeout(timeout);
+      reveal?.stop();
+    };
+  }, [caption, opacity, reducedMotion, visible]);
+
+  if (!visible) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.roomCaption, { opacity }]}
+      testID="cat-room-caption"
+    >
+      <Text accessibilityLiveRegion="polite" style={styles.roomCaptionText}>
+        {caption}
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -1687,8 +2006,11 @@ function CatStore({
   return (
     <>
       <View style={styles.storeBalance}>
-        <Text style={styles.storeBalanceLabel}>Current points</Text>
-        <Text style={styles.storeBalanceValue}>{formatPoints(room.points)}</Text>
+        <PixelCoinIcon size={34} />
+        <View>
+          <Text style={styles.storeBalanceLabel}>Available points</Text>
+          <Text style={styles.storeBalanceValue}>{formatPointAmount(room.points)}</Text>
+        </View>
       </View>
       <Body muted>
         Food and treats can be bought again. Toys, furniture, and tricks stay yours. Locked rewards open with active days, never streaks.
@@ -1707,6 +2029,9 @@ function CatStore({
                 : `Preview locked · day ${item.unlockActiveDays}`;
             return (
               <View key={item.id} style={styles.storeItem}>
+                <View style={styles.storeItemIcon}>
+                  <PixelItemIcon itemId={item.id} size={64} />
+                </View>
                 <View style={styles.storeItemCopy}>
                   <Text style={styles.itemName}>{item.name}</Text>
                   <Text style={styles.itemDescription}>
@@ -1749,78 +2074,6 @@ function CatStore({
   );
 }
 
-function Inventory({ room }: { room: CatRoomView }) {
-  const groups = [
-    ["Food & treats", room.ownedFood],
-    ["Toys", room.ownedToys],
-    ["Furniture", room.ownedFurniture],
-    ["Tricks", room.ownedTricks],
-    ["Adventures", [...room.ownedScenes, ...room.ownedInteractions]],
-  ] as const;
-  const hasAnything = groups.some(([, entries]) => entries.length > 0);
-  return (
-    <View style={styles.inventoryShelf}>
-      <Text style={styles.cardTitle}>Owned things</Text>
-      {!hasAnything ? (
-        <Body muted>Your first Cat Store reward will appear here.</Body>
-      ) : (
-        groups.map(([label, entries]) =>
-          entries.length > 0 ? (
-            <View key={label} style={styles.inventoryGroup}>
-              <Text style={styles.inventoryLabel}>{label}</Text>
-              <View style={styles.inventoryTiles}>
-                {entries.map(({ item, quantity }) => (
-                  <View
-                    accessibilityLabel={item.durable ? item.name : `${item.name}, quantity ${quantity}`}
-                    accessible
-                    key={item.id}
-                    style={styles.inventoryTile}
-                  >
-                    <View style={[styles.inventoryMark, inventoryMarkStyle(item.kind)]}>
-                      <Text style={styles.inventoryMarkText}>{item.name.slice(0, 1)}</Text>
-                      {!item.durable ? (
-                        <View style={styles.inventoryQuantity}>
-                          <Text style={styles.inventoryQuantityText}>×{quantity}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text numberOfLines={2} style={styles.inventoryName}>{item.name}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : null,
-        )
-      )}
-    </View>
-  );
-}
-
-function inventoryMarkStyle(kind: CatCatalogItem["kind"]) {
-  if (kind === "food") return styles.inventoryMarkFood;
-  if (kind === "toy") return styles.inventoryMarkToy;
-  if (kind === "furniture") return styles.inventoryMarkFurniture;
-  if (kind === "trick") return styles.inventoryMarkTrick;
-  return styles.inventoryMarkAdventure;
-}
-
-function SectionTab({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [styles.sectionTab, active && styles.sectionTabActive, pressed && styles.pressed]}
-    >
-      <Text style={[styles.sectionTabText, active && styles.sectionTabTextActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return <View style={styles.stat}><Text style={styles.statLabel}>{label}</Text><Text style={styles.statValue}>{value}</Text></View>;
-}
-
 function ActionButton({ disabled, label, onPress }: { disabled?: boolean; label: string; onPress(): void }) {
   return (
     <Pressable
@@ -1830,54 +2083,6 @@ function ActionButton({ disabled, label, onPress }: { disabled?: boolean; label:
       style={({ pressed }) => [styles.actionButton, pressed && styles.pressed, disabled && styles.disabled]}
     >
       <Text style={styles.actionButtonText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function InteractionCategoryButton({
-  expanded,
-  label,
-  onPress,
-  summary,
-}: {
-  expanded: boolean;
-  label: string;
-  onPress(): void;
-  summary: string;
-}) {
-  return (
-    <Pressable
-      accessibilityHint={`Shows ${label} interactions`}
-      accessibilityRole="button"
-      accessibilityState={{ expanded }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.interactionCategory,
-        expanded && styles.interactionCategoryExpanded,
-        pressed && styles.pressed,
-      ]}
-    >
-      <Text style={[styles.interactionCategoryLabel, expanded && styles.interactionCategoryLabelExpanded]}>
-        {label}
-      </Text>
-      <Text style={[styles.interactionCategorySummary, expanded && styles.interactionCategorySummaryExpanded]}>
-        {summary}
-      </Text>
-    </Pressable>
-  );
-}
-
-function CompanionActionButton({ disabled, label, onPress }: { disabled?: boolean; label: string; onPress(): void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: Boolean(disabled) }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.companionAction, pressed && styles.pressed, disabled && styles.disabled]}
-    >
-      <Text style={styles.companionActionText}>{label}</Text>
-      <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.companionActionArrow}>›</Text>
     </Pressable>
   );
 }
@@ -1910,11 +2115,7 @@ function RoomToyVisuals({
           pointerEvents="none"
           style={[styles.movingTarget, movingTarget]}
         >
-          <View style={styles.yarnBall}>
-            <View style={[styles.yarnStripe, styles.yarnStripeOne]} />
-            <View style={[styles.yarnStripe, styles.yarnStripeTwo]} />
-          </View>
-          <View style={styles.yarnTail} />
+          <PixelItemIcon itemId="yarn-toy" size={42} />
         </Animated.View>
       ) : null}
       {ownsMouse && activeTarget === "mouse" ? (
@@ -1923,12 +2124,7 @@ function RoomToyVisuals({
           pointerEvents="none"
           style={[styles.movingTarget, movingTarget]}
         >
-          <View style={styles.mouseTail} />
-          <View style={styles.mouseBody}>
-            <View style={styles.mouseEar} />
-            <View style={styles.mouseEye} />
-            <View style={styles.mouseNose} />
-          </View>
+          <PixelItemIcon itemId="toy-mouse" size={46} />
         </Animated.View>
       ) : null}
       {activeTarget === "wand" ? (
@@ -1937,9 +2133,7 @@ function RoomToyVisuals({
           pointerEvents="none"
           style={[styles.movingTarget, styles.wandTarget, movingTarget]}
         >
-          <View style={styles.wandHandle} />
-          <View style={styles.wandString} />
-          <View style={styles.wandTip} />
+          <PixelItemIcon itemId="teaser-wand" size={58} />
         </Animated.View>
       ) : null}
       {activeTarget === "butterfly" ? (
@@ -1948,39 +2142,76 @@ function RoomToyVisuals({
           pointerEvents="none"
           style={[styles.movingTarget, styles.butterflyTarget, movingTarget]}
         >
-          <View style={[styles.butterflyWing, styles.butterflyWingLeft]} />
-          <View style={styles.butterflyBody} />
-          <View style={[styles.butterflyWing, styles.butterflyWingRight]} />
+          <PixelItemIcon itemId="butterfly" size={42} />
         </Animated.View>
       ) : null}
     </>
   );
 }
 
-function FurnitureVisual({ itemId }: { itemId?: CatItemId }) {
-  if (itemId === "cat-bed") return <View accessibilityLabel="Cat bed in room" style={[styles.catBed, roomAnchorStyle(CAT_ROOM_LAYOUT.bedAnchor)]} />;
-  if (itemId === "window-cushion") return <View accessibilityLabel="Window perch in room" style={[styles.windowCushion, roomAnchorStyle(CAT_ROOM_LAYOUT.windowPerchAnchor)]} />;
+function FurnitureVisual({
+  itemId,
+  onPress,
+}: {
+  itemId?: CatItemId;
+  onPress?(itemId: CatItemId): void;
+}) {
+  if (itemId === "cat-bed") {
+    return (
+      <Pressable
+        accessibilityHint="Starts a nap"
+        accessibilityLabel="Cat bed in room"
+        accessibilityRole="button"
+        disabled={!onPress}
+        onPress={() => onPress?.(itemId)}
+        style={[styles.catBed, roomAnchorStyle(CAT_ROOM_LAYOUT.bedAnchor)]}
+      />
+    );
+  }
+  if (itemId === "window-cushion") {
+    return (
+      <Pressable
+        accessibilityHint="Shows watch and nap choices"
+        accessibilityLabel="Window perch in room"
+        accessibilityRole="button"
+        disabled={!onPress}
+        onPress={() => onPress?.(itemId)}
+        style={[styles.windowCushion, roomAnchorStyle(CAT_ROOM_LAYOUT.windowPerchAnchor)]}
+      />
+    );
+  }
   if (itemId === "scratching-post") {
     return (
-      <View
+      <Pressable
+        accessibilityHint="Starts scratching"
         accessibilityLabel="Scratching post in room"
+        accessibilityRole="button"
+        disabled={!onPress}
+        onPress={() => onPress?.(itemId)}
         style={[styles.scratchingPost, roomAnchorStyle(CAT_ROOM_LAYOUT.scratchingPostAnchor)]}
       >
         <View style={styles.scratchingPostTop} />
         <View style={styles.scratchingPostColumn} />
         <View style={styles.scratchingPostBase} />
-      </View>
+      </Pressable>
     );
   }
   if (itemId === "cat-tree") {
     return (
-      <View accessibilityLabel="Cat tree in room" style={[styles.catTree, roomAnchorStyle(CAT_ROOM_LAYOUT.catTreeFloorAnchor)]}>
+      <Pressable
+        accessibilityHint="Starts climbing and perching"
+        accessibilityLabel="Cat tree in room"
+        accessibilityRole="button"
+        disabled={!onPress}
+        onPress={() => onPress?.(itemId)}
+        style={[styles.catTree, roomAnchorStyle(CAT_ROOM_LAYOUT.catTreeFloorAnchor)]}
+      >
         <View style={styles.catTreeTop} />
         <View style={styles.catTreeUpperPost} />
         <View style={styles.catTreeMiddle} />
         <View style={styles.catTreeLowerPost} />
         <View style={styles.catTreeBase} />
-      </View>
+      </Pressable>
     );
   }
   return null;
@@ -2045,12 +2276,19 @@ function formatPoints(points: number): string {
   return `${Number.isInteger(points) ? points.toFixed(0) : points.toFixed(1)} points`;
 }
 
+function formatPointAmount(points: number): string {
+  return Number.isInteger(points) ? points.toFixed(0) : points.toFixed(1);
+}
+
 const styles = StyleSheet.create({
-  sectionTabs: { backgroundColor: colors.surfaceMuted, borderRadius: radii.pill, flexDirection: "row", gap: spacing.xs, padding: spacing.xs },
-  sectionTab: { alignItems: "center", borderRadius: radii.pill, flex: 1, justifyContent: "center", minHeight: touchTarget },
-  sectionTabActive: { backgroundColor: colors.primary },
-  sectionTabText: { color: colors.text, fontSize: typography.body, fontWeight: "800" },
-  sectionTabTextActive: { color: "#FFFFFF" },
+  roomSafeArea: { backgroundColor: colors.background, flex: 1 },
+  roomScreenContent: { flexGrow: 1, gap: spacing.sm, paddingBottom: spacing.lg, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
+  roomScreenHeader: { alignItems: "baseline", flexDirection: "row", justifyContent: "space-between", minHeight: 38, paddingHorizontal: spacing.xs },
+  roomScreenTitle: { color: colors.text, fontSize: 24, fontWeight: "900", letterSpacing: -0.4 },
+  roomScreenStage: { color: colors.textMuted, fontSize: typography.small, fontWeight: "800" },
+  backToRoom: { alignItems: "center", alignSelf: "flex-start", flexDirection: "row", minHeight: touchTarget, paddingRight: spacing.md },
+  backToRoomArrow: { color: colors.primary, fontSize: 30, fontWeight: "700", marginRight: spacing.xs },
+  backToRoomText: { color: colors.primary, fontSize: typography.small, fontWeight: "900" },
   qaPanel: { backgroundColor: "#F5F3FF", borderColor: "#7C3AED", borderRadius: radii.md, borderStyle: "dashed", borderWidth: 1, gap: spacing.sm, padding: spacing.md },
   qaHeader: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm, justifyContent: "space-between" },
   qaDisclosure: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", minHeight: touchTarget },
@@ -2066,21 +2304,17 @@ const styles = StyleSheet.create({
   qaChipText: { color: "#5B21B6", fontSize: typography.small, fontWeight: "700" },
   qaChipTextSelected: { color: "#FFFFFF" },
   notice: { backgroundColor: colors.primarySoft, borderRadius: radii.sm, color: colors.text, fontSize: typography.small, lineHeight: 20, padding: spacing.md },
-  statGrid: { flexDirection: "row", gap: spacing.sm },
-  stat: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flex: 1, gap: spacing.xs, minHeight: 92, padding: spacing.md },
-  statLabel: { color: colors.textMuted, fontSize: typography.label, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase" },
-  statValue: { color: colors.text, fontSize: 20, fontWeight: "900" },
   progressTitle: { color: colors.text, fontSize: typography.body, fontWeight: "800" },
-  growthStory: { borderTopColor: colors.border, borderTopWidth: 1, gap: spacing.xs, marginTop: spacing.md, paddingTop: spacing.md },
   growthTitle: { color: colors.text, fontSize: typography.body, fontWeight: "900" },
   symbolicNote: { color: colors.textMuted, fontSize: typography.small, fontStyle: "italic", lineHeight: 20 },
   returnMessage: { color: colors.success, fontSize: typography.body, fontWeight: "700", lineHeight: 22 },
-  roomFrame: { backgroundColor: "#FFFCF6", borderColor: "#D9A86C", borderRadius: radii.lg, borderWidth: 1, overflow: "hidden" },
+  roomExperience: { gap: spacing.sm },
+  roomFrame: { backgroundColor: "#FFFCF6", borderColor: "#D9A86C", borderRadius: radii.lg, borderWidth: 1, overflow: "hidden", position: "relative" },
   gardenRoomFrame: { borderColor: "#79A96B" },
-  room: { alignItems: "center", backgroundColor: "#FDECCB", height: CAT_ROOM_HEIGHT, overflow: "hidden", padding: spacing.md, position: "relative" },
+  room: { alignItems: "center", backgroundColor: "#FDECCB", overflow: "hidden", padding: spacing.md, position: "relative" },
   gardenRoom: { backgroundColor: "#DFF2D0" },
   gardenSky: { backgroundColor: "#CDECF4", height: 190, left: 0, position: "absolute", right: 0, top: 0 },
-  window: { backgroundColor: "#BFE5F5", borderColor: "#FFFFFF", borderWidth: 5, flexDirection: "row", height: 75, left: spacing.lg, position: "absolute", top: spacing.lg, width: 108 },
+  window: { backgroundColor: "#BFE5F5", borderColor: "#FFFFFF", borderWidth: 5, flexDirection: "row", height: 84, left: spacing.lg, position: "absolute", top: 78, width: 118 },
   windowPane: { borderColor: "#FFFFFF", borderRightWidth: 2, flex: 1 },
   gardenDetail: { color: "#3B6B3B", fontSize: 20, left: 20, letterSpacing: 7, position: "absolute", right: 20, textAlign: "center", top: 50 },
   roomFloor: { backgroundColor: "#E8C895", bottom: 0, left: 0, position: "absolute", right: 0, top: `${CAT_ROOM_LAYOUT.floorY * 100}%` },
@@ -2088,28 +2322,42 @@ const styles = StyleSheet.create({
   gardenFloor: { backgroundColor: "#A9CF83" },
   gardenFloorHighlight: { backgroundColor: "#C7E4A9" },
   kittenLayer: { height: 110, left: 0, position: "absolute", top: 0, width: CAT_SPRITE_WIDTH, zIndex: 3 },
-  roomCaption: { alignItems: "center", backgroundColor: "#FFFCF6", borderTopColor: "#E4D3BE", borderTopWidth: StyleSheet.hairlineWidth, justifyContent: "center", minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  roomHud: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", left: 12, position: "absolute", right: 12, top: 12, zIndex: 12 },
+  pointsHud: { alignItems: "center", backgroundColor: "rgba(255, 252, 246, 0.94)", borderColor: "#E4D3BE", borderRadius: radii.pill, borderWidth: 1, flexDirection: "row", gap: spacing.sm, minHeight: touchTarget, paddingHorizontal: spacing.sm },
+  pointsHudValue: { color: "#4A2F21", fontSize: typography.body, fontVariant: ["tabular-nums"], fontWeight: "900" },
+  roomHudActions: { flexDirection: "row", gap: spacing.xs },
+  hudButton: { alignItems: "center", backgroundColor: "rgba(255, 252, 246, 0.94)", borderColor: "#E4D3BE", borderRadius: radii.pill, borderWidth: 1, height: touchTarget, justifyContent: "center", width: touchTarget },
+  hudButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  roomCaption: { alignItems: "center", alignSelf: "center", backgroundColor: colors.surface, borderColor: "#E4D3BE", borderRadius: radii.md, borderWidth: 1, justifyContent: "center", maxWidth: 300, minHeight: 42, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   roomCaptionText: { color: colors.text, flexShrink: 1, fontSize: typography.small, lineHeight: 20, textAlign: "center", width: "100%" },
-  movingTarget: { height: 38, left: 0, marginLeft: -19, marginTop: -19, position: "absolute", top: 0, width: 38, zIndex: 6 },
-  yarnBall: { backgroundColor: "#9C6644", borderColor: "#6F422A", borderRadius: 16, borderWidth: 2, height: 32, left: 2, position: "absolute", top: 2, width: 32 },
-  yarnStripe: { backgroundColor: "#F0D5B5", height: 2, left: 5, position: "absolute", top: 13, width: 20 },
-  yarnStripeOne: { transform: [{ rotate: "28deg" }] },
-  yarnStripeTwo: { transform: [{ rotate: "-35deg" }] },
-  yarnTail: { borderBottomColor: "#9C6644", borderBottomWidth: 2, borderRadius: 10, bottom: 0, height: 11, position: "absolute", right: 0, transform: [{ rotate: "14deg" }], width: 18 },
-  mouseBody: { backgroundColor: "#817A85", borderColor: "#514B55", borderRadius: 12, borderWidth: 2, height: 22, left: 13, position: "absolute", top: 2, width: 30 },
-  mouseEar: { backgroundColor: "#C58B9A", borderColor: "#514B55", borderRadius: 6, borderWidth: 1, height: 11, left: 3, position: "absolute", top: -5, width: 11 },
-  mouseEye: { backgroundColor: "#2E2930", borderRadius: 2, height: 4, position: "absolute", right: 6, top: 5, width: 4 },
-  mouseNose: { backgroundColor: "#C66F7C", borderRadius: 3, height: 5, position: "absolute", right: -4, top: 9, width: 5 },
-  mouseTail: { borderColor: "#A36D78", borderRadius: 12, borderTopWidth: 2, height: 15, left: 0, position: "absolute", top: 6, transform: [{ rotate: "-12deg" }], width: 18 },
-  wandTarget: { height: 64, marginLeft: -26, marginTop: -32, width: 52 },
-  wandHandle: { backgroundColor: "#6D4C41", borderRadius: 3, height: 42, position: "absolute", right: 5, top: 0, transform: [{ rotate: "24deg" }], width: 5 },
-  wandString: { backgroundColor: "#715B77", height: 35, position: "absolute", right: 18, top: 26, transform: [{ rotate: "38deg" }], width: 2 },
-  wandTip: { backgroundColor: "#E76F51", borderColor: "#A83D31", borderRadius: 8, borderWidth: 2, bottom: 0, height: 16, left: 5, position: "absolute", width: 16 },
-  butterflyTarget: { alignItems: "center", flexDirection: "row", height: 30, justifyContent: "center", marginLeft: -21, marginTop: -15, width: 42 },
-  butterflyWing: { borderRadius: 10, height: 20, width: 17 },
-  butterflyWingLeft: { backgroundColor: "#F4A261", transform: [{ rotate: "-18deg" }] },
-  butterflyWingRight: { backgroundColor: "#E76F51", transform: [{ rotate: "18deg" }] },
-  butterflyBody: { backgroundColor: "#50394C", borderRadius: 2, height: 22, marginHorizontal: -1, width: 4, zIndex: 2 },
+  floatingSheet: { backgroundColor: "rgba(255, 252, 246, 0.98)", borderColor: "#D9A86C", borderRadius: radii.lg, borderWidth: 2, bottom: spacing.sm, gap: spacing.sm, left: spacing.sm, maxHeight: 390, padding: spacing.md, position: "absolute", right: spacing.sm, shadowColor: "#4A2F21", shadowOffset: { height: 4, width: 0 }, shadowOpacity: 0.18, shadowRadius: 10, zIndex: 20 },
+  sheetHeader: { alignItems: "center", flexDirection: "row", gap: spacing.sm, justifyContent: "space-between" },
+  sheetTitleGroup: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
+  sheetTitle: { color: colors.text, fontSize: typography.heading, fontWeight: "900" },
+  sheetCloseButton: { alignItems: "center", backgroundColor: colors.surfaceMuted, borderRadius: radii.pill, height: touchTarget, justifyContent: "center", width: touchTarget },
+  sheetCloseText: { color: colors.text, fontSize: 26, fontWeight: "700", lineHeight: 28 },
+  itemTray: { backgroundColor: "rgba(255, 247, 231, 0.98)", maxHeight: 360, padding: spacing.sm },
+  itemTrayScroll: { maxHeight: 296 },
+  itemTrayContent: { gap: spacing.md, paddingBottom: spacing.xs },
+  itemTraySection: { gap: spacing.xs },
+  itemTraySectionLabel: { color: colors.text, fontSize: typography.label, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
+  itemTrayGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  itemTrayButton: { alignItems: "center", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 3, minHeight: 82, padding: spacing.xs, width: 72 },
+  itemTrayButtonSelected: { backgroundColor: colors.primarySoft, borderColor: colors.primary, borderWidth: 2 },
+  itemTrayIcon: { alignItems: "center", height: 50, justifyContent: "center", position: "relative", width: 56 },
+  itemTrayLabel: { color: colors.text, fontSize: 11, fontWeight: "800", lineHeight: 13, textAlign: "center" },
+  itemTrayQuantity: { backgroundColor: colors.primary, borderRadius: radii.pill, minWidth: 25, paddingHorizontal: 4, paddingVertical: 1, position: "absolute", right: -2, top: -2 },
+  itemTrayQuantityText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900", textAlign: "center" },
+  trayUtilityButton: { alignItems: "center", backgroundColor: colors.surfaceMuted, borderColor: colors.border, borderRadius: radii.md, borderStyle: "dashed", borderWidth: 1, gap: 4, justifyContent: "center", minHeight: 82, padding: spacing.xs, width: 72 },
+  trayUtilityIcon: { color: colors.textMuted, fontSize: 26, fontWeight: "500", lineHeight: 32 },
+  furnitureChoice: { alignItems: "center", backgroundColor: "rgba(255, 252, 246, 0.98)", borderColor: "#D9A86C", borderRadius: radii.md, borderWidth: 2, flexDirection: "row", gap: spacing.xs, left: spacing.sm, padding: spacing.xs, position: "absolute", zIndex: 9 },
+  contextChoiceButton: { alignItems: "center", backgroundColor: colors.primarySoft, borderRadius: radii.sm, justifyContent: "center", minHeight: touchTarget, paddingHorizontal: spacing.md },
+  contextChoiceText: { color: colors.primaryPressed, fontSize: typography.small, fontWeight: "900" },
+  growthDetailHeader: { alignItems: "center", flex: 1, flexDirection: "row", gap: spacing.sm },
+  growthDetailTitleGroup: { flex: 1, gap: 2 },
+  movingTarget: { height: 64, left: 0, marginLeft: -32, marginTop: -32, position: "absolute", top: 0, width: 64, zIndex: 6 },
+  wandTarget: { height: 64, width: 64 },
+  butterflyTarget: { height: 64, width: 64 },
   catBed: { backgroundColor: "#D9A4C4", borderColor: "#8C5177", borderRadius: 34, borderWidth: 5, height: 55, marginLeft: -56, marginTop: -25, position: "absolute", width: 112 },
   windowCushion: { backgroundColor: "#D79B62", borderColor: "#8F5C32", borderRadius: 8, borderWidth: 3, height: 24, marginLeft: -58, marginTop: -4, position: "absolute", width: 116 },
   scratchingPost: { height: 135, marginLeft: -41, marginTop: -135, position: "absolute", width: 82, zIndex: 1 },
@@ -2123,131 +2371,21 @@ const styles = StyleSheet.create({
   catTreeLowerPost: { backgroundColor: "#C59A6D", borderColor: "#70452B", borderWidth: 3, height: 63, left: 76, position: "absolute", top: 92, width: 20 },
   catTreeBase: { backgroundColor: "#8F5C32", borderRadius: 8, bottom: 0, height: 18, left: 16, position: "absolute", width: 110 },
   cardTitle: { color: colors.text, fontSize: typography.heading, fontWeight: "800" },
-  actionWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  actionButton: { alignItems: "center", backgroundColor: colors.primarySoft, borderColor: "#C4B5FD", borderRadius: radii.sm, borderWidth: 1, justifyContent: "center", minHeight: touchTarget, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  actionButton: { alignItems: "center", backgroundColor: colors.primarySoft, borderColor: colors.border, borderRadius: radii.sm, borderWidth: 1, justifyContent: "center", minHeight: touchTarget, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   actionButtonText: { color: colors.primaryPressed, fontSize: typography.small, fontWeight: "800" },
-  companionSection: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-  },
-  categoryRow: { flexDirection: "row", gap: spacing.sm },
-  interactionCategory: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 66,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  interactionCategoryExpanded: { backgroundColor: colors.primary },
-  interactionCategoryLabel: { color: colors.text, fontSize: typography.body, fontWeight: "900" },
-  interactionCategoryLabelExpanded: { color: "#FFFFFF" },
-  interactionCategorySummary: { color: colors.textMuted, fontSize: typography.label, lineHeight: 16, marginTop: 2 },
-  interactionCategorySummaryExpanded: { color: "#EDE9FE" },
-  interactionPanel: {
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 0,
-    marginTop: spacing.xs,
-    paddingTop: spacing.sm,
-  },
-  interactionPanelTitle: { color: colors.text, fontSize: typography.body, fontWeight: "900", marginBottom: spacing.xs },
-  interactionSubgroup: { gap: 0, marginTop: spacing.sm },
-  interactionSubheading: { color: colors.text, fontSize: typography.small, fontWeight: "900", marginBottom: 2 },
-  interactionHelp: { color: colors.textMuted, fontSize: typography.small, lineHeight: 19, marginBottom: spacing.xs },
-  companionAction: {
-    alignItems: "center",
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: spacing.sm,
-    justifyContent: "space-between",
-    minHeight: touchTarget,
-    paddingVertical: spacing.sm,
-  },
-  companionActionText: { color: colors.text, flex: 1, fontSize: typography.body, fontWeight: "700", lineHeight: 22 },
-  companionActionArrow: { color: colors.primary, fontSize: 24, fontWeight: "700" },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.5 },
-  inventoryShelf: {
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: spacing.md,
-    paddingTop: spacing.md,
-  },
-  inventoryGroup: { gap: spacing.sm },
-  inventoryLabel: {
-    color: colors.textMuted,
-    fontSize: typography.label,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
-  inventoryTiles: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  inventoryTile: {
-    alignItems: "center",
-    flexBasis: 76,
-    flexGrow: 1,
-    gap: spacing.xs,
-    maxWidth: 104,
-    minWidth: 76,
-  },
-  inventoryMark: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    height: 58,
-    justifyContent: "center",
-    position: "relative",
-    width: "100%",
-  },
-  inventoryMarkFood: { backgroundColor: "#FDE5CF" },
-  inventoryMarkToy: { backgroundColor: "#EAE4FF" },
-  inventoryMarkFurniture: { backgroundColor: "#E8D9C8" },
-  inventoryMarkTrick: { backgroundColor: "#DCFCE7" },
-  inventoryMarkAdventure: { backgroundColor: "#DFF2D0" },
-  inventoryMarkText: {
-    color: "#4A2F21",
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  inventoryQuantity: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.pill,
-    minWidth: 30,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    position: "absolute",
-    right: -4,
-    top: -4,
-  },
-  inventoryQuantityText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  inventoryName: {
-    color: colors.text,
-    fontSize: typography.label,
-    fontWeight: "700",
-    lineHeight: 16,
-    textAlign: "center",
-  },
-  storeBalance: { alignItems: "center", backgroundColor: colors.primary, borderRadius: radii.lg, padding: spacing.lg },
-  storeBalanceLabel: { color: "#EDE9FE", fontSize: typography.small, fontWeight: "800" },
-  storeBalanceValue: { color: "#FFFFFF", fontSize: 30, fontWeight: "900", marginTop: spacing.xs },
+  storeBalance: { alignItems: "center", alignSelf: "flex-start", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  storeBalanceLabel: { color: colors.textMuted, fontSize: typography.label, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" },
+  storeBalanceValue: { color: colors.text, fontSize: 24, fontVariant: ["tabular-nums"], fontWeight: "900" },
   storeSection: { gap: spacing.sm },
   categoryTitle: { color: colors.text, fontSize: typography.heading, fontWeight: "900" },
   storeItem: { alignItems: "flex-start", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: "row", gap: spacing.md, justifyContent: "space-between", padding: spacing.md },
+  storeItemIcon: { alignItems: "center", backgroundColor: colors.surfaceMuted, borderRadius: radii.md, height: 68, justifyContent: "center", width: 68 },
   storeItemCopy: { flex: 1, gap: spacing.xs },
   itemName: { color: colors.text, fontSize: typography.body, fontWeight: "800" },
   itemDescription: { color: colors.textMuted, fontSize: typography.small, lineHeight: 20 },
   ownedText: { color: colors.success, fontSize: typography.small, fontWeight: "800" },
-  priceColumn: { alignItems: "flex-end", gap: spacing.sm, maxWidth: 145 },
+  priceColumn: { alignItems: "flex-end", gap: spacing.sm, maxWidth: 112 },
   price: { color: colors.text, fontSize: typography.body, fontWeight: "900" },
 });

@@ -224,7 +224,9 @@ export const CAT_ROOM_LAYOUT: CatRoomLayout = {
 
 export const CAT_HOME_POINT: NormalizedRoomPoint = CAT_ROOM_LAYOUT.catHome;
 export const CAT_TARGET_PADDING = 0.06;
-export const CAT_SCRATCH_PAW_CONTACT_OFFSET_PX = 43;
+export const CAT_SCRATCH_PAW_CONTACT_OFFSET_PX = 34;
+export const CAT_TREE_MID_SUPPORT_OFFSET_PX = { x: 9, y: -95 } as const;
+export const CAT_TREE_TOP_SUPPORT_OFFSET_PX = { x: -16, y: -170 } as const;
 export const CAT_WAND_STEP = 0.12;
 export const CAT_WAND_POUNCE_DISTANCE = 0.14;
 export const FIRST_CAT_IDLE_DELAY_MS = 5 * 60_000;
@@ -268,6 +270,21 @@ export function catScratchingPostPlacement(layout = CAT_ROOM_LAYOUT): CatTargetS
     catOffsetPx: { x: -CAT_SCRATCH_PAW_CONTACT_OFFSET_PX, y: 0 },
     target: layout.scratchingPostAnchor,
   };
+}
+
+export function catTreePlacementSteps(layout = CAT_ROOM_LAYOUT): readonly CatTargetStep[] {
+  return [
+    {
+      cat: layout.catTreeFloorAnchor,
+      catOffsetPx: { ...CAT_TREE_MID_SUPPORT_OFFSET_PX },
+      target: layout.catTreeMidAnchor,
+    },
+    {
+      cat: layout.catTreeFloorAnchor,
+      catOffsetPx: { ...CAT_TREE_TOP_SUPPORT_OFFSET_PX },
+      target: layout.catTreeTopAnchor,
+    },
+  ];
 }
 
 export function catButterflyFollowSteps(layout = CAT_ROOM_LAYOUT): readonly CatTargetStep[] {

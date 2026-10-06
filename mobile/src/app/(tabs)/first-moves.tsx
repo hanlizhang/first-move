@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useFirstMoveApp } from "../../app-state/app-provider.tsx";
 import {
@@ -37,6 +38,10 @@ import {
   Screen,
 } from "../../components/ui.tsx";
 import {
+  PixelDirectionIcon,
+  PixelKittenScene,
+} from "../../components/pixel-scenes.tsx";
+import {
   colors,
   radii,
   spacing,
@@ -44,10 +49,11 @@ import {
   typography,
 } from "../../theme/tokens.ts";
 
-type FlowStep = "stuck-state" | "direction" | "move";
+type FlowStep = "landing" | "stuck-state" | "direction" | "move";
 
 export default function FirstMovesScreen() {
   const router = useRouter();
+  const { visualPreview } = useLocalSearchParams<{ visualPreview?: string }>();
   const {
     localWorkspace,
     localWorkspaceMessage,
@@ -55,7 +61,13 @@ export default function FirstMovesScreen() {
     updateLocalWorkspace,
     workspaceEditable,
   } = useFirstMoveApp();
-  const [step, setStep] = useState<FlowStep>("stuck-state");
+  const [step, setStep] = useState<FlowStep>(
+    __DEV__ && visualPreview === "step-1"
+      ? "stuck-state"
+      : __DEV__ && visualPreview === "step-2"
+        ? "direction"
+        : "landing",
+  );
   const [stuckState, setStuckState] = useState<StuckState>(STUCK_STATES[0]);
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
   const initialTemplate = templatesFor(stuckState, direction)[0];
@@ -71,6 +83,20 @@ export default function FirstMovesScreen() {
   const [saving, setSaving] = useState(false);
   const pendingIntent = getPendingIntent(localWorkspace);
   const openSession = getOpenSession(localWorkspace);
+
+  useEffect(() => {
+    if (!__DEV__ || !visualPreview) return undefined;
+    const frame = requestAnimationFrame(() => {
+      setStep(
+        visualPreview === "step-1"
+          ? "stuck-state"
+          : visualPreview === "step-2"
+            ? "direction"
+            : "landing",
+      );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [visualPreview]);
 
   function chooseTemplate(
     stateChoice: StuckState,
@@ -191,6 +217,38 @@ export default function FirstMovesScreen() {
     );
   }
 
+  if (step === "landing") {
+    return (
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.landingSafeArea}>
+        <View style={styles.landingScreen}>
+          <View style={styles.landingCopy}>
+            <Text accessibilityRole="header" style={styles.landingTitle}>Feeling stuck?</Text>
+            <Text style={styles.landingDescription}>Try one small action today.</Text>
+          </View>
+          {localWorkspaceMessage ? (
+            <Card tone="danger">
+              <Body>{localWorkspaceMessage}</Body>
+            </Card>
+          ) : null}
+          <View style={styles.landingHero}>
+            <PixelKittenScene
+              accessibilityLabel="An attentive pixel kitten ready to help you start small"
+              attention
+            />
+          </View>
+          <View style={styles.landingActionZone}>
+            <View style={styles.landingAction}>
+              <PrimaryButton
+                title="Start small"
+                onPress={() => setStep("stuck-state")}
+              />
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <Screen
       eyebrow="I’m Stuck · No AI required"
@@ -210,12 +268,15 @@ export default function FirstMovesScreen() {
           <View style={styles.choiceList}>
             {STUCK_STATES.map((value) => (
               <ChoiceButton
+                icon={<StuckStateSymbol state={value} />}
                 key={value}
                 label={sentenceCase(value)}
                 onPress={() => chooseStuckState(value)}
+                tile
               />
             ))}
           </View>
+          <TextAction label="Back" onPress={() => setStep("landing")} />
         </View>
       ) : null}
 
@@ -227,9 +288,11 @@ export default function FirstMovesScreen() {
           <View style={styles.choiceList}>
             {DIRECTIONS.map((value) => (
               <ChoiceButton
+                icon={<PixelDirectionIcon direction={value} />}
                 key={value}
                 label={value}
                 onPress={() => chooseDirection(value)}
+                tile
               />
             ))}
           </View>
@@ -342,14 +405,18 @@ export default function FirstMovesScreen() {
 
 function ChoiceButton({
   compact = false,
+  icon,
   label,
   onPress,
   selected = false,
+  tile = false,
 }: {
   compact?: boolean;
+  icon?: ReactNode;
   label: string;
   onPress(): void;
   selected?: boolean;
+  tile?: boolean;
 }) {
   return (
     <Pressable
@@ -359,21 +426,64 @@ function ChoiceButton({
       style={({ pressed }) => [
         styles.choice,
         compact && styles.compactChoice,
+        tile && styles.tileChoice,
         selected && styles.selectedChoice,
         pressed && styles.pressedChoice,
       ]}
     >
+      {icon ? <View style={styles.choiceIcon}>{icon}</View> : null}
       <Text style={[
         styles.choiceText,
         compact && styles.compactChoiceText,
+        tile && styles.tileChoiceText,
         selected && styles.selectedChoiceText,
       ]}>
         {label}
       </Text>
-      {!compact ? (
-        <Text accessibilityElementsHidden style={styles.choiceChevron}>›</Text>
-      ) : null}
     </Pressable>
+  );
+}
+
+function StuckStateSymbol({ state }: { state: StuckState }) {
+  const index = STUCK_STATES.indexOf(state);
+  return (
+    <View accessibilityElementsHidden style={styles.symbolCanvas}>
+      {index === 0 ? (
+        <>
+          <View style={styles.phoneBody} />
+          <View style={styles.phoneScroll} />
+        </>
+      ) : null}
+      {index === 1 ? (
+        <>
+          <View style={styles.bedPillow} />
+          <View style={styles.bedBlanket} />
+          <View style={styles.bedLeg} />
+        </>
+      ) : null}
+      {index === 2 ? (
+        <>
+          <View style={styles.pausedStepLow} />
+          <View style={styles.pausedStepHigh} />
+          <View style={styles.pauseBarOne} />
+          <View style={styles.pauseBarTwo} />
+        </>
+      ) : null}
+      {index === 3 ? (
+        <>
+          <View style={styles.blockOne} />
+          <View style={styles.blockTwo} />
+          <View style={styles.blockThree} />
+        </>
+      ) : null}
+      {index === 4 ? <View style={styles.moonSymbol}><View style={styles.moonCutout} /></View> : null}
+      {index === 5 ? (
+        <>
+          <Text style={styles.questionSymbol}>?</Text>
+          <View style={styles.questionSpark} />
+        </>
+      ) : null}
+    </View>
   );
 }
 
@@ -442,6 +552,53 @@ function sentenceCase(value: string): string {
 }
 
 const styles = StyleSheet.create({
+  landingSafeArea: { backgroundColor: colors.background, flex: 1 },
+  landingScreen: {
+    flex: 1,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  landingCopy: {
+    alignItems: "center",
+    flex: 23,
+    gap: spacing.sm,
+    justifyContent: "center",
+  },
+  landingTitle: {
+    color: colors.text,
+    fontSize: 32,
+    fontWeight: "900",
+    letterSpacing: -0.7,
+    lineHeight: 39,
+    textAlign: "center",
+  },
+  landingDescription: {
+    color: colors.textMuted,
+    fontSize: typography.body,
+    lineHeight: 23,
+    textAlign: "center",
+  },
+  landingHero: {
+    alignItems: "center",
+    flex: 52,
+    justifyContent: "center",
+    minHeight: 0,
+    overflow: "hidden",
+    width: "100%",
+  },
+  landingActionZone: {
+    alignItems: "center",
+    flex: 25,
+    justifyContent: "flex-end",
+    paddingBottom: spacing.lg,
+    width: "100%",
+  },
+  landingAction: {
+    alignSelf: "center",
+    maxWidth: 360,
+    width: "100%",
+  },
   flowSurface: {
     gap: spacing.md,
     paddingVertical: spacing.xs,
@@ -454,21 +611,31 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   choiceList: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
   },
   choice: {
     alignItems: "center",
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: "transparent",
+    borderRadius: radii.md,
+    borderWidth: 1,
     flexDirection: "row",
     gap: spacing.sm,
     justifyContent: "center",
     minHeight: touchTarget,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
+  },
+  tileChoice: {
+    alignItems: "flex-start",
+    flexBasis: "47%",
+    flexDirection: "column",
+    flexGrow: 1,
+    justifyContent: "space-between",
+    minHeight: 116,
+    padding: spacing.md,
   },
   compactChoice: {
     backgroundColor: colors.surface,
@@ -492,7 +659,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "left",
   },
-  choiceChevron: { color: colors.primary, fontSize: 26, fontWeight: "700" },
+  tileChoiceText: { flex: 0, fontSize: typography.small, lineHeight: 19 },
+  choiceIcon: { alignItems: "center", height: 40, justifyContent: "center", width: 48 },
   compactChoiceText: { flex: 0, textAlign: "center" },
   selectedChoiceText: { color: "#FFFFFF" },
   inputLabel: {
@@ -523,19 +691,21 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   utilityActions: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
   },
   utilityAction: {
     alignItems: "center",
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radii.md,
+    flexBasis: "47%",
+    flexGrow: 1,
     flexDirection: "row",
     gap: spacing.sm,
     minHeight: touchTarget,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
   },
   utilityActionText: {
     color: colors.text,
@@ -574,4 +744,21 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: "700",
   },
+  symbolCanvas: { height: 40, position: "relative", width: 48 },
+  phoneBody: { borderColor: colors.primaryPressed, borderRadius: 4, borderWidth: 3, height: 36, left: 13, position: "absolute", top: 1, width: 22 },
+  phoneScroll: { backgroundColor: colors.primary, height: 4, left: 19, position: "absolute", top: 15, width: 10 },
+  bedPillow: { backgroundColor: "#E6A8A8", borderColor: colors.primaryPressed, borderRadius: 3, borderWidth: 2, height: 13, left: 5, position: "absolute", top: 9, width: 15 },
+  bedBlanket: { backgroundColor: "#EFCBA2", borderColor: colors.primaryPressed, borderWidth: 3, bottom: 6, height: 21, left: 4, position: "absolute", width: 40 },
+  bedLeg: { backgroundColor: colors.primaryPressed, bottom: 1, height: 6, left: 35, position: "absolute", width: 4 },
+  pausedStepLow: { backgroundColor: "#EFCBA2", bottom: 4, height: 11, left: 3, position: "absolute", width: 17 },
+  pausedStepHigh: { backgroundColor: "#C6864F", bottom: 4, height: 22, left: 20, position: "absolute", width: 18 },
+  pauseBarOne: { backgroundColor: colors.primaryPressed, height: 16, position: "absolute", right: 7, top: 1, width: 4 },
+  pauseBarTwo: { backgroundColor: colors.primaryPressed, height: 16, position: "absolute", right: 0, top: 1, width: 4 },
+  blockOne: { backgroundColor: "#E6A8A8", borderColor: colors.primaryPressed, borderWidth: 2, bottom: 2, height: 16, left: 2, position: "absolute", width: 20 },
+  blockTwo: { backgroundColor: "#C6864F", borderColor: colors.primaryPressed, borderWidth: 2, bottom: 2, height: 16, left: 26, position: "absolute", width: 20 },
+  blockThree: { backgroundColor: "#EFCBA2", borderColor: colors.primaryPressed, borderWidth: 2, bottom: 20, height: 16, left: 14, position: "absolute", width: 20 },
+  moonSymbol: { backgroundColor: "#C6864F", borderRadius: 18, height: 36, left: 6, overflow: "hidden", position: "absolute", top: 1, width: 36 },
+  moonCutout: { backgroundColor: colors.surfaceMuted, borderRadius: 14, height: 29, left: 11, position: "absolute", top: -2, width: 29 },
+  questionSymbol: { color: colors.primaryPressed, fontSize: 34, fontWeight: "900", left: 7, lineHeight: 39, position: "absolute", top: -2 },
+  questionSpark: { backgroundColor: "#E6A8A8", height: 9, position: "absolute", right: 6, top: 4, transform: [{ rotate: "15deg" }], width: 9 },
 });

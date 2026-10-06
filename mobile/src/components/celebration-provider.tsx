@@ -37,7 +37,7 @@ import {
 } from "../domain/celebrations.ts";
 import type { ActivitySession, AppState } from "../domain/models.ts";
 import { radii, spacing, touchTarget, typography } from "../theme/tokens.ts";
-import { PixelKitten } from "./pixel-kitten.tsx";
+import { PixelStepScene } from "./pixel-scenes.tsx";
 
 type PreviewKind =
   | "points"
@@ -387,68 +387,6 @@ function SecondaryRewards({
   ) : null;
 }
 
-function PixelStepScene({
-  reduceMotion,
-  variant,
-}: {
-  reduceMotion: boolean;
-  variant: "daily" | "focus" | "milestone";
-}) {
-  const [reveal] = useState(() => new Animated.Value(reduceMotion ? 1 : 0));
-
-  useEffect(() => {
-    reveal.setValue(reduceMotion ? 1 : 0);
-    const animation = Animated.timing(reveal, {
-      duration: reduceMotion ? 0 : 420,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [reduceMotion, reveal, variant]);
-
-  const kittenPose = variant === "milestone" ? "perched" : "walking";
-  return (
-    <View accessibilityElementsHidden style={styles.stepScene}>
-      <View style={[styles.pixelSpark, styles.pixelSparkOne]} />
-      <View style={[styles.pixelSpark, styles.pixelSparkTwo]} />
-      {variant === "milestone" ? (
-        <Animated.View style={[styles.rewardReveal, { opacity: reveal }]}>
-          <View style={styles.rewardPixelTop} />
-          <View style={styles.rewardPixelCore} />
-        </Animated.View>
-      ) : null}
-      <View style={styles.stepsRow}>
-        <View style={[styles.pixelPlatform, styles.pixelPlatformOne]} />
-        <View style={[styles.pixelPlatform, styles.pixelPlatformTwo]} />
-        <View style={[styles.pixelPlatform, styles.pixelPlatformThree]} />
-      </View>
-      <Animated.View
-        style={[
-          styles.stepKitten,
-          variant === "focus" && styles.stepKittenFocus,
-          {
-            opacity: reveal,
-            transform: [{
-              translateY: reduceMotion
-                ? 0
-                : reveal.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
-            }],
-          },
-        ]}
-      >
-        <PixelKitten
-          accessibilityLabel="Pixel kitten taking a small step"
-          blinking={variant === "milestone"}
-          pose={kittenPose}
-          showFloor={false}
-        />
-      </Animated.View>
-    </View>
-  );
-}
-
 interface CelebrationViewProps {
   event: CelebrationEvent;
   onDismiss(): void;
@@ -738,68 +676,4 @@ const styles = StyleSheet.create({
   toastStepOne: { height: 6 },
   toastStepTwo: { height: 12 },
   toastStepThree: { height: 18 },
-  stepScene: {
-    height: 210,
-    maxWidth: 320,
-    position: "relative",
-    width: "100%",
-  },
-  stepsRow: {
-    alignItems: "flex-end",
-    bottom: 10,
-    flexDirection: "row",
-    justifyContent: "center",
-    left: 0,
-    position: "absolute",
-    right: 0,
-  },
-  pixelPlatform: {
-    borderColor: "#6C4430",
-    borderWidth: 4,
-    width: 82,
-  },
-  pixelPlatformOne: { backgroundColor: "#F3B6A2", height: 38 },
-  pixelPlatformTwo: {
-    backgroundColor: "#ECA668",
-    borderLeftWidth: 0,
-    height: 68,
-  },
-  pixelPlatformThree: {
-    backgroundColor: "#D77B4A",
-    borderLeftWidth: 0,
-    height: 98,
-  },
-  stepKitten: {
-    bottom: 82,
-    position: "absolute",
-    right: 0,
-    width: 174,
-  },
-  stepKittenFocus: { bottom: 52, right: 66 },
-  pixelSpark: {
-    backgroundColor: "#D95F76",
-    height: 10,
-    position: "absolute",
-    width: 10,
-  },
-  pixelSparkOne: { left: 34, top: 42 },
-  pixelSparkTwo: { height: 7, right: 54, top: 8, width: 7 },
-  rewardReveal: {
-    alignItems: "center",
-    position: "absolute",
-    right: 22,
-    top: 22,
-  },
-  rewardPixelTop: {
-    backgroundColor: "#D95F76",
-    height: 9,
-    width: 24,
-  },
-  rewardPixelCore: {
-    backgroundColor: "#F5B35F",
-    borderColor: "#6C4430",
-    borderWidth: 4,
-    height: 38,
-    width: 42,
-  },
 });

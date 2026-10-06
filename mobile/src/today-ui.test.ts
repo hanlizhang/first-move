@@ -20,10 +20,10 @@ const plannerSource = readFileSync(
   "utf8",
 );
 
-test("Mobile Today exposes compact points, direction, activity, and Reflection content", () => {
+test("Mobile Today opens with a shared step-and-kitten hero before activity content", () => {
   for (const label of [
-    "Current points",
-    "Focused today",
+    "focused today",
+    "Small steps add up",
     "Tasks",
     "Habits",
     "Focus today",
@@ -34,7 +34,7 @@ test("Mobile Today exposes compact points, direction, activity, and Reflection c
   }
   assert.match(todaySource, /getTodayView\(localWorkspace, today\)/);
   assert.match(todaySource, /formatFocusedDuration/);
-  assert.match(todaySource, /DIRECTIONS\.map/);
+  assert.match(todaySource, /<PixelStepScene reduceMotion=\{reduceMotion\} variant="daily" \/>/);
   assert.match(todaySource, /view\.timeline\.map/);
   assert.doesNotMatch(todaySource, /react-native-svg|victory|chart/i);
 });
@@ -72,6 +72,7 @@ test("Today shows simple sync language without developer-facing architecture cop
 });
 
 test("Today puts core actions and daily content ahead of optional Morning Start", () => {
+  const hero = todaySource.indexOf("<TodaySummary");
   const stuck = todaySource.indexOf('title="I’m Stuck"');
   const tasks = todaySource.indexOf('title="Tasks"');
   const habits = todaySource.indexOf('title="Habits"');
@@ -80,13 +81,12 @@ test("Today puts core actions and daily content ahead of optional Morning Start"
   const timeline = todaySource.indexOf('title="Activity timeline"');
   const reflection = todaySource.indexOf('title="Reflection"');
 
-  assert.ok(stuck > -1);
+  assert.ok(hero > -1 && hero < stuck);
   assert.ok(stuck < tasks && tasks < habits && habits < focus);
   assert.ok(focus < morning && morning < timeline && timeline < reflection);
-  assert.match(todaySource, /Today overview/);
-  assert.match(todaySource, /completedTasks.*taskCount/s);
-  assert.match(todaySource, /checkedHabits.*habitCount/s);
-  assert.match(todaySource, /No Focus activity yet/);
+  assert.match(todaySource, /Small steps add up\./);
+  assert.doesNotMatch(todaySource, /completedTasks.*taskCount/s);
+  assert.doesNotMatch(todaySource, /checkedHabits.*habitCount/s);
 });
 
 test("Today uses lightweight row lists instead of a bordered card for every section", () => {
@@ -95,7 +95,8 @@ test("Today uses lightweight row lists instead of a bordered card for every sect
   assert.doesNotMatch(todaySource, /styles\.compactCard|compactCard:/);
   assert.doesNotMatch(reflectionSource, /editorCard/);
   assert.doesNotMatch(todaySource, /function OverviewMetric|overviewMetrics|overviewMetric:/);
-  assert.match(todaySource, /overviewValue: \{ color: colors\.text, fontSize: 30/);
+  assert.match(todaySource, /todayHero: \{/);
+  assert.match(todaySource, /todayHeroValue: \{ color: colors\.text, fontSize: 24/);
 });
 
 test("Morning Start is collapsed until opened and keeps every verification and planning route", () => {

@@ -80,13 +80,34 @@ test("idle Focus uses one accessible mode selector and preserves both setup stat
   assert.match(source, /hiddenSetup: \{ display: "none" \}/);
 });
 
+test("idle Focus centers the shared ring and Start action before secondary configuration", () => {
+  const countdown = source.slice(
+    source.indexOf("function CountdownSetup"),
+    source.indexOf("function StopwatchSetup"),
+  );
+  assert.match(source, /import \{ PixelFocusRing \} from "\.\.\/\.\.\/components\/pixel-scenes\.tsx"/);
+  assert.match(source, /const focusParentWidth = Math\.min\(viewportWidth - spacing\.md \* 2, 420\)/);
+  assert.match(source, /Math\.round\(focusParentWidth \* 0\.65\)/);
+  assert.match(countdown, /size=\{ringSize\}/);
+  assert.match(countdown, /value=\{duration === undefined \? "--:--" : formatDuration\(duration \* 60_000\)\}/);
+  assert.ok(countdown.indexOf("<PixelFocusRing") < countdown.indexOf('title="Start Focus"'));
+  assert.ok(countdown.indexOf('title="Start Focus"') < countdown.indexOf("secondaryConfiguration"));
+  assert.ok(countdown.indexOf('label="Customize"') < countdown.indexOf("FOCUS_COUNTDOWN_PRESETS.map"));
+  assert.ok(countdown.indexOf("FOCUS_COUNTDOWN_PRESETS.map") < countdown.indexOf(">Mode</Text>"));
+  assert.match(countdown, /pose="sleeping"/);
+  assert.match(source, /focusPageContent:[\s\S]*?alignItems: "center"/);
+  assert.match(source, /timerPresentation:[\s\S]*?alignItems: "center"/);
+  assert.doesNotMatch(source, /<Screen eyebrow="Focus"/);
+});
+
 test("Countdown keeps every preset, secondary custom input, and existing start semantics", () => {
   assert.deepEqual(FOCUS_COUNTDOWN_PRESETS, [2, 5, 10, 25, 50]);
   assert.match(source, /FOCUS_COUNTDOWN_PRESETS\.map/);
   assert.match(source, /<ChoiceButton\s+balanced\s+compact/);
   assert.match(source, /choiceBalanced: \{ flexBasis: "29%", flexGrow: 1 \}/);
   assert.match(source, /label=\{`\$\{minutes\} min`\}/);
-  assert.match(source, /label=\{customMinutes && customDuration[\s\S]*?"Custom duration"\}/);
+  assert.match(source, /label="Custom"/);
+  assert.match(source, /summary=\{customMinutes && customDuration \? `\$\{customDuration\} min` : undefined\}/);
   assert.match(source, /parseFocusDurationInput\(customMinutes\)/);
   assert.match(source, /disabled=\{disabled \|\| duration === undefined\}/);
   assert.match(source, /durationMinutes: duration/);
@@ -101,7 +122,7 @@ test("optional setup details retain title, linked item, and all compact Directio
     "Intentional Entertainment",
     "Rest",
   ]);
-  assert.match(source, /label=\{expanded \? "Hide details" : "Add details"\}/);
+  assert.match(source, /label="Details"/);
   assert.match(source, /function SetupDetails/);
   assert.match(source, /Activity title \(optional\)/);
   assert.match(source, /Link to a Task or Habit \(optional\)/);

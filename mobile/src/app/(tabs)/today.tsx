@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import type { AuthState } from "../../auth/auth-state.ts";
 import { useFirstMoveApp, type AppSyncState } from "../../app-state/app-provider.tsx";
 import { ReflectionEditor } from "../../components/reflection-editor.tsx";
 import { MorningPlanFlow } from "../../components/morning-plan-flow.tsx";
+import { PixelStepScene } from "../../components/pixel-scenes.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import {
   Body,
@@ -15,7 +16,7 @@ import {
   Screen,
 } from "../../components/ui.tsx";
 import { captureLocalDay } from "../../domain/dates.ts";
-import { DIRECTIONS, type AppState, type Habit, type Task } from "../../domain/models.ts";
+import { type AppState, type Habit, type Task } from "../../domain/models.ts";
 import {
   deleteReflection,
   saveReflection,
@@ -66,6 +67,8 @@ export default function TodayScreen() {
       title="Today"
       description="What matters today, and your next small move."
     >
+      <TodaySummary totalFocusedMs={view.totalFocusedMs} />
+
       <View style={styles.statusRow}>
         <SyncStatus auth={auth} sync={sync} />
       </View>
@@ -90,16 +93,6 @@ export default function TodayScreen() {
           <Body>Today is read-only until this account finishes loading.</Body>
         </Card>
       ) : null}
-
-      <TodaySummary
-        checkedHabits={view.habits.filter((habit) => !isHabitActive(habit, today)).length}
-        completedTasks={view.tasks.filter((task) => task.completedOn.includes(today)).length}
-        directionTotals={view.directionTotals}
-        habitCount={view.habits.length}
-        points={localWorkspace.progress.points}
-        taskCount={view.tasks.length}
-        totalFocusedMs={view.totalFocusedMs}
-      />
 
       <View style={styles.section}>
         <SectionHeader
@@ -272,41 +265,34 @@ export default function TodayScreen() {
 }
 
 function TodaySummary({
-  checkedHabits,
-  completedTasks,
-  directionTotals,
-  habitCount,
-  points,
-  taskCount,
   totalFocusedMs,
 }: {
-  checkedHabits: number;
-  completedTasks: number;
-  directionTotals: ReturnType<typeof getTodayView>["directionTotals"];
-  habitCount: number;
-  points: number;
-  taskCount: number;
   totalFocusedMs: number;
 }) {
-  const activeDirections = DIRECTIONS.map((direction) => ({
-    direction,
-    duration: directionTotals[direction],
-  })).filter((item) => item.duration > 0);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) setReduceMotion(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion,
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
 
   return (
-    <View accessibilityLabel="Today overview" style={styles.overview}>
-      <Text style={styles.overviewLabel}>Focused today</Text>
-      <Text style={styles.overviewValue}>{formatFocusedDuration(totalFocusedMs)}</Text>
-      <Text style={styles.overviewContext}>
-        Tasks {completedTasks}/{taskCount} · Habits {checkedHabits}/{habitCount} · Current points {formatPoints(points)}
-      </Text>
-      <Text style={styles.overviewDirections}>
-        {activeDirections.length > 0
-          ? activeDirections
-              .map((item) => `${item.direction} ${formatFocusedDuration(item.duration)}`)
-              .join(" · ")
-          : "No Focus activity yet"}
-      </Text>
+    <View accessibilityLabel={`Today. ${formatFocusedDuration(totalFocusedMs)} focused today. Small steps add up.`} style={styles.todayHero}>
+      <PixelStepScene reduceMotion={reduceMotion} variant="daily" />
+      <View style={styles.todayHeroCopy}>
+        <Text style={styles.todayHeroValue}>{formatFocusedDuration(totalFocusedMs)} focused today</Text>
+        <Text style={styles.todayHeroMessage}>Small steps add up.</Text>
+      </View>
     </View>
   );
 }
@@ -594,22 +580,18 @@ const styles = StyleSheet.create({
     fontSize: typography.small,
     padding: spacing.sm,
   },
-  overview: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  todayHero: {
+    alignItems: "center",
+    backgroundColor: colors.primarySoft,
+    borderRadius: radii.lg,
     gap: spacing.xs,
-    paddingBottom: spacing.md,
+    overflow: "hidden",
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
   },
-  overviewValue: { color: colors.text, fontSize: 30, fontWeight: "900", lineHeight: 36 },
-  overviewLabel: {
-    color: colors.textMuted,
-    fontSize: typography.label,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  overviewContext: { color: colors.textMuted, fontSize: typography.small, lineHeight: 20 },
-  overviewDirections: { color: colors.primary, fontSize: typography.small, fontWeight: "700", lineHeight: 20 },
+  todayHeroCopy: { alignItems: "center", gap: 2, paddingBottom: spacing.lg },
+  todayHeroValue: { color: colors.text, fontSize: 24, fontWeight: "900", lineHeight: 31, textAlign: "center" },
+  todayHeroMessage: { color: colors.primary, fontSize: typography.body, fontWeight: "700", lineHeight: 22, textAlign: "center" },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
