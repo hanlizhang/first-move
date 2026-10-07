@@ -186,24 +186,32 @@ function CelebrationRenderer({
       />
     );
   }
-  if (event.level === 2) {
-    const LevelTwoCelebration = event.kind === "focus-completion"
-      ? FocusCompletionCelebration
-      : ActiveDayCelebration;
-    return (
-      <LevelTwoCelebration
-        event={event}
-        onDismiss={onDismiss}
-        reduceMotion={reduceMotion}
-      />
-    );
-  }
   return (
-    <MilestoneCelebration
+    <BlockingCelebration
       event={event}
       onDismiss={onDismiss}
       reduceMotion={reduceMotion}
     />
+  );
+}
+
+function BlockingCelebration(props: CelebrationViewProps) {
+  const { event } = props;
+  const tone = event.kind === "milestone"
+    ? "milestone"
+    : event.kind === "focus-completion"
+      ? "focus"
+      : "daily";
+  return (
+    <BlockingCelebrationFrame {...props} tone={tone}>
+      {event.kind === "milestone" ? (
+        <MilestoneCelebration {...props} />
+      ) : event.kind === "focus-completion" ? (
+        <FocusCompletionCelebration {...props} />
+      ) : (
+        <ActiveDayCelebration {...props} />
+      )}
+    </BlockingCelebrationFrame>
   );
 }
 
@@ -291,34 +299,32 @@ function ActiveDayCelebration(props: CelebrationViewProps) {
   const { event, reduceMotion } = props;
   const firstMove = event.focus?.linkedFirstMove;
   return (
-    <BlockingCelebrationFrame {...props} tone="daily">
-      <View style={styles.activeDayContent}>
-        <View style={styles.rewardHeading}>
-          <Text style={styles.overlayLabel}>
-            {firstMove
-              ? "First Move saved · Daily progress"
-              : event.focus
-                ? "Focus saved · Daily progress"
-                : "Daily progress"}
-          </Text>
-          <Text style={styles.activeDayTitle}>
-            {firstMove
-              ? event.focus?.outcome === "stopped"
-                ? "You stopped when you chose."
-                : "You made the first move."
-              : "You showed up today"}
-          </Text>
-          <FirstMoveCelebrationContext event={event} />
-        </View>
-        <PixelStepScene reduceMotion={reduceMotion} variant="daily" />
-        <View style={styles.primaryRewardGroup}>
-          <Text style={styles.activeDayCount}>
-            Active Day +{event.activeDayDelta ?? 1}
-          </Text>
-          <SecondaryRewards event={event} includeActiveDay={false} />
-        </View>
+    <View style={styles.activeDayContent}>
+      <View style={styles.rewardHeading}>
+        <Text style={styles.overlayLabel}>
+          {firstMove
+            ? "First Move saved · Daily progress"
+            : event.focus
+              ? "Focus saved · Daily progress"
+              : "Daily progress"}
+        </Text>
+        <Text style={styles.activeDayTitle}>
+          {firstMove
+            ? event.focus?.outcome === "stopped"
+              ? "You stopped when you chose."
+              : "You made the first move."
+            : "You showed up today"}
+        </Text>
+        <FirstMoveCelebrationContext event={event} />
       </View>
-    </BlockingCelebrationFrame>
+      <PixelStepScene reduceMotion={reduceMotion} variant="daily" />
+      <View style={styles.primaryRewardGroup}>
+        <Text style={styles.activeDayCount}>
+          Active Day +{event.activeDayDelta ?? 1}
+        </Text>
+        <SecondaryRewards event={event} includeActiveDay={false} />
+      </View>
+    </View>
   );
 }
 
@@ -327,37 +333,35 @@ function FocusCompletionCelebration(props: CelebrationViewProps) {
   const stopped = event.focus?.outcome === "stopped";
   const firstMove = event.focus?.linkedFirstMove;
   return (
-    <BlockingCelebrationFrame {...props} tone="focus">
-      <View style={styles.activeDayContent}>
-        <View style={styles.rewardHeading}>
-          <Text style={styles.overlayLabel}>Focus saved</Text>
-          <Text style={styles.activeDayTitle}>
-            {firstMove
-              ? stopped
-                ? "You stopped when you chose."
-                : "You made the first move."
-              : stopped
-                ? "You stopped intentionally"
-                : "Session complete"}
-          </Text>
-          <Text style={styles.focusSupport}>
-            {firstMove && stopped
-              ? "Your time is saved."
-              : stopped
-              ? "Choosing to stop is still a deliberate step."
-              : "One focused step, finished."}
-          </Text>
-          <FirstMoveCelebrationContext event={event} />
-        </View>
-        <PixelStepScene reduceMotion={reduceMotion} variant="focus" />
-        <View style={styles.primaryRewardGroup}>
-          <Text style={styles.focusDuration}>
-            {formatFocusDuration(event.focus?.durationMs ?? 0).replace(".", "")}
-          </Text>
-          <SecondaryRewards event={event} includeActiveDay />
-        </View>
+    <View style={styles.activeDayContent}>
+      <View style={styles.rewardHeading}>
+        <Text style={styles.overlayLabel}>Focus saved</Text>
+        <Text style={styles.activeDayTitle}>
+          {firstMove
+            ? stopped
+              ? "You stopped when you chose."
+              : "You made the first move."
+            : stopped
+              ? "You stopped intentionally"
+              : "Session complete"}
+        </Text>
+        <Text style={styles.focusSupport}>
+          {firstMove && stopped
+            ? "Your time is saved."
+            : stopped
+            ? "Choosing to stop is still a deliberate step."
+            : "One focused step, finished."}
+        </Text>
+        <FirstMoveCelebrationContext event={event} />
       </View>
-    </BlockingCelebrationFrame>
+      <PixelStepScene reduceMotion={reduceMotion} variant="focus" />
+      <View style={styles.primaryRewardGroup}>
+        <Text style={styles.focusDuration}>
+          {formatFocusDuration(event.focus?.durationMs ?? 0).replace(".", "")}
+        </Text>
+        <SecondaryRewards event={event} includeActiveDay />
+      </View>
+    </View>
   );
 }
 
@@ -365,25 +369,23 @@ function MilestoneCelebration(props: CelebrationViewProps) {
   const { event, reduceMotion } = props;
   const milestone = event.milestone;
   return (
-    <BlockingCelebrationFrame {...props} tone="milestone">
-      <View style={styles.milestoneContent}>
-        <View style={styles.milestoneCopy}>
-          <Text style={styles.milestoneLabel}>Cat Room milestone</Text>
-          <Text style={styles.dayTitle}>Day {milestone?.day ?? event.activeDayTotal}</Text>
-          <Text style={styles.milestoneTitle}>
-            {milestone?.chapter ?? "Something new for your kitten"}
-          </Text>
-        </View>
-        <PixelStepScene reduceMotion={reduceMotion} variant="milestone" />
-        <View style={styles.milestoneRewardGroup}>
-          <Text style={styles.milestoneReward}>
-            {milestone?.reward ?? "Active Day milestone reached"}
-          </Text>
-          <FirstMoveCelebrationContext event={event} />
-          <SecondaryRewards event={event} includeActiveDay />
-        </View>
+    <View style={styles.milestoneContent}>
+      <View style={styles.milestoneCopy}>
+        <Text style={styles.milestoneLabel}>Cat Room milestone</Text>
+        <Text style={styles.dayTitle}>Day {milestone?.day ?? event.activeDayTotal}</Text>
+        <Text style={styles.milestoneTitle}>
+          {milestone?.chapter ?? "Something new for your kitten"}
+        </Text>
       </View>
-    </BlockingCelebrationFrame>
+      <PixelStepScene reduceMotion={reduceMotion} variant="milestone" />
+      <View style={styles.milestoneRewardGroup}>
+        <Text style={styles.milestoneReward}>
+          {milestone?.reward ?? "Active Day milestone reached"}
+        </Text>
+        <FirstMoveCelebrationContext event={event} />
+        <SecondaryRewards event={event} includeActiveDay />
+      </View>
+    </View>
   );
 }
 

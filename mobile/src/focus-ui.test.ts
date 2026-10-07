@@ -24,18 +24,23 @@ const tabsSource = readFileSync(
 test("a pending First Move is primary while every existing Focus entry path remains available", () => {
   assert.match(source, /YOUR FIRST MOVE/);
   assert.match(source, /Start this move/);
-  assert.match(source, /Start a different Focus session/);
+  assert.match(source, /Start a different focus/);
   assert.match(source, /type FocusSetupMode = "countdown" \| "stopwatch"/);
   assert.match(source, /accessibilityLabel="Start countdown focus"/);
   assert.match(source, /accessibilityLabel="Start stopwatch focus"/);
   assert.equal((source.match(/title="Start Focus"/g) ?? []).length, 2);
-  const idleComposition = source.slice(
-    source.indexOf("{pendingIntent ?", source.indexOf("return (", source.indexOf("if (localWorkspaceStatus"))),
-    source.indexOf("{latestClosedSession && !pendingIntent"),
+  const idleCompositionStart = source.indexOf(
+    "{pendingIntent ?",
+    source.indexOf("return (", source.indexOf("if (localWorkspaceStatus")),
   );
+  const idleComposition = source.slice(
+    idleCompositionStart,
+    source.indexOf("\n\n    </FocusPage>", idleCompositionStart),
+  );
+  const pendingCardIndex = idleComposition.indexOf("PendingFirstMoveCard");
   assert.ok(
-    idleComposition.indexOf("PendingFirstMoveCard") <
-      idleComposition.indexOf("Start a different Focus session"),
+    pendingCardIndex <
+      idleComposition.indexOf("setStandaloneSetupForIntentId", pendingCardIndex),
   );
   assert.match(
     idleComposition,
@@ -59,6 +64,16 @@ test("Start this move inherits wording, Direction, duration, and intent through 
     pendingCard,
     /\{intent\.direction\} · \{intent\.intendedDurationMinutes\} min/,
   );
+  assert.match(pendingCard, /<PixelFocusRing/);
+  assert.match(pendingCard, /size=\{ringSize\}/);
+  assert.match(pendingCard, /pose="sleeping"/);
+  assert.match(pendingCard, /numberOfLines=\{2\}/);
+  assert.match(source, /pendingMoveTitle:[\s\S]*?fontSize: 18[\s\S]*?lineHeight: 22/);
+  assert.match(source, /focusSleepingKitten:[\s\S]*?aspectRatio: 160 \/ 110[\s\S]*?width: 256/);
+  assert.doesNotMatch(
+    source.match(/focusSleepingKitten:[\s\S]*?\n  \},/)?.[0] ?? "",
+    /overflow: "hidden"/,
+  );
 });
 
 test("linked active Focus keeps the timer and First Move context dominant", () => {
@@ -72,8 +87,12 @@ test("linked active Focus keeps the timer and First Move context dominant", () =
   assert.match(active, /session\.linkedIntentId/);
   assert.match(active, /\{session\.direction\}/);
   assert.match(active, /session\.targetDurationMinutes/);
+  assert.match(active, /numberOfLines=\{2\}/);
   assert.match(active, />Stop and save</);
   assert.match(active, />Cancel this session</);
+  assert.match(source, /activeSessionInfo:[\s\S]*?width: "100%"/);
+  assert.match(source, /activeSessionTitle:[\s\S]*?width: "100%"/);
+  assert.equal((source.match(/style=\{styles\.focusSleepingKitten\}/g) ?? []).length, 4);
 });
 
 test("linked results offer Done, Keep going, and Another First Move without a second timer", () => {
@@ -149,6 +168,11 @@ test("idle Focus uses one accessible mode selector and preserves both setup stat
   assert.match(source, /accessibilityElementsHidden=\{mode !== "countdown"\}/);
   assert.match(source, /accessibilityElementsHidden=\{mode !== "stopwatch"\}/);
   assert.match(source, /hiddenSetup: \{ display: "none" \}/);
+  assert.match(source, /focusSetupMode: \{ flex: 1 \}/);
+  assert.match(
+    source,
+    /style=\{\[styles\.focusSetupMode, mode !== "countdown" && styles\.hiddenSetup\]\}/,
+  );
 });
 
 test("idle Focus centers the shared ring and Start action before secondary configuration", () => {
@@ -158,18 +182,38 @@ test("idle Focus centers the shared ring and Start action before secondary confi
   );
   assert.match(source, /import \{ PixelFocusRing \} from "\.\.\/\.\.\/components\/pixel-scenes\.tsx"/);
   assert.match(source, /const focusParentWidth = Math\.min\(viewportWidth - spacing\.md \* 2, 420\)/);
-  assert.match(source, /focusParentWidth \* 0\.62/);
-  assert.match(source, /viewportHeight \* \(activePresentation \? 0\.29 : 0\.27\)/);
+  assert.match(source, /focusParentWidth \* 0\.78/);
+  assert.match(source, /viewportHeight \* 0\.33/);
+  assert.doesNotMatch(source, /activePresentation/);
   assert.match(countdown, /size=\{ringSize\}/);
   assert.match(countdown, /value=\{duration === undefined \? "--:--" : formatDuration\(duration \* 60_000\)\}/);
   assert.ok(countdown.indexOf("<PixelFocusRing") < countdown.indexOf('title="Start Focus"'));
   assert.ok(countdown.indexOf('title="Start Focus"') < countdown.indexOf("secondaryConfiguration"));
-  assert.ok(countdown.indexOf('label="Customize"') < countdown.indexOf("FOCUS_COUNTDOWN_PRESETS.map"));
+  assert.ok(countdown.indexOf('label="Edit focus"') < countdown.indexOf("FOCUS_COUNTDOWN_PRESETS.map"));
+  assert.match(countdown, /accessibilityLabel=\{`Edit focus\. \$\{duration === undefined/);
+  assert.match(countdown, /`\$\{duration\} minutes\. Countdown`/);
   assert.ok(countdown.indexOf("FOCUS_COUNTDOWN_PRESETS.map") < countdown.indexOf(">Mode</Text>"));
   assert.match(countdown, /pose="sleeping"/);
   assert.match(source, /focusPageContent:[\s\S]*?alignItems: "center"/);
   assert.match(source, /timerPresentation:[\s\S]*?alignItems: "center"/);
+  assert.match(source, /idleRingStage:[\s\S]*?width: "100%"/);
+  assert.match(source, /focusStartButton: \{ maxWidth: 320, width: "100%" \}/);
+  assert.match(source, /focusSleepingKitten:[\s\S]*?aspectRatio: 160 \/ 110[\s\S]*?width: 256/);
   assert.doesNotMatch(source, /<Screen eyebrow="Focus"/);
+});
+
+test("the last Focus review lives below a protected first viewport", () => {
+  const page = source.slice(
+    source.indexOf("function FocusPage"),
+    source.indexOf("function ActiveSessionCard"),
+  );
+  assert.match(source, /const idleSessionReview =/);
+  assert.match(source, /secondary=\{idleSessionReview\}/);
+  assert.match(source, /visualPreview === "idle-with-history"/);
+  assert.match(page, /secondary \? \([\s\S]*?<ScrollView/);
+  assert.ok(page.indexOf("focusProtectedViewport") < page.indexOf("focusHistorySection"));
+  assert.match(page, /minHeight: viewportHeight/);
+  assert.match(source, /focusHistorySection:[\s\S]*?borderTopWidth: StyleSheet\.hairlineWidth/);
 });
 
 test("normal Focus states use a fixed page and only exceptional content can scroll", () => {
@@ -218,6 +262,23 @@ test("optional setup details retain title, linked item, and all compact Directio
   assert.match(source, /DIRECTIONS\.map/);
   assert.match(source, /choiceCompact/);
   assert.match(source, /setDetailsExpanded\(true\)/);
+});
+
+test("generic Focus configuration is clearly exposed as an edit action", () => {
+  const countdown = source.slice(
+    source.indexOf("function CountdownSetup"),
+    source.indexOf("function StopwatchSetup"),
+  );
+  const stopwatch = source.slice(
+    source.indexOf("function StopwatchSetup"),
+    source.indexOf("function SetupDetails"),
+  );
+  assert.match(countdown, /label="Edit focus"/);
+  assert.match(countdown, /summary=\{duration === undefined \? "Check custom time" : `\$\{duration\} min · Countdown`\}/);
+  assert.match(stopwatch, /label="Edit focus"/);
+  assert.match(stopwatch, /accessibilityLabel="Edit focus\. Stopwatch"/);
+  assert.match(stopwatch, /summary="Stopwatch"/);
+  assert.doesNotMatch(source, /Duration · Mode · Details|Mode · Details/);
 });
 
 test("Focus setup prioritizes Start and removes implementation copy", () => {

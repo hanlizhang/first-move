@@ -336,7 +336,10 @@ function mergeCelebrationEvents(
   const dominant = incoming.priority >= existing.priority ? incoming : existing;
   const merged: CelebrationEvent = {
     accessibleLabel: "",
-    id: `${dominant.id}:with:${incoming.id === dominant.id ? existing.id : incoming.id}`,
+    // The current event ID is also the renderer's presentation identity. Keep it
+    // stable while later canonical rewards enrich the same logical source so a
+    // single completion cannot restart its already-visible celebration.
+    id: existing.id,
     kind,
     level,
     ...(points !== undefined ? { points } : {}),
