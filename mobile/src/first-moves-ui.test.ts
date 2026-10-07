@@ -36,6 +36,7 @@ test("First Move adds an illustration-led landing without changing the three gui
   assert.match(source, /type FlowStep = "landing" \| "stuck-state" \| "direction" \| "move"/);
   assert.match(source, /visualPreview === "step-1"[\s\S]*?\? "stuck-state"/);
   assert.match(source, /visualPreview === "step-2"[\s\S]*?\? "direction"/);
+  assert.match(source, /visualPreview === "step-3"[\s\S]*?\? "move"/);
   assert.match(source, /if \(step === "landing"\)/);
   assert.match(source, /<SafeAreaView/);
   assert.match(source, />Feeling stuck\?</);
@@ -64,7 +65,7 @@ test("First Move adds an illustration-led landing without changing the three gui
 test("First Move steps use illustrated choice tiles instead of settings rows", () => {
   const steps = source.slice(
     source.indexOf('{step === "stuck-state"'),
-    source.indexOf('{notice && step !== "move"'),
+    source.indexOf("{notice ?", source.indexOf('{step === "stuck-state"')),
   );
   assert.match(steps, /style=\{styles\.flowSurface\}/);
   assert.match(steps, /style=\{styles\.choiceList\}/);
@@ -73,6 +74,22 @@ test("First Move steps use illustrated choice tiles instead of settings rows", (
   assert.match(source, /tileChoice/);
   assert.doesNotMatch(source, /choiceChevron/);
   assert.doesNotMatch(steps, /<Card tone="primary">/);
+});
+
+test("First Move Step 3 is fixed by default with bounded exceptional overflow", () => {
+  const moveStep = source.slice(
+    source.indexOf('if (step === "move")'),
+    source.indexOf("return (\n    <Screen", source.indexOf('if (step === "move")')),
+  );
+  assert.match(moveStep, /keyboardVisible \|\| fontScale > 1\.3 \|\| viewportHeight < 650/);
+  assert.match(moveStep, /<KeyboardAvoidingView/);
+  assert.match(moveStep, /needsOverflow \? \([\s\S]*?<ScrollView/);
+  assert.match(moveStep, /numberOfLines=\{3\}/);
+  assert.match(moveStep, /scrollEnabled/);
+  assert.match(moveStep, /styles\.moveBottomActions/);
+  assert.ok(moveStep.indexOf("Save this First Move") < moveStep.indexOf("Change direction"));
+  assert.doesNotMatch(moveStep, /title="Choose one small move"/);
+  assert.match(source, /textInput:[\s\S]*?height: 88[\s\S]*?maxHeight: 104/);
 });
 
 test("First Move controls retain accessibility, touch targets, and save semantics", () => {

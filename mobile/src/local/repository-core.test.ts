@@ -13,6 +13,7 @@ import {
   toggleTaskCompletion,
 } from "../domain/tasks-habits.ts";
 import {
+  continueLinkedSession,
   getOpenSession,
   pauseSession,
   reconcileRunningCountdown,
@@ -275,6 +276,61 @@ test("completion is persisted before optional review and retains its historical 
   assert.equal(reviewed.sessions[0]?.label, "Opened the saved draft");
   assert.equal(reviewed.sessions[0]?.actualElapsedMs, 120_000);
   assert.equal(reviewed.sessions[0]?.linkedIntentId, "persisted-intent");
+});
+
+test("linked First Move continuation stays durable and owner-scoped for Guest and account", async () => {
+  const store = memoryStore();
+  const repository = createMobileRepositoryWithStore(store);
+  const startMs = Date.parse("2026-08-09T09:00:00.000Z");
+  const owners = [
+    { kind: "guest" } as const,
+    { kind: "account", userId: USER_ID } as const,
+  ];
+
+  for (const [index, owner] of owners.entries()) {
+    const suffix = String(index + 1);
+    const intentId = `owner-intent-${suffix}`;
+    const sessionId = `owner-session-${suffix}`;
+    await repository.updateLocalWorkspace(owner, (state) =>
+      stopSession(
+        startCountdownFromIntent(
+          createPendingIntent(
+            state,
+            {
+              stuckState: "knows what to do but cannot start",
+              direction: "Work & Study",
+              moveText: `Owner ${suffix} move`,
+              intendedDurationMinutes: 2,
+            },
+            () => new Date(startMs).toISOString(),
+            () => intentId,
+          ),
+          intentId,
+          startMs,
+          () => sessionId,
+        ),
+        sessionId,
+        startMs + 30_000,
+      ),
+    );
+    await repository.updateLocalWorkspace(owner, (state) =>
+      continueLinkedSession(
+        state,
+        sessionId,
+        startMs + 40_000,
+        () => `owner-follow-up-${suffix}`,
+      ),
+    );
+  }
+
+  const guest = await repository.loadLocalWorkspace(owners[0]!);
+  const account = await repository.loadLocalWorkspace(owners[1]!);
+  assert.equal(guest.sessions[0]?.reviewedAt, new Date(startMs + 40_000).toISOString());
+  assert.equal(getOpenSession(guest)?.linkedIntentId, "owner-intent-1");
+  assert.equal(account.sessions[0]?.reviewedAt, new Date(startMs + 40_000).toISOString());
+  assert.equal(getOpenSession(account)?.linkedIntentId, "owner-intent-2");
+  assert.equal(guest.activityIntents[0]?.moveText, "Owner 1 move");
+  assert.equal(account.activityIntents[0]?.moveText, "Owner 2 move");
 });
 
 test("standalone Stopwatch records stay isolated by local workspace owner", async () => {

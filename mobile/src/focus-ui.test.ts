@@ -12,20 +12,91 @@ const pickerSource = readFileSync(
   new URL("./components/focus-link-picker.tsx", import.meta.url),
   "utf8",
 );
+const celebrationSource = readFileSync(
+  new URL("./components/celebration-provider.tsx", import.meta.url),
+  "utf8",
+);
+const tabsSource = readFileSync(
+  new URL("./app/(tabs)/_layout.tsx", import.meta.url),
+  "utf8",
+);
 
-test("Mobile Focus exposes the three independent Session entry paths", () => {
-  assert.match(source, /Next small move/);
-  assert.match(source, /Start this First Move/);
+test("a pending First Move is primary while every existing Focus entry path remains available", () => {
+  assert.match(source, /YOUR FIRST MOVE/);
+  assert.match(source, /Start this move/);
+  assert.match(source, /Start a different Focus session/);
   assert.match(source, /type FocusSetupMode = "countdown" \| "stopwatch"/);
   assert.match(source, /accessibilityLabel="Start countdown focus"/);
   assert.match(source, /accessibilityLabel="Start stopwatch focus"/);
   assert.equal((source.match(/title="Start Focus"/g) ?? []).length, 2);
   const idleComposition = source.slice(
-    source.indexOf("{pendingIntent ?"),
-    source.indexOf("</>", source.indexOf("{pendingIntent ?")),
+    source.indexOf("{pendingIntent ?", source.indexOf("return (", source.indexOf("if (localWorkspaceStatus"))),
+    source.indexOf("{latestClosedSession && !pendingIntent"),
   );
-  assert.ok(idleComposition.indexOf("PendingFirstMoveCard") < idleComposition.indexOf("FocusSetup"));
+  assert.ok(
+    idleComposition.indexOf("PendingFirstMoveCard") <
+      idleComposition.indexOf("Start a different Focus session"),
+  );
+  assert.match(
+    idleComposition,
+    /standaloneSetupForIntentId === pendingIntent\.id[\s\S]*?focusSetup/,
+  );
+  assert.match(idleComposition, /:\s*\(\s*focusSetup\s*\)/);
   assert.doesNotMatch(source, /cancelPendingIntent/);
+});
+
+test("Start this move inherits wording, Direction, duration, and intent through the existing engine", () => {
+  assert.match(
+    source,
+    /startCountdownFromIntent\(state, pendingIntent\.id, current\)/,
+  );
+  const pendingCard = source.slice(
+    source.indexOf("function PendingFirstMoveCard"),
+    source.indexOf("function LinkedFirstMoveResult"),
+  );
+  assert.match(pendingCard, /\{intent\.moveText\}/);
+  assert.match(
+    pendingCard,
+    /\{intent\.direction\} · \{intent\.intendedDurationMinutes\} min/,
+  );
+});
+
+test("linked active Focus keeps the timer and First Move context dominant", () => {
+  const active = source.slice(
+    source.indexOf("function ActiveSessionCard"),
+    source.indexOf("function countdownProgress"),
+  );
+  assert.ok(active.indexOf("YOUR FIRST MOVE") < active.indexOf("{session.label}"));
+  assert.ok(active.indexOf("{session.label}") < active.indexOf("<PixelFocusRing"));
+  assert.ok(active.indexOf("{session.label}") < active.indexOf('pose="sleeping"'));
+  assert.match(active, /session\.linkedIntentId/);
+  assert.match(active, /\{session\.direction\}/);
+  assert.match(active, /session\.targetDurationMinutes/);
+  assert.match(active, />Stop and save</);
+  assert.match(active, />Cancel this session</);
+});
+
+test("linked results offer Done, Keep going, and Another First Move without a second timer", () => {
+  assert.match(source, /function LinkedFirstMoveResult/);
+  assert.match(source, /You made the first move\./);
+  assert.match(source, /You stopped when you chose\. Your time is saved\./);
+  assert.match(source, /Actual focus time/);
+  assert.match(source, /title="Done"/);
+  assert.match(source, /title="Keep going"/);
+  assert.match(source, /title="Another First Move"/);
+  assert.match(source, /acknowledgeSession\(state, linkedResultSession\.id, current\)/);
+  assert.match(source, /continueLinkedSession\(state, linkedResultSession\.id, current\)/);
+  assert.match(source, /router\.push\("\/\(tabs\)\/first-moves"\)/);
+  assert.doesNotMatch(source, /setInterval[\s\S]*?function LinkedFirstMoveResult[\s\S]*?setInterval/);
+});
+
+test("linked completion reuses one celebration overlay and preserves owner persistence boundaries", () => {
+  assert.match(celebrationSource, /You made the first move\./);
+  assert.match(celebrationSource, /You stopped when you chose\./);
+  assert.match(celebrationSource, /FirstMoveCelebrationContext/);
+  assert.equal((celebrationSource.match(/<Modal/g) ?? []).length, 1);
+  assert.doesNotMatch(source, /<Modal|AsyncStorage|localWorkspaceKey|cloudCacheKey/);
+  assert.match(source, /updateLocalWorkspace/);
 });
 
 test("Mobile Focus makes persistence automatic and review optional", () => {
@@ -87,7 +158,8 @@ test("idle Focus centers the shared ring and Start action before secondary confi
   );
   assert.match(source, /import \{ PixelFocusRing \} from "\.\.\/\.\.\/components\/pixel-scenes\.tsx"/);
   assert.match(source, /const focusParentWidth = Math\.min\(viewportWidth - spacing\.md \* 2, 420\)/);
-  assert.match(source, /Math\.round\(focusParentWidth \* 0\.65\)/);
+  assert.match(source, /focusParentWidth \* 0\.62/);
+  assert.match(source, /viewportHeight \* \(activePresentation \? 0\.29 : 0\.27\)/);
   assert.match(countdown, /size=\{ringSize\}/);
   assert.match(countdown, /value=\{duration === undefined \? "--:--" : formatDuration\(duration \* 60_000\)\}/);
   assert.ok(countdown.indexOf("<PixelFocusRing") < countdown.indexOf('title="Start Focus"'));
@@ -98,6 +170,22 @@ test("idle Focus centers the shared ring and Start action before secondary confi
   assert.match(source, /focusPageContent:[\s\S]*?alignItems: "center"/);
   assert.match(source, /timerPresentation:[\s\S]*?alignItems: "center"/);
   assert.doesNotMatch(source, /<Screen eyebrow="Focus"/);
+});
+
+test("normal Focus states use a fixed page and only exceptional content can scroll", () => {
+  const page = source.slice(
+    source.indexOf("function FocusPage"),
+    source.indexOf("function ActiveSessionCard"),
+  );
+  assert.match(source, /const requiresFocusOverflow = fontScale > 1\.3 \|\| viewportHeight < 600/);
+  assert.match(page, /scroll \? \([\s\S]*?<ScrollView/);
+  assert.match(page, /:\s*\(\s*<View style=\{styles\.focusPageContent\}>/);
+  assert.match(source, /title=\{openSession \? undefined : "Focus"\}/);
+  assert.match(source, /\{notice && !openSession \?/);
+  assert.match(source, /numberOfLines=\{3\}/);
+  assert.match(source, /configurationScroller: \{ flexShrink: 1, maxHeight: 260 \}/);
+  assert.match(tabsSource, /hideFocusTabs[\s\S]*?display: "none"/);
+  assert.match(tabsSource, /getOpenSession\(localWorkspace\)/);
 });
 
 test("Countdown keeps every preset, secondary custom input, and existing start semantics", () => {

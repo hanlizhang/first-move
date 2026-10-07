@@ -137,6 +137,7 @@ test("completed and intentionally stopped Focus sessions derive supportive prese
   assert.equal(completed?.level, 2);
   assert.equal(completed?.sourceKey, "session:source-session:2026-10-05");
   assert.equal(completed?.focus?.durationMs, 300_000);
+  assert.equal(completed?.focus?.linkedFirstMove, false);
   assert.match(completed?.accessibleLabel ?? "", /Session complete/);
   assert.equal(stopped?.focus?.outcome, "stopped");
   assert.match(stopped?.accessibleLabel ?? "", /stopped intentionally/);
@@ -144,6 +145,28 @@ test("completed and intentionally stopped Focus sessions derive supportive prese
     ...focusSession("stopped", 150_000),
     status: "paused",
   }), undefined);
+});
+
+test("linked Focus completion is branded around the retained First Move context", () => {
+  const completed = focusCompletionCelebration({
+    ...focusSession("completed", 120_000),
+    label: "Open the exact document.",
+    linkedIntentId: "intent-local",
+    targetDurationMinutes: 2,
+  });
+  const stopped = focusCompletionCelebration({
+    ...focusSession("stopped", 45_000),
+    label: "Open the exact document.",
+    linkedIntentId: "intent-local",
+    targetDurationMinutes: 2,
+  });
+
+  assert.equal(completed?.focus?.linkedFirstMove, true);
+  assert.equal(completed?.focus?.label, "Open the exact document.");
+  assert.match(completed?.accessibleLabel ?? "", /You made the first move/);
+  assert.match(completed?.accessibleLabel ?? "", /Open the exact document/);
+  assert.match(stopped?.accessibleLabel ?? "", /stopped when you chose/i);
+  assert.match(stopped?.accessibleLabel ?? "", /time is saved/i);
 });
 
 test("a Focus moment merges with its later points and Active Day confirmation", () => {
@@ -165,6 +188,30 @@ test("a Focus moment merges with its later points and Active Day confirmation", 
   assert.equal(merged.current?.points, 5);
   assert.deepEqual(merged.pending, []);
   assert.match(merged.current?.accessibleLabel ?? "", /Session complete/);
+  assert.match(merged.current?.accessibleLabel ?? "", /Active Day \+1/);
+});
+
+test("a linked First Move completion and its reward remain one celebration", () => {
+  const focus = focusCompletionCelebration({
+    ...focusSession("completed", 120_000),
+    label: "Open the exact document.",
+    linkedIntentId: "intent-local",
+    targetDurationMinutes: 2,
+  });
+  assert.ok(focus);
+  const confirmed = deriveCelebrations(
+    activeDays(8),
+    withReward(activeDays(9), "session", 5),
+  );
+  const merged = enqueueCelebrations(
+    enqueueCelebrations(createCelebrationQueueState("guest"), [focus]),
+    confirmed,
+  );
+
+  assert.equal(merged.current?.focus?.linkedFirstMove, true);
+  assert.equal(merged.current?.activeDayDelta, 1);
+  assert.deepEqual(merged.pending, []);
+  assert.match(merged.current?.accessibleLabel ?? "", /made the first move/i);
   assert.match(merged.current?.accessibleLabel ?? "", /Active Day \+1/);
 });
 

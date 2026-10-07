@@ -1,10 +1,15 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -54,6 +59,7 @@ type FlowStep = "landing" | "stuck-state" | "direction" | "move";
 
 export default function FirstMovesScreen() {
   const router = useRouter();
+  const { fontScale, height: viewportHeight } = useWindowDimensions();
   const { visualPreview } = useLocalSearchParams<{ visualPreview?: string }>();
   const {
     auth,
@@ -68,31 +74,62 @@ export default function FirstMovesScreen() {
       ? "stuck-state"
       : __DEV__ && visualPreview === "step-2"
         ? "direction"
-        : "landing",
+        : __DEV__ && visualPreview === "step-3"
+          ? "move"
+          : "landing",
   );
   const [stuckState, setStuckState] = useState<StuckState>(STUCK_STATES[0]);
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
   const [templateId, setTemplateId] = useState<string | undefined>();
-  const [moveText, setMoveText] = useState("");
+  const [moveText, setMoveText] = useState(
+    __DEV__ && visualPreview === "step-3"
+      ? "Write the task title and one action that takes under two minutes."
+      : "",
+  );
   const [duration, setDuration] = useState<IntendedDuration>(2);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const pendingIntent = getPendingIntent(localWorkspace);
   const openSession = getOpenSession(localWorkspace);
 
   useEffect(() => {
     if (!__DEV__ || !visualPreview) return undefined;
     const frame = requestAnimationFrame(() => {
+      if (visualPreview === "step-3") {
+        setStuckState("overwhelmed by a large task");
+        setDirection("Work & Study");
+        setTemplateId("visual-preview-template");
+        setMoveText(
+          "Write the task title and one action that takes under two minutes.",
+        );
+        setDuration(2);
+      }
       setStep(
         visualPreview === "step-1"
           ? "stuck-state"
           : visualPreview === "step-2"
             ? "direction"
-            : "landing",
+            : visualPreview === "step-3"
+              ? "move"
+              : "landing",
       );
     });
     return () => cancelAnimationFrame(frame);
   }, [visualPreview]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () =>
+      setKeyboardVisible(true),
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardVisible(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   async function chooseTemplate(
     stateChoice: StuckState,
@@ -255,6 +292,143 @@ export default function FirstMovesScreen() {
     );
   }
 
+  if (step === "move") {
+    const needsOverflow =
+      keyboardVisible || fontScale > 1.3 || viewportHeight < 650;
+    const editor = (
+      <View style={styles.moveScreen}>
+        <View style={styles.moveMain}>
+          <View style={styles.moveHeader}>
+            <Label>Step 3 of 3</Label>
+            <Heading>Your First Move</Heading>
+            <Text style={styles.moveMeta}>
+              {sentenceCase(stuckState)} · {direction}
+            </Text>
+          </View>
+
+          {localWorkspaceMessage ? (
+            <Card tone="danger">
+              <Body>{localWorkspaceMessage}</Body>
+            </Card>
+          ) : null}
+
+          <View style={styles.editorGroup}>
+            <Text style={styles.inputLabel}>Edit the wording</Text>
+            <TextInput
+              accessibilityLabel="First Move wording"
+              maxLength={160}
+              multiline
+              numberOfLines={3}
+              onChangeText={(value) => {
+                setMoveText(value);
+                setTemplateId(undefined);
+                setNotice("");
+              }}
+              placeholder="Write one visible action you can begin now"
+              placeholderTextColor={colors.textMuted}
+              scrollEnabled
+              style={styles.textInput}
+              textAlignVertical="top"
+              value={moveText}
+            />
+            <Text style={styles.counter}>{moveText.length}/160</Text>
+          </View>
+
+          <View style={styles.durationGroup}>
+            <Text style={styles.inputLabel}>Intended duration</Text>
+            <View accessibilityRole="radiogroup" style={styles.durationRow}>
+              {INTENDED_DURATIONS.map((minutes) => (
+                <ChoiceButton
+                  compact
+                  key={minutes}
+                  label={`${minutes} min`}
+                  onPress={() => setDuration(minutes)}
+                  selected={duration === minutes}
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.utilityActions}>
+            <UtilityAction
+              label="Choose another"
+              onPress={() => void chooseTemplate(stuckState, direction, duration)}
+            />
+            <UtilityAction
+              label="Make duration shorter"
+              disabled={duration === 2}
+              onPress={() => setDuration(nextShorterDuration(duration))}
+            />
+            <UtilityAction
+              label="Enter my own move"
+              onPress={() => {
+                setTemplateId(undefined);
+                setMoveText("");
+                setDuration(2);
+                setNotice("Write one small action in your own words.");
+              }}
+            />
+          </View>
+
+          {notice ? (
+            <Text accessibilityLiveRegion="polite" style={styles.notice}>
+              {notice}
+            </Text>
+          ) : templateId ? (
+            <Text style={styles.sourceNote}>Offline suggestion</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.moveBottomActions}>
+          <PrimaryButton
+            title={saving ? "Saving…" : "Save this First Move"}
+            disabled={!moveText.trim() || saving || !workspaceEditable}
+            onPress={() => void savePendingIntent()}
+          />
+          <View style={styles.moveFooterLinks}>
+            <TextAction
+              label="Change direction"
+              disabled={saving}
+              onPress={() => setStep("direction")}
+            />
+            <TextAction
+              label="Cancel"
+              disabled={saving}
+              onPress={() => {
+                setNotice("Cancelled. Nothing was lost.");
+                setStep("stuck-state");
+              }}
+            />
+          </View>
+        </View>
+      </View>
+    );
+
+    return (
+      <SafeAreaView
+        edges={["top", "left", "right"]}
+        style={styles.moveSafeArea}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.moveKeyboardView}
+        >
+          {needsOverflow ? (
+            <ScrollView
+              contentContainerStyle={styles.moveOverflowContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {editor}
+            </ScrollView>
+          ) : (
+            editor
+          )}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <Screen
       eyebrow="I’m Stuck · No AI required"
@@ -309,96 +483,7 @@ export default function FirstMovesScreen() {
         </View>
       ) : null}
 
-      {step === "move" ? (
-        <View style={styles.flowSurface}>
-          <Label>Step 3 of 3</Label>
-          <Heading>Your First Move</Heading>
-          <Body muted>
-            {sentenceCase(stuckState)} · {direction}
-          </Body>
-          <Text style={styles.inputLabel}>Edit the wording</Text>
-          <TextInput
-            accessibilityLabel="First Move wording"
-            maxLength={160}
-            multiline
-            onChangeText={(value) => {
-              setMoveText(value);
-              setTemplateId(undefined);
-              setNotice("");
-            }}
-            placeholder="Write one visible action you can begin now"
-            placeholderTextColor={colors.textMuted}
-            style={styles.textInput}
-            textAlignVertical="top"
-            value={moveText}
-          />
-          <Text style={styles.counter}>{moveText.length}/160</Text>
-
-          <Text style={styles.inputLabel}>Intended duration</Text>
-          <View accessibilityRole="radiogroup" style={styles.durationRow}>
-            {INTENDED_DURATIONS.map((minutes) => (
-              <ChoiceButton
-                compact
-                key={minutes}
-                label={`${minutes} min`}
-                onPress={() => setDuration(minutes)}
-                selected={duration === minutes}
-              />
-            ))}
-          </View>
-
-          {notice ? (
-            <Text accessibilityLiveRegion="polite" style={styles.notice}>
-              {notice}
-            </Text>
-          ) : null}
-
-          <View style={styles.utilityActions}>
-            <UtilityAction
-              label="Choose another"
-              onPress={() => void chooseTemplate(stuckState, direction, duration)}
-            />
-            <UtilityAction
-              label="Make duration shorter"
-              disabled={duration === 2}
-              onPress={() => setDuration(nextShorterDuration(duration))}
-            />
-            <UtilityAction
-              label="Enter my own move"
-              onPress={() => {
-                setTemplateId(undefined);
-                setMoveText("");
-                setDuration(2);
-                setNotice("Write one small action in your own words.");
-              }}
-            />
-          </View>
-
-          <PrimaryButton
-            title={saving ? "Saving…" : "Save this First Move"}
-            disabled={!moveText.trim() || saving || !workspaceEditable}
-            onPress={() => void savePendingIntent()}
-          />
-          <TextAction
-            label="Change direction"
-            disabled={saving}
-            onPress={() => setStep("direction")}
-          />
-          <TextAction
-            label="Cancel"
-            disabled={saving}
-            onPress={() => {
-              setNotice("Cancelled. Nothing was lost.");
-              setStep("stuck-state");
-            }}
-          />
-          {templateId ? (
-            <Body muted>This suggestion came from the offline local library.</Body>
-          ) : null}
-        </View>
-      ) : null}
-
-      {notice && step !== "move" ? (
+      {notice ? (
         <Text accessibilityLiveRegion="polite" style={styles.notice}>
           {notice}
         </Text>
@@ -512,7 +597,6 @@ function UtilityAction({
       ]}
     >
       <Text style={styles.utilityActionText}>{label}</Text>
-      <Text accessibilityElementsHidden style={styles.utilityActionIcon}>+</Text>
     </Pressable>
   );
 }
@@ -557,6 +641,36 @@ function sentenceCase(value: string): string {
 
 const styles = StyleSheet.create({
   landingSafeArea: { backgroundColor: colors.background, flex: 1 },
+  moveSafeArea: { backgroundColor: colors.background, flex: 1 },
+  moveKeyboardView: { flex: 1 },
+  moveOverflowContent: { flexGrow: 1 },
+  moveScreen: {
+    flex: 1,
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  moveMain: { flex: 1, gap: spacing.sm },
+  moveHeader: { gap: spacing.xs },
+  moveMeta: {
+    color: colors.textMuted,
+    fontSize: typography.small,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  editorGroup: { gap: spacing.xs },
+  durationGroup: { gap: spacing.xs },
+  moveBottomActions: { gap: spacing.xs, marginTop: "auto" },
+  moveFooterLinks: {
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  sourceNote: {
+    color: colors.textMuted,
+    fontSize: typography.label,
+    lineHeight: 16,
+  },
   landingScreen: {
     flex: 1,
     paddingBottom: spacing.sm,
@@ -671,7 +785,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: typography.small,
     fontWeight: "800",
-    marginTop: spacing.sm,
   },
   textInput: {
     backgroundColor: colors.surface,
@@ -680,9 +793,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.text,
     fontSize: typography.body,
+    height: 88,
     lineHeight: 24,
-    minHeight: 112,
-    padding: spacing.md,
+    maxHeight: 104,
+    minHeight: 72,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   counter: {
     color: colors.textMuted,
@@ -702,22 +818,20 @@ const styles = StyleSheet.create({
   utilityAction: {
     alignItems: "center",
     backgroundColor: colors.surfaceMuted,
-    borderRadius: radii.md,
-    flexBasis: "47%",
+    borderRadius: radii.pill,
+    flexBasis: "46%",
     flexGrow: 1,
-    flexDirection: "row",
-    gap: spacing.sm,
+    justifyContent: "center",
     minHeight: touchTarget,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.xs,
   },
   utilityActionText: {
     color: colors.text,
-    flex: 1,
     fontSize: typography.small,
     fontWeight: "700",
+    textAlign: "center",
   },
-  utilityActionIcon: { color: colors.primary, fontSize: 22, fontWeight: "800" },
   textAction: {
     alignItems: "center",
     alignSelf: "center",

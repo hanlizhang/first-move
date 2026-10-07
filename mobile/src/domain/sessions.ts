@@ -145,6 +145,66 @@ export function startCountdownFromIntent(
   );
 }
 
+export function acknowledgeSession(
+  state: AppState,
+  sessionId: string,
+  nowMs = Date.now(),
+): AppState {
+  const session = state.sessions.find((candidate) => candidate.id === sessionId);
+  if (
+    !session ||
+    (session.status !== "completed" && session.status !== "stopped") ||
+    session.reviewedAt
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    sessions: state.sessions.map((candidate) =>
+      candidate.id === sessionId
+        ? { ...candidate, reviewedAt: new Date(nowMs).toISOString() }
+        : candidate,
+    ),
+  };
+}
+
+export function continueLinkedSession(
+  state: AppState,
+  sessionId: string,
+  nowMs = Date.now(),
+  idFactory: IdFactory = createUuidV4,
+): AppState {
+  if (getOpenSession(state)) return state;
+  const session = state.sessions.find((candidate) => candidate.id === sessionId);
+  if (
+    !session ||
+    session.mode !== "countdown" ||
+    (session.status !== "completed" && session.status !== "stopped") ||
+    !session.linkedIntentId ||
+    !isFocusDuration(session.targetDurationMinutes)
+  ) {
+    return state;
+  }
+  const intent = state.activityIntents.find(
+    (candidate) =>
+      candidate.id === session.linkedIntentId && candidate.status === "consumed",
+  );
+  if (!intent) return state;
+
+  return appendSession(
+    acknowledgeSession(state, sessionId, nowMs),
+    {
+      direction: session.direction,
+      id: idFactory(),
+      label: session.label,
+      linkedIntentId: session.linkedIntentId,
+      mode: "countdown",
+      targetDurationMinutes: session.targetDurationMinutes,
+    },
+    nowMs,
+  );
+}
+
 export function pauseSession(
   state: AppState,
   sessionId: string,
