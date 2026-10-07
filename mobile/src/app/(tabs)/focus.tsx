@@ -103,20 +103,26 @@ export default function FocusScreen() {
   }), [visualPreview]);
   const visualPreviewSession = useMemo<ActivitySession>(() => {
     const startedAt = "2026-10-07T09:00:00.000Z";
-    const completed = visualPreview === "completed" || visualPreview === "post-focus";
+    const closed =
+      visualPreview === "completed" ||
+      visualPreview === "idle-with-history" ||
+      visualPreview === "post-focus" ||
+      visualPreview === "stopped";
     return {
-      accumulatedElapsedMs: completed ? 120_000 : 15_000,
-      actualElapsedMs: completed ? 120_000 : undefined,
+      accumulatedElapsedMs: closed ? 120_000 : 15_000,
+      actualElapsedMs: closed ? 120_000 : undefined,
       direction: visualPreviewIntent.direction,
-      endedAt: completed ? "2026-10-07T09:02:00.000Z" : undefined,
+      endedAt: closed ? "2026-10-07T09:02:00.000Z" : undefined,
       id: "visual-preview-running-focus",
       label: visualPreviewIntent.moveText,
-      lastResumedAt: visualPreview === "paused" || completed ? undefined : startedAt,
+      lastResumedAt: visualPreview === "paused" || closed ? undefined : startedAt,
       linkedIntentId: visualPreviewIntent.id,
       mode: "countdown",
       startedAt,
-      status: completed
-        ? "completed"
+      status: closed
+        ? visualPreview === "stopped"
+          ? "stopped"
+          : "completed"
         : visualPreview === "paused"
           ? "paused"
           : "running",
@@ -147,16 +153,15 @@ export default function FocusScreen() {
     : undefined;
   const visualPreviewActive =
     __DEV__ && (visualPreview === "running" || visualPreview === "paused");
-  const activePresentation = Boolean(openSession) || visualPreviewActive;
   const focusParentWidth = Math.min(viewportWidth - spacing.md * 2, 420);
   const focusRingSize = Math.round(
     Math.min(
-      activePresentation ? 248 : 236,
+      284,
       Math.max(
-        176,
+        228,
         Math.min(
-          focusParentWidth * 0.62,
-          viewportHeight * (activePresentation ? 0.29 : 0.27),
+          focusParentWidth * 0.78,
+          viewportHeight * 0.33,
         ),
       ),
     ),
@@ -184,6 +189,21 @@ export default function FocusScreen() {
       }
     />
   );
+  const idleSessionReview =
+    latestClosedSession &&
+    !openSession &&
+    !(linkedResultSession && linkedResultIntent) &&
+    !pendingIntent ? (
+      <SessionReview
+        key={latestClosedSession.id}
+        linkOptions={linkOptions}
+        references={references}
+        session={latestClosedSession}
+        state={localWorkspace}
+        updateLocalWorkspace={updateLocalWorkspace}
+        workspaceEditable={workspaceEditable}
+      />
+    ) : undefined;
 
   useEffect(() => {
     if (openSession?.status !== "running") {
@@ -248,7 +268,7 @@ export default function FocusScreen() {
 
   if (
     __DEV__ &&
-    ["pending", "running", "paused", "completed", "post-focus"].includes(
+    ["idle", "idle-with-history", "pending", "running", "paused", "stopped", "completed", "post-focus"].includes(
       visualPreview ?? "",
     )
   ) {
@@ -256,9 +276,23 @@ export default function FocusScreen() {
       <FocusPage
         immersive={visualPreviewActive}
         scroll={requiresFocusOverflow}
+        secondary={
+          visualPreview === "idle-with-history" ? (
+            <SessionReview
+              linkOptions={linkOptions}
+              references={references}
+              session={visualPreviewSession}
+              state={localWorkspace}
+              updateLocalWorkspace={() => Promise.resolve(undefined)}
+              workspaceEditable={false}
+            />
+          ) : undefined
+        }
         title={visualPreviewActive ? undefined : "Focus"}
       >
-        {visualPreviewActive ? (
+        {visualPreview === "idle" || visualPreview === "idle-with-history" ? (
+          focusSetup
+        ) : visualPreviewActive ? (
           <ActiveSessionCard
             parentWidth={focusParentWidth}
             ringSize={focusRingSize}
@@ -271,19 +305,14 @@ export default function FocusScreen() {
             session={visualPreviewSession}
           />
         ) : visualPreview === "pending" ? (
-          <>
-            <PendingFirstMoveCard
-              disabled={false}
-              intent={visualPreviewIntent}
-              linkOptions={[]}
-              onStart={() => undefined}
-              state={localWorkspace}
-            />
-            <SecondaryButton
-              title="Start a different Focus session"
-              onPress={() => undefined}
-            />
-          </>
+          <PendingFirstMoveCard
+            disabled={false}
+            intent={visualPreviewIntent}
+            onAlternate={() => undefined}
+            onStart={() => undefined}
+            parentWidth={focusParentWidth}
+            ringSize={focusRingSize}
+          />
         ) : (
           <LinkedFirstMoveResult
             disabled={false}
@@ -302,6 +331,7 @@ export default function FocusScreen() {
     <FocusPage
       immersive={Boolean(openSession)}
       scroll={requiresFocusOverflow}
+      secondary={idleSessionReview}
       title={openSession ? undefined : "Focus"}
     >
       {localWorkspaceMessage ? (
@@ -407,7 +437,9 @@ export default function FocusScreen() {
                 <PendingFirstMoveCard
                   disabled={saving || !workspaceEditable}
                   intent={pendingIntent}
-                  linkOptions={linkOptions}
+                  onAlternate={() =>
+                    setStandaloneSetupForIntentId(pendingIntent.id)
+                  }
                   onStart={() =>
                     void saveChange(
                       (state, current) =>
@@ -415,31 +447,14 @@ export default function FocusScreen() {
                       "",
                     )
                   }
-                  state={localWorkspace}
-                />
-                <SecondaryButton
-                  disabled={saving || !workspaceEditable}
-                  title="Start a different Focus session"
-                  onPress={() =>
-                    setStandaloneSetupForIntentId(pendingIntent.id)
-                  }
+                  parentWidth={focusParentWidth}
+                  ringSize={focusRingSize}
                 />
               </>
             )
           ) : (
             focusSetup
           )}
-          {latestClosedSession && !pendingIntent ? (
-            <SessionReview
-              key={latestClosedSession.id}
-              linkOptions={linkOptions}
-              references={references}
-              session={latestClosedSession}
-              state={localWorkspace}
-              updateLocalWorkspace={updateLocalWorkspace}
-              workspaceEditable={workspaceEditable}
-            />
-          ) : null}
         </>
       )}
 
@@ -488,13 +503,16 @@ function FocusPage({
   children,
   immersive = false,
   scroll = false,
+  secondary,
   title,
 }: {
   children: ReactNode;
   immersive?: boolean;
   scroll?: boolean;
+  secondary?: ReactNode;
   title?: string;
 }) {
+  const [viewportHeight, setViewportHeight] = useState(0);
   const content = (
     <>
       {title ? (
@@ -517,7 +535,24 @@ function FocusPage({
       edges={immersive ? ["top", "right", "bottom", "left"] : ["top", "left", "right"]}
       style={styles.focusSafeArea}
     >
-      {scroll ? (
+      {secondary ? (
+        <ScrollView
+          contentContainerStyle={styles.focusHistoryContent}
+          keyboardShouldPersistTaps="handled"
+          onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
+          showsVerticalScrollIndicator={false}
+        >
+          <View
+            style={[
+              styles.focusProtectedViewport,
+              viewportHeight > 0 ? { minHeight: viewportHeight } : undefined,
+            ]}
+          >
+            {content}
+          </View>
+          <View style={styles.focusHistorySection}>{secondary}</View>
+        </ScrollView>
+      ) : scroll ? (
         <ScrollView
           contentContainerStyle={styles.focusOverflowContent}
           keyboardShouldPersistTaps="handled"
@@ -574,10 +609,8 @@ function ActiveSessionCard({
               ? `Your First Move. ${session.label}`
               : session.label
           }
-          adjustsFontSizeToFit
           ellipsizeMode="tail"
-          minimumFontScale={0.78}
-          numberOfLines={3}
+          numberOfLines={2}
           style={styles.activeSessionTitle}
         >
           {session.label}
@@ -601,7 +634,7 @@ function ActiveSessionCard({
           value={formatDuration(displayMs)}
         />
       </View>
-      <View style={styles.sleepingKitten}>
+      <View style={styles.focusSleepingKitten}>
         <PixelKitten
           accessibilityLabel="Sleeping pixel kitten resting beneath the Focus timer"
           pose="sleeping"
@@ -667,36 +700,70 @@ function countdownProgress(
 function PendingFirstMoveCard({
   disabled,
   intent,
-  linkOptions,
+  onAlternate,
   onStart,
-  state,
+  parentWidth,
+  ringSize,
 }: {
   disabled: boolean;
   intent: ActivityIntent;
-  linkOptions: readonly FocusLinkOption[];
+  onAlternate(): void;
   onStart(): void;
-  state: AppState;
+  parentWidth: number;
+  ringSize: number;
 }) {
   return (
-    <View style={styles.nextMove}>
-      <Label>YOUR FIRST MOVE</Label>
-      <Text
-        adjustsFontSizeToFit
-        ellipsizeMode="tail"
-        minimumFontScale={0.82}
-        numberOfLines={4}
-        style={styles.pendingMoveTitle}
-      >
-        {intent.moveText}
-      </Text>
-      <Text style={styles.nextMoveMeta}>
-        {intent.direction} · {intent.intendedDurationMinutes} min · {intentRelationshipLabel(intent, linkOptions, state)}
-      </Text>
-      <PrimaryButton
-        disabled={disabled}
-        title="Start this move"
-        onPress={onStart}
-      />
+    <View style={[styles.pendingFocus, { width: parentWidth }]}>
+      <View style={styles.pendingFocusCopy}>
+        <Label>YOUR FIRST MOVE</Label>
+        <Text
+          accessibilityLabel={`Your First Move. ${intent.moveText}`}
+          ellipsizeMode="tail"
+          numberOfLines={2}
+          style={styles.pendingMoveTitle}
+        >
+          {intent.moveText}
+        </Text>
+        <Text style={styles.nextMoveMeta}>
+          {intent.direction} · {intent.intendedDurationMinutes} min
+        </Text>
+      </View>
+      <View style={styles.pendingFocusHero}>
+        <View style={[styles.idleRingStage, { height: ringSize }]}>
+          <PixelFocusRing
+            accessibilityLabel={`${intent.intendedDurationMinutes} minute First Move countdown ready`}
+            label="Focus"
+            size={ringSize}
+            value={formatDuration(intent.intendedDurationMinutes * 60_000)}
+          />
+        </View>
+        <View style={styles.focusSleepingKitten}>
+          <PixelKitten
+            accessibilityLabel="Sleeping pixel kitten beside the First Move timer"
+            pose="sleeping"
+            showFloor={false}
+          />
+        </View>
+      </View>
+      <View style={styles.pendingFocusActions}>
+        <PrimaryButton
+          disabled={disabled}
+          title="Start this move"
+          onPress={onStart}
+        />
+        <Pressable
+          accessibilityRole="button"
+          disabled={disabled}
+          onPress={onAlternate}
+          style={({ pressed }) => [
+            styles.pendingAlternateAction,
+            pressed && styles.choicePressed,
+            disabled && styles.focusActionDisabled,
+          ]}
+        >
+          <Text style={styles.pendingAlternateText}>Start a different focus</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -792,7 +859,7 @@ function FocusSetup({
       <View
         accessibilityElementsHidden={mode !== "countdown"}
         importantForAccessibility={mode === "countdown" ? "auto" : "no-hide-descendants"}
-        style={mode !== "countdown" && styles.hiddenSetup}
+        style={[styles.focusSetupMode, mode !== "countdown" && styles.hiddenSetup]}
       >
         <CountdownSetup
           disabled={disabled}
@@ -806,7 +873,7 @@ function FocusSetup({
       <View
         accessibilityElementsHidden={mode !== "stopwatch"}
         importantForAccessibility={mode === "stopwatch" ? "auto" : "no-hide-descendants"}
-        style={mode !== "stopwatch" && styles.hiddenSetup}
+        style={[styles.focusSetupMode, mode !== "stopwatch" && styles.hiddenSetup]}
       >
         <StopwatchSetup
           disabled={disabled}
@@ -895,16 +962,25 @@ function CountdownSetup({
   return (
     <View style={styles.setupContent}>
       <View style={styles.idleFocusHero}>
-        <PixelFocusRing
-          accessibilityLabel={
-            duration === undefined
-              ? "Custom countdown duration is invalid"
-              : `${duration} minute countdown selected`
-          }
-          label="Focus"
-          size={ringSize}
-          value={duration === undefined ? "--:--" : formatDuration(duration * 60_000)}
-        />
+        <View style={[styles.idleRingStage, { height: ringSize }]}>
+          <PixelFocusRing
+            accessibilityLabel={
+              duration === undefined
+                ? "Custom countdown duration is invalid"
+                : `${duration} minute countdown selected`
+            }
+            label="Focus"
+            size={ringSize}
+            value={duration === undefined ? "--:--" : formatDuration(duration * 60_000)}
+          />
+        </View>
+        <View style={styles.focusSleepingKitten}>
+          <PixelKitten
+            accessibilityLabel="Sleeping pixel kitten beside the Focus ring"
+            pose="sleeping"
+            showFloor={false}
+          />
+        </View>
         <View style={styles.focusStartButton}>
           <PrimaryButton
             accessibilityLabel="Start countdown focus"
@@ -921,18 +997,12 @@ function CountdownSetup({
             }}
           />
         </View>
-        <View style={styles.idleSleepingKitten}>
-          <PixelKitten
-            accessibilityLabel="Sleeping pixel kitten beside the Focus ring"
-            pose="sleeping"
-            showFloor={false}
-          />
-        </View>
       </View>
       <View style={styles.secondaryConfiguration}>
         <DisclosureButton
+          accessibilityLabel={`Edit focus. ${duration === undefined ? "Check custom time" : `${duration} minutes. Countdown`}`}
           expanded={customizeExpanded}
-          label="Customize"
+          label="Edit focus"
           onPress={() => setCustomizeExpanded((current) => !current)}
           summary={duration === undefined ? "Check custom time" : `${duration} min · Countdown`}
         />
@@ -1045,12 +1115,21 @@ function StopwatchSetup({
   return (
     <View style={styles.setupContent}>
       <View style={styles.idleFocusHero}>
-        <PixelFocusRing
-          accessibilityLabel="Stopwatch ready at zero minutes"
-          label="Stopwatch"
-          size={ringSize}
-          value="00:00"
-        />
+        <View style={[styles.idleRingStage, { height: ringSize }]}>
+          <PixelFocusRing
+            accessibilityLabel="Stopwatch ready at zero minutes"
+            label="Stopwatch"
+            size={ringSize}
+            value="00:00"
+          />
+        </View>
+        <View style={styles.focusSleepingKitten}>
+          <PixelKitten
+            accessibilityLabel="Sleeping pixel kitten beside the Focus ring"
+            pose="sleeping"
+            showFloor={false}
+          />
+        </View>
         <View style={styles.focusStartButton}>
           <PrimaryButton
             accessibilityLabel="Start stopwatch focus"
@@ -1065,18 +1144,12 @@ function StopwatchSetup({
             }
           />
         </View>
-        <View style={styles.idleSleepingKitten}>
-          <PixelKitten
-            accessibilityLabel="Sleeping pixel kitten beside the Focus ring"
-            pose="sleeping"
-            showFloor={false}
-          />
-        </View>
       </View>
       <View style={styles.secondaryConfiguration}>
         <DisclosureButton
+          accessibilityLabel="Edit focus. Stopwatch"
           expanded={customizeExpanded}
-          label="Customize"
+          label="Edit focus"
           onPress={() => setCustomizeExpanded((current) => !current)}
           summary="Stopwatch"
         />
@@ -1180,11 +1253,13 @@ function DetailsDisclosure({
 }
 
 function DisclosureButton({
+  accessibilityLabel,
   expanded,
   label,
   onPress,
   summary,
 }: {
+  accessibilityLabel?: string;
   expanded: boolean;
   label: string;
   onPress(): void;
@@ -1192,6 +1267,7 @@ function DisclosureButton({
 }) {
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       accessibilityState={{ expanded }}
       onPress={onPress}
@@ -1522,6 +1598,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
   },
+  focusHistoryContent: { flexGrow: 1 },
+  focusProtectedViewport: {
+    alignItems: "center",
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  focusHistorySection: {
+    alignSelf: "center",
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    maxWidth: 452,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+    width: "100%",
+  },
   focusOverflowContent: {
     alignItems: "center",
     flexGrow: 1,
@@ -1619,27 +1712,55 @@ const styles = StyleSheet.create({
     fontSize: typography.small,
     fontWeight: "800",
   },
-  nextMove: {
+  pendingFocus: {
+    alignItems: "center",
     flex: 1,
-    gap: spacing.sm,
+    gap: 2,
+    justifyContent: "space-between",
+  },
+  pendingFocusCopy: {
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: spacing.sm,
+  },
+  pendingFocusHero: {
+    alignItems: "center",
+    flex: 1,
     justifyContent: "center",
-    paddingVertical: spacing.sm,
+    width: "100%",
   },
   pendingMoveTitle: {
     color: colors.text,
-    fontSize: typography.heading,
+    fontSize: 18,
     fontWeight: "800",
-    lineHeight: 28,
+    lineHeight: 22,
+    maxWidth: 350,
+    textAlign: "center",
   },
   nextMoveMeta: {
     color: colors.textMuted,
     fontSize: typography.small,
+    fontWeight: "700",
     lineHeight: 20,
+    textAlign: "center",
+  },
+  pendingFocusActions: { alignSelf: "stretch", gap: spacing.xs },
+  pendingAlternateAction: {
+    alignItems: "center",
+    alignSelf: "center",
+    justifyContent: "center",
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.md,
+  },
+  pendingAlternateText: {
+    color: colors.primary,
+    fontSize: typography.small,
+    fontWeight: "800",
   },
   focusSetup: {
     flex: 1,
-    gap: spacing.sm,
   },
+  focusSetupMode: { flex: 1 },
   activeSessionCard: {
     alignItems: "center",
     alignSelf: "center",
@@ -1654,17 +1775,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
-  sleepingKitten: {
+  focusSleepingKitten: {
     alignSelf: "center",
-    height: 92,
-    marginTop: -18,
-    overflow: "hidden",
-    width: 174,
+    aspectRatio: 160 / 110,
+    marginTop: -48,
+    width: 256,
   },
   activeSessionInfo: {
     alignItems: "center",
     gap: spacing.xs,
     paddingHorizontal: spacing.sm,
+    width: "100%",
   },
   firstMoveEyebrow: {
     color: colors.primary,
@@ -1674,10 +1795,12 @@ const styles = StyleSheet.create({
   },
   activeSessionTitle: {
     color: "#4A2F21",
-    fontSize: typography.heading,
+    fontSize: 18,
     fontWeight: "800",
-    lineHeight: 28,
+    lineHeight: 22,
+    maxWidth: 350,
     textAlign: "center",
+    width: "100%",
   },
   activeSessionMeta: {
     color: "#7A6354",
@@ -1685,7 +1808,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
-  focusActions: { alignSelf: "stretch", gap: spacing.xs },
+  focusActions: { alignSelf: "stretch", gap: spacing.sm },
   focusPrimaryButton: {
     alignItems: "center",
     backgroundColor: "#8B5A35",
@@ -1737,18 +1860,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "center",
     flex: 1,
-    gap: spacing.sm,
+    gap: spacing.xs,
     justifyContent: "center",
     width: "100%",
   },
-  focusStartButton: { width: 176 },
-  idleSleepingKitten: {
-    alignSelf: "center",
-    height: 96,
-    marginTop: -22,
-    overflow: "hidden",
-    width: 174,
+  idleRingStage: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
   },
+  focusStartButton: { maxWidth: 320, width: "100%" },
   modeSelector: {
     alignSelf: "center",
     backgroundColor: colors.surface,
@@ -1777,7 +1898,7 @@ const styles = StyleSheet.create({
   },
   modeOptionTextSelected: { color: "#FFFFFF" },
   hiddenSetup: { display: "none" },
-  setupContent: { flex: 1, gap: spacing.sm },
+  setupContent: { flex: 1, gap: spacing.xs },
   secondaryConfiguration: {
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,

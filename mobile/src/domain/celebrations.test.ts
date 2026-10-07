@@ -186,9 +186,95 @@ test("a Focus moment merges with its later points and Active Day confirmation", 
   assert.equal(merged.current?.focus?.outcome, "completed");
   assert.equal(merged.current?.activeDayDelta, 1);
   assert.equal(merged.current?.points, 5);
+  assert.equal(merged.current?.id, focus.id);
   assert.deepEqual(merged.pending, []);
   assert.match(merged.current?.accessibleLabel ?? "", /Session complete/);
   assert.match(merged.current?.accessibleLabel ?? "", /Active Day \+1/);
+});
+
+test("a linked First Move completion has one stable enqueue identity", () => {
+  const focus = focusCompletionCelebration({
+    ...focusSession("completed", 120_000),
+    linkedIntentId: "intent-local",
+  });
+  assert.ok(focus);
+  const once = enqueueCelebrations(createCelebrationQueueState("guest"), [focus]);
+  const repeated = enqueueCelebrations(once, [focus]);
+
+  assert.strictEqual(repeated, once);
+  assert.equal(once.current?.id, "celebration:session:source-session:2026-10-05:focus-completion");
+  assert.deepEqual(once.pending, []);
+});
+
+test("a linked First Move Stop and save cannot enqueue twice", () => {
+  const focus = focusCompletionCelebration({
+    ...focusSession("stopped", 45_000),
+    linkedIntentId: "intent-local",
+  });
+  assert.ok(focus);
+  const once = enqueueCelebrations(createCelebrationQueueState("guest"), [focus]);
+  const repeated = enqueueCelebrations(once, [focus]);
+
+  assert.strictEqual(repeated, once);
+  assert.equal(once.current?.focus?.outcome, "stopped");
+  assert.deepEqual(once.pending, []);
+});
+
+test("consuming the pending First Move cannot re-enqueue its closed session", () => {
+  const completedSession = {
+    ...focusSession("completed", 120_000),
+    linkedIntentId: "intent-local",
+  };
+  const beforeIntentUpdate = focusCompletionCelebration(completedSession);
+  const afterIntentUpdate = focusCompletionCelebration({ ...completedSession });
+  assert.ok(beforeIntentUpdate);
+  assert.ok(afterIntentUpdate);
+  const once = enqueueCelebrations(createCelebrationQueueState("guest"), [
+    beforeIntentUpdate,
+  ]);
+  const repeated = enqueueCelebrations(once, [afterIntentUpdate]);
+
+  assert.equal(afterIntentUpdate.id, beforeIntentUpdate.id);
+  assert.strictEqual(repeated, once);
+});
+
+test("authenticated canonical confirmation enriches instead of replaying Focus", () => {
+  const focus = focusCompletionCelebration(focusSession("completed", 300_000));
+  assert.ok(focus);
+  const confirmed = deriveCelebrations(
+    activeDays(8),
+    withReward(activeDays(9), "session", 5),
+  );
+  const shown = enqueueCelebrations(createCelebrationQueueState("account:user-1"), [
+    focus,
+  ]);
+  const enriched = enqueueCelebrations(shown, confirmed);
+  const repeatedConfirmation = enqueueCelebrations(enriched, confirmed);
+
+  assert.equal(enriched.current?.id, focus.id);
+  assert.equal(enriched.current?.activeDayDelta, 1);
+  assert.deepEqual(enriched.pending, []);
+  assert.strictEqual(repeatedConfirmation, enriched);
+});
+
+test("Guest local Focus save remains one presentation without cloud rewards", () => {
+  const before = createEmptyState();
+  const after = structuredClone(before);
+  after.sessions = [{
+    ...focusSession("completed", 120_000),
+    linkedIntentId: "intent-local",
+  }];
+  const focus = focusCompletionCelebration(after.sessions[0]!);
+  assert.ok(focus);
+  const localRewards = deriveCelebrations(before, after);
+  const shown = enqueueCelebrations(createCelebrationQueueState("guest"), [
+    ...localRewards,
+    focus,
+  ]);
+
+  assert.deepEqual(localRewards, []);
+  assert.equal(shown.current?.id, focus.id);
+  assert.deepEqual(shown.pending, []);
 });
 
 test("a linked First Move completion and its reward remain one celebration", () => {
@@ -236,6 +322,43 @@ test("a dismissed Focus source does not reopen at the same level but may upgrade
   assert.equal(upgraded.current?.kind, "milestone");
 });
 
+test("one Focus completion coalesces points, Active Day, and milestone without restarting", () => {
+  const focus = focusCompletionCelebration(focusSession("completed", 300_000));
+  assert.ok(focus);
+  const milestone = deriveCelebrations(
+    activeDays(34),
+    withReward(activeDays(35), "session", 5),
+  );
+  const merged = enqueueCelebrations(
+    enqueueCelebrations(createCelebrationQueueState("account:user-1"), [focus]),
+    milestone,
+  );
+
+  assert.equal(merged.current?.id, focus.id);
+  assert.equal(merged.current?.kind, "milestone");
+  assert.equal(merged.current?.points, 5);
+  assert.equal(merged.current?.activeDayDelta, 1);
+  assert.equal(merged.current?.milestone?.day, 35);
+  assert.deepEqual(merged.pending, []);
+});
+
+test("two separate Focus sessions retain independent celebration identities", () => {
+  const first = focusCompletionCelebration(focusSession("completed", 120_000));
+  const second = focusCompletionCelebration({
+    ...focusSession("completed", 180_000),
+    id: "second-session",
+  });
+  assert.ok(first);
+  assert.ok(second);
+  const queued = enqueueCelebrations(createCelebrationQueueState("guest"), [
+    first,
+    second,
+  ]);
+
+  assert.equal(queued.current?.id, first.id);
+  assert.deepEqual(queued.pending.map((event) => event.id), [second.id]);
+});
+
 test("equal hydrated or remounted state does not derive a celebration", () => {
   const state = withReward(activeDays(35), "task", 5);
   state.progress.unlockedMilestones = [21];
@@ -244,6 +367,18 @@ test("equal hydrated or remounted state does not derive a celebration", () => {
 
   assert.deepEqual(deriveCelebrations(state, state), []);
   assert.deepEqual(deriveCelebrations(state, rehydrated), []);
+});
+
+test("a consumed Focus completion is not replayed after hydration or remount", () => {
+  const focus = focusCompletionCelebration(focusSession("completed", 300_000));
+  assert.ok(focus);
+  const shown = enqueueCelebrations(createCelebrationQueueState("guest"), [focus]);
+  const consumed = dismissCurrentCelebration(shown);
+  const replay = enqueueCelebrations(consumed, [focus]);
+
+  assert.strictEqual(replay, consumed);
+  assert.equal(replay.current, undefined);
+  assert.deepEqual(replay.pending, []);
 });
 
 test("derivation is presentation-only and leaves source state untouched", () => {

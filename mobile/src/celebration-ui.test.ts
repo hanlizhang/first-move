@@ -38,13 +38,19 @@ const pixelScenesSource = readFileSync(
 test("one global renderer presents compact, daily, and milestone levels", () => {
   assert.equal((providerSource.match(/<CelebrationRenderer/g) ?? []).length, 1);
   assert.match(providerSource, /event\.level === 1/);
-  assert.match(providerSource, /event\.level === 2/);
   assert.match(providerSource, /PointsCelebration/);
+  assert.match(providerSource, /BlockingCelebration/);
   assert.match(providerSource, /ActiveDayCelebration/);
   assert.match(providerSource, /FocusCompletionCelebration/);
   assert.match(providerSource, /MilestoneCelebration/);
   assert.match(providerSource, /pointerEvents="none"/);
   assert.match(providerSource, /<Modal/);
+});
+
+test("related blocking rewards update one mounted presentation frame", () => {
+  assert.equal((providerSource.match(/<BlockingCelebrationFrame/g) ?? []).length, 1);
+  assert.match(providerSource, /event\.kind === "milestone"/);
+  assert.match(providerSource, /event\.kind === "focus-completion"/);
 });
 
 test("reduced motion retains content while removing scale and rise motion", () => {
