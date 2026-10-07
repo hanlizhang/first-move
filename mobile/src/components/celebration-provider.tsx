@@ -289,14 +289,26 @@ function ToastStepIcon() {
 
 function ActiveDayCelebration(props: CelebrationViewProps) {
   const { event, reduceMotion } = props;
+  const firstMove = event.focus?.linkedFirstMove;
   return (
     <BlockingCelebrationFrame {...props} tone="daily">
       <View style={styles.activeDayContent}>
         <View style={styles.rewardHeading}>
           <Text style={styles.overlayLabel}>
-            {event.focus ? "Focus saved · Daily progress" : "Daily progress"}
+            {firstMove
+              ? "First Move saved · Daily progress"
+              : event.focus
+                ? "Focus saved · Daily progress"
+                : "Daily progress"}
           </Text>
-          <Text style={styles.activeDayTitle}>You showed up today</Text>
+          <Text style={styles.activeDayTitle}>
+            {firstMove
+              ? event.focus?.outcome === "stopped"
+                ? "You stopped when you chose."
+                : "You made the first move."
+              : "You showed up today"}
+          </Text>
+          <FirstMoveCelebrationContext event={event} />
         </View>
         <PixelStepScene reduceMotion={reduceMotion} variant="daily" />
         <View style={styles.primaryRewardGroup}>
@@ -313,19 +325,29 @@ function ActiveDayCelebration(props: CelebrationViewProps) {
 function FocusCompletionCelebration(props: CelebrationViewProps) {
   const { event, reduceMotion } = props;
   const stopped = event.focus?.outcome === "stopped";
+  const firstMove = event.focus?.linkedFirstMove;
   return (
     <BlockingCelebrationFrame {...props} tone="focus">
       <View style={styles.activeDayContent}>
         <View style={styles.rewardHeading}>
           <Text style={styles.overlayLabel}>Focus saved</Text>
           <Text style={styles.activeDayTitle}>
-            {stopped ? "You stopped intentionally" : "Session complete"}
+            {firstMove
+              ? stopped
+                ? "You stopped when you chose."
+                : "You made the first move."
+              : stopped
+                ? "You stopped intentionally"
+                : "Session complete"}
           </Text>
           <Text style={styles.focusSupport}>
-            {stopped
+            {firstMove && stopped
+              ? "Your time is saved."
+              : stopped
               ? "Choosing to stop is still a deliberate step."
               : "One focused step, finished."}
           </Text>
+          <FirstMoveCelebrationContext event={event} />
         </View>
         <PixelStepScene reduceMotion={reduceMotion} variant="focus" />
         <View style={styles.primaryRewardGroup}>
@@ -357,6 +379,7 @@ function MilestoneCelebration(props: CelebrationViewProps) {
           <Text style={styles.milestoneReward}>
             {milestone?.reward ?? "Active Day milestone reached"}
           </Text>
+          <FirstMoveCelebrationContext event={event} />
           <SecondaryRewards event={event} includeActiveDay />
         </View>
       </View>
@@ -373,9 +396,13 @@ function SecondaryRewards({
 }) {
   const rewards = [
     event.focus && event.kind !== "focus-completion"
-      ? event.focus.outcome === "completed"
-        ? "Session complete"
-        : "Focus saved"
+      ? event.focus.linkedFirstMove
+        ? event.focus.outcome === "completed"
+          ? "First Move complete"
+          : "First Move saved"
+        : event.focus.outcome === "completed"
+          ? "Session complete"
+          : "Focus saved"
       : undefined,
     includeActiveDay && event.activeDayDelta
       ? `Active Day +${event.activeDayDelta}`
@@ -384,6 +411,16 @@ function SecondaryRewards({
   ].filter(Boolean);
   return rewards.length > 0 ? (
     <Text style={styles.supportingReward}>{rewards.join(" · ")}</Text>
+  ) : null;
+}
+
+function FirstMoveCelebrationContext({
+  event,
+}: {
+  event: CelebrationEvent;
+}) {
+  return event.focus?.linkedFirstMove ? (
+    <Text style={styles.firstMoveContext}>{event.focus.label}</Text>
   ) : null;
 }
 
@@ -584,6 +621,14 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     lineHeight: 24,
     maxWidth: 300,
+    textAlign: "center",
+  },
+  firstMoveContext: {
+    color: "#4A2F21",
+    fontSize: typography.body,
+    fontWeight: "800",
+    lineHeight: 24,
+    maxWidth: 330,
     textAlign: "center",
   },
   focusDuration: {

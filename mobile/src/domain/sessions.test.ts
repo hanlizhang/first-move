@@ -10,8 +10,10 @@ import {
 import { isUuidV4 } from "./ids.ts";
 import { localDateKey } from "./dates.ts";
 import {
+  acknowledgeSession,
   cancelSession,
   completeSessionIfElapsed,
+  continueLinkedSession,
   elapsedMs,
   getOpenSession,
   pauseSession,
@@ -145,6 +147,112 @@ test("stopping early saves actual elapsed time with neutral stopped state", () =
   assert.equal(stopped.rewardEvents.length, 0);
   assert.equal(stopped.progress.points, 0);
   assert.equal(stopped.activityIntents[0]?.status, "consumed");
+});
+
+test("Done acknowledges a linked First Move without changing its saved outcome", () => {
+  const stopped = stopSession(
+    runningState(5),
+    "session-local",
+    startMs + 74_321,
+  );
+  const acknowledged = acknowledgeSession(
+    stopped,
+    "session-local",
+    startMs + 80_000,
+  );
+
+  assert.equal(acknowledged.sessions[0]?.status, "stopped");
+  assert.equal(acknowledged.sessions[0]?.actualElapsedMs, 74_321);
+  assert.equal(
+    acknowledged.sessions[0]?.reviewedAt,
+    new Date(startMs + 80_000).toISOString(),
+  );
+  assert.equal(acknowledged.sessions[0]?.linkedIntentId, "intent-local");
+  assert.equal(acknowledged.activityIntents[0]?.status, "consumed");
+});
+
+test("Keep going acknowledges the result and starts the same linked First Move again", () => {
+  const completed = reconcileRunningCountdown(
+    runningState(2),
+    startMs + 120_000,
+  );
+  const continued = continueLinkedSession(
+    completed,
+    "session-local",
+    startMs + 130_000,
+    () => "follow-up-session",
+  );
+
+  assert.equal(continued.sessions[0]?.reviewedAt, new Date(startMs + 130_000).toISOString());
+  assert.deepEqual(getOpenSession(continued), {
+    id: "follow-up-session",
+    mode: "countdown",
+    direction: "Work & Study",
+    label: "Open the exact document.",
+    targetDurationMinutes: 2,
+    linkedIntentId: "intent-local",
+    status: "running",
+    startedAt: new Date(startMs + 130_000).toISOString(),
+    localDate: localDateKey(new Date(startMs + 130_000)),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    lastResumedAt: new Date(startMs + 130_000).toISOString(),
+    accumulatedElapsedMs: 0,
+  });
+  assert.equal(continued.activityIntents[0]?.status, "consumed");
+
+  const stoppedAgain = stopSession(
+    continued,
+    "follow-up-session",
+    startMs + 160_000,
+  );
+  assert.equal(stoppedAgain.sessions.length, 2);
+  assert.equal(stoppedAgain.sessions[1]?.actualElapsedMs, 30_000);
+  assert.equal(stoppedAgain.activityIntents[0]?.status, "consumed");
+});
+
+test("Keep going rejects standalone results and preserves a replacement pending move", () => {
+  const standalone = stopSession(
+    startCountdown(
+      createEmptyState(),
+      { direction: "Rest", durationMinutes: 2 },
+      startMs,
+      () => "standalone-session",
+    ),
+    "standalone-session",
+    startMs + 30_000,
+  );
+  assert.equal(
+    continueLinkedSession(standalone, "standalone-session", startMs + 40_000),
+    standalone,
+  );
+
+  const started = runningState(2);
+  const withReplacement = createPendingIntent(
+    {
+      ...started,
+      activityIntents: started.activityIntents.map((intent) => ({
+        ...intent,
+        status: "consumed" as const,
+      })),
+    },
+    {
+      stuckState: "needs intentional rest",
+      direction: "Rest",
+      moveText: "Pause for two minutes.",
+      intendedDurationMinutes: 2,
+    },
+    () => new Date(startMs + 1_000).toISOString(),
+    () => "replacement-intent",
+  );
+  const stopped = stopSession(withReplacement, "session-local", startMs + 30_000);
+  const continued = continueLinkedSession(
+    stopped,
+    "session-local",
+    startMs + 40_000,
+    () => "continued-with-replacement",
+  );
+  assert.equal(getPendingIntent(continued)?.id, "replacement-intent");
+  assert.equal(getOpenSession(continued)?.linkedIntentId, "intent-local");
 });
 
 test("an assisted Session keeps the full consumed Intent and its Task relationship", () => {

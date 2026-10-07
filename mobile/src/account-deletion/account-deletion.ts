@@ -3,6 +3,7 @@ import {
   cloudCacheKey,
 } from "../local/repository-core.ts";
 import { morningSkipStorageKey } from "../local/morning-skip.ts";
+import { recentFirstMoveTemplateKey } from "../local/recent-first-moves-core.ts";
 import { mobileSyncQueueKey } from "../cloud/sync-queue.ts";
 
 export const MOBILE_ACCOUNT_DELETION_CONFIRMATION =
@@ -148,6 +149,7 @@ export function accountScopedMobileKeys(userId: string): string[] {
     cloudCacheKey(userId),
     mobileSyncQueueKey(userId),
     morningSkipStorageKey(workspaceKey),
+    recentFirstMoveTemplateKey({ kind: "account", userId }),
   ];
 }
 

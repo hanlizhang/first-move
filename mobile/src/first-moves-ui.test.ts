@@ -16,8 +16,12 @@ const pixelKittenSource = readFileSync(
   new URL("./components/pixel-kitten.tsx", import.meta.url),
   "utf8",
 );
+const tabsSource = readFileSync(
+  new URL("./app/(tabs)/_layout.tsx", import.meta.url),
+  "utf8",
+);
 
-test("First Moves adds an illustration-led landing without changing the three guided steps", () => {
+test("First Move adds an illustration-led landing without changing the three guided steps", () => {
   assert.equal(STUCK_STATES.length, 6);
   assert.deepEqual(STUCK_STATES, [
     "scrolling and unable to stop",
@@ -32,6 +36,7 @@ test("First Moves adds an illustration-led landing without changing the three gu
   assert.match(source, /type FlowStep = "landing" \| "stuck-state" \| "direction" \| "move"/);
   assert.match(source, /visualPreview === "step-1"[\s\S]*?\? "stuck-state"/);
   assert.match(source, /visualPreview === "step-2"[\s\S]*?\? "direction"/);
+  assert.match(source, /visualPreview === "step-3"[\s\S]*?\? "move"/);
   assert.match(source, /if \(step === "landing"\)/);
   assert.match(source, /<SafeAreaView/);
   assert.match(source, />Feeling stuck\?</);
@@ -60,7 +65,7 @@ test("First Moves adds an illustration-led landing without changing the three gu
 test("First Move steps use illustrated choice tiles instead of settings rows", () => {
   const steps = source.slice(
     source.indexOf('{step === "stuck-state"'),
-    source.indexOf('{notice && step !== "move"'),
+    source.indexOf("{notice ?", source.indexOf('{step === "stuck-state"')),
   );
   assert.match(steps, /style=\{styles\.flowSurface\}/);
   assert.match(steps, /style=\{styles\.choiceList\}/);
@@ -71,11 +76,29 @@ test("First Move steps use illustrated choice tiles instead of settings rows", (
   assert.doesNotMatch(steps, /<Card tone="primary">/);
 });
 
+test("First Move Step 3 is fixed by default with bounded exceptional overflow", () => {
+  const moveStep = source.slice(
+    source.indexOf('if (step === "move")'),
+    source.indexOf("return (\n    <Screen", source.indexOf('if (step === "move")')),
+  );
+  assert.match(moveStep, /keyboardVisible \|\| fontScale > 1\.3 \|\| viewportHeight < 650/);
+  assert.match(moveStep, /<KeyboardAvoidingView/);
+  assert.match(moveStep, /needsOverflow \? \([\s\S]*?<ScrollView/);
+  assert.match(moveStep, /numberOfLines=\{3\}/);
+  assert.match(moveStep, /scrollEnabled/);
+  assert.match(moveStep, /styles\.moveBottomActions/);
+  assert.ok(moveStep.indexOf("Save this First Move") < moveStep.indexOf("Change direction"));
+  assert.doesNotMatch(moveStep, /title="Choose one small move"/);
+  assert.match(source, /textInput:[\s\S]*?height: 88[\s\S]*?maxHeight: 104/);
+});
+
 test("First Move controls retain accessibility, touch targets, and save semantics", () => {
   assert.match(source, /accessibilityRole=\{compact \? "radio" : "button"\}/);
   assert.match(source, /accessibilityState=\{\{ selected \}\}/);
   assert.match(source, /minHeight: touchTarget/);
   assert.match(source, /accessibilityLabel="First Move wording"/);
+  assert.match(source, /maxLength=\{160\}/);
+  assert.match(source, /setTemplateId\(undefined\)/);
   assert.match(source, /createPendingIntent\(state/);
   assert.match(source, /title=\{saving \? "Saving…" : "Save this First Move"\}/);
   for (const label of [
@@ -87,6 +110,14 @@ test("First Move controls retain accessibility, touch targets, and save semantic
   ]) {
     assert.match(source, new RegExp(`label="${label}"`));
   }
+});
+
+test("the primary bottom tab uses the singular accessible product label", () => {
+  assert.match(
+    tabsSource,
+    /name="first-moves"[\s\S]*?tabBarAccessibilityLabel: "First Move"[\s\S]*?title: "First Move"/,
+  );
+  assert.doesNotMatch(tabsSource, /title: "First Moves"/);
 });
 
 test("the landing attention treatment respects reduced motion", () => {

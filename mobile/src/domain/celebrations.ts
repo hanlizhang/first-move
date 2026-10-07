@@ -24,6 +24,7 @@ export interface CelebrationMilestone {
 export interface CelebrationFocus {
   durationMs: number;
   label: string;
+  linkedFirstMove: boolean;
   outcome: "completed" | "stopped";
 }
 
@@ -172,6 +173,7 @@ export function focusCompletionCelebration(
   const focus: CelebrationFocus = {
     durationMs: Math.max(0, session.actualElapsedMs ?? session.accumulatedElapsedMs),
     label: session.label,
+    linkedFirstMove: Boolean(session.linkedIntentId),
     outcome: session.status,
   };
   const sourceLabel = session.status === "completed" ? "Focus complete" : "Focus saved";
@@ -351,9 +353,13 @@ function mergeCelebrationEvents(
 
 function celebrationAccessibleLabel(event: CelebrationEvent): string {
   const focusCopy = event.focus
-    ? event.focus.outcome === "completed"
-      ? "Session complete. Focus saved."
-      : "You stopped intentionally. Focus saved."
+    ? event.focus.linkedFirstMove
+      ? event.focus.outcome === "completed"
+        ? `You made the first move. ${event.focus.label}. Focus saved.`
+        : `You stopped when you chose. Your time is saved. ${event.focus.label}.`
+      : event.focus.outcome === "completed"
+        ? "Session complete. Focus saved."
+        : "You stopped intentionally. Focus saved."
     : undefined;
   const activeDayCopy = event.activeDayDelta
     ? `Active Day +${event.activeDayDelta}.`
