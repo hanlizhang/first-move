@@ -28,7 +28,13 @@ export default function TabsLayout() {
         ),
       })}
     >
-      <Tabs.Screen name="first-moves" options={{ title: "First Moves" }} />
+      <Tabs.Screen
+        name="first-moves"
+        options={{
+          tabBarAccessibilityLabel: "First Move",
+          title: "First Move",
+        }}
+      />
       <Tabs.Screen name="today" options={{ title: "Today" }} />
       <Tabs.Screen name="focus" options={{ title: "Focus" }} />
       <Tabs.Screen name="cat" options={{ title: "Cat" }} />

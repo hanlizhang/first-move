@@ -16,8 +16,12 @@ const pixelKittenSource = readFileSync(
   new URL("./components/pixel-kitten.tsx", import.meta.url),
   "utf8",
 );
+const tabsSource = readFileSync(
+  new URL("./app/(tabs)/_layout.tsx", import.meta.url),
+  "utf8",
+);
 
-test("First Moves adds an illustration-led landing without changing the three guided steps", () => {
+test("First Move adds an illustration-led landing without changing the three guided steps", () => {
   assert.equal(STUCK_STATES.length, 6);
   assert.deepEqual(STUCK_STATES, [
     "scrolling and unable to stop",
@@ -76,6 +80,8 @@ test("First Move controls retain accessibility, touch targets, and save semantic
   assert.match(source, /accessibilityState=\{\{ selected \}\}/);
   assert.match(source, /minHeight: touchTarget/);
   assert.match(source, /accessibilityLabel="First Move wording"/);
+  assert.match(source, /maxLength=\{160\}/);
+  assert.match(source, /setTemplateId\(undefined\)/);
   assert.match(source, /createPendingIntent\(state/);
   assert.match(source, /title=\{saving \? "Saving…" : "Save this First Move"\}/);
   for (const label of [
@@ -87,6 +93,14 @@ test("First Move controls retain accessibility, touch targets, and save semantic
   ]) {
     assert.match(source, new RegExp(`label="${label}"`));
   }
+});
+
+test("the primary bottom tab uses the singular accessible product label", () => {
+  assert.match(
+    tabsSource,
+    /name="first-moves"[\s\S]*?tabBarAccessibilityLabel: "First Move"[\s\S]*?title: "First Move"/,
+  );
+  assert.doesNotMatch(tabsSource, /title: "First Moves"/);
 });
 
 test("the landing attention treatment respects reduced motion", () => {

@@ -26,8 +26,9 @@ import {
 import { getOpenSession } from "../../domain/sessions.ts";
 import {
   nextShorterDuration,
-  templatesFor,
+  selectFirstMoveTemplate,
 } from "../../domain/templates.ts";
+import { recentFirstMoveRepository } from "../../local/recent-first-moves.ts";
 import {
   Body,
   Card,
@@ -55,6 +56,7 @@ export default function FirstMovesScreen() {
   const router = useRouter();
   const { visualPreview } = useLocalSearchParams<{ visualPreview?: string }>();
   const {
+    auth,
     localWorkspace,
     localWorkspaceMessage,
     localWorkspaceStatus,
@@ -70,15 +72,9 @@ export default function FirstMovesScreen() {
   );
   const [stuckState, setStuckState] = useState<StuckState>(STUCK_STATES[0]);
   const [direction, setDirection] = useState<Direction>(DIRECTIONS[0]);
-  const initialTemplate = templatesFor(stuckState, direction)[0];
-  const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const [templateId, setTemplateId] = useState<string | undefined>(
-    initialTemplate?.id,
-  );
-  const [moveText, setMoveText] = useState(initialTemplate?.text ?? "");
-  const [duration, setDuration] = useState<IntendedDuration>(
-    initialTemplate?.durationMinutes ?? 2,
-  );
+  const [templateId, setTemplateId] = useState<string | undefined>();
+  const [moveText, setMoveText] = useState("");
+  const [duration, setDuration] = useState<IntendedDuration>(2);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const pendingIntent = getPendingIntent(localWorkspace);
@@ -98,31 +94,41 @@ export default function FirstMovesScreen() {
     return () => cancelAnimationFrame(frame);
   }, [visualPreview]);
 
-  function chooseTemplate(
+  async function chooseTemplate(
     stateChoice: StuckState,
     directionChoice: Direction,
-    index = 0,
+    durationChoice?: IntendedDuration,
   ) {
-    const options = templatesFor(stateChoice, directionChoice);
-    const selectedIndex = options.length === 0 ? 0 : index % options.length;
-    const selected = options[selectedIndex];
-    if (!selected) return;
-    setSuggestionIndex(selectedIndex);
+    const select = (recentTemplateIds: readonly string[]) =>
+      selectFirstMoveTemplate({
+        stuckState: stateChoice,
+        direction: directionChoice,
+        durationMinutes: durationChoice,
+        recentTemplateIds,
+      });
+    const recentOwner =
+      auth.status === "guest"
+        ? ({ kind: "guest" } as const)
+        : auth.status === "authenticated"
+          ? ({ kind: "account", userId: auth.user.id } as const)
+          : undefined;
+    const selected = recentOwner
+      ? await recentFirstMoveRepository.chooseAndRemember(recentOwner, select)
+      : select([]);
     setTemplateId(selected.id);
     setMoveText(selected.text);
-    setDuration(selected.durationMinutes);
+    setDuration(durationChoice ?? selected.suggestedDurationMinutes);
     setNotice("");
   }
 
   function chooseStuckState(value: StuckState) {
     setStuckState(value);
-    chooseTemplate(value, direction);
     setStep("direction");
   }
 
-  function chooseDirection(value: Direction) {
+  async function chooseDirection(value: Direction) {
     setDirection(value);
-    chooseTemplate(stuckState, value);
+    await chooseTemplate(stuckState, value);
     setStep("move");
   }
 
@@ -291,7 +297,7 @@ export default function FirstMovesScreen() {
                 icon={<PixelDirectionIcon direction={value} />}
                 key={value}
                 label={value}
-                onPress={() => chooseDirection(value)}
+                onPress={() => void chooseDirection(value)}
                 tile
               />
             ))}
@@ -350,9 +356,7 @@ export default function FirstMovesScreen() {
           <View style={styles.utilityActions}>
             <UtilityAction
               label="Choose another"
-              onPress={() =>
-                chooseTemplate(stuckState, direction, suggestionIndex + 1)
-              }
+              onPress={() => void chooseTemplate(stuckState, direction, duration)}
             />
             <UtilityAction
               label="Make duration shorter"
