@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Linking, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import {
   MOBILE_ACCOUNT_DELETION_CONFIRMATION,
-  openAppleSubscriptionManagement,
   type MobileAccountDeletionOutcome,
 } from "../account-deletion/account-deletion.ts";
 import { useFirstMoveApp } from "../app-state/app-provider.tsx";
@@ -25,7 +24,7 @@ export function AccountDeletionPanel() {
   } = useFirstMoveApp();
   const [expanded, setExpanded] = useState(false);
   const [confirmation, setConfirmation] = useState("");
-  const [pending, setPending] = useState<"reauth" | "delete" | "manage">();
+  const [pending, setPending] = useState<"reauth" | "delete">();
   const [feedback, setFeedback] = useState<string>();
 
   if (auth.status !== "authenticated") return null;
@@ -37,14 +36,6 @@ export function AccountDeletionPanel() {
       <Body>
         Permanently delete your First Move account and synced cloud data. This cannot be undone.
       </Body>
-      <Body>
-        Deleting your First Move account does not cancel an active Apple subscription. Apple may continue billing until you cancel it in your Apple Account.
-      </Body>
-      <SecondaryButton
-        disabled={Boolean(pending)}
-        title={pending === "manage" ? "Opening Apple subscriptions…" : "Manage Apple subscription"}
-        onPress={() => void manageSubscription()}
-      />
       {!expanded ? (
         <DangerButton title="Delete account" onPress={() => setExpanded(true)} />
       ) : (
@@ -96,17 +87,6 @@ export function AccountDeletionPanel() {
       ) : null}
     </Card>
   );
-
-  async function manageSubscription() {
-    setPending("manage");
-    const opened = await openAppleSubscriptionManagement(Linking.openURL);
-    setFeedback(
-      opened
-        ? undefined
-        : "Apple subscription management could not be opened. Try again from iOS Settings.",
-    );
-    setPending(undefined);
-  }
 
   async function reauthenticate() {
     setPending("reauth");

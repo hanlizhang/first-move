@@ -2,6 +2,25 @@
 
 > The Next.js Web app and the independent Expo Mobile app are implemented through the current Mobile v1 Focus, Tasks/Habits, authenticated sync, and Today v1 increments. Remaining work is tracked explicitly below and in the release backlog.
 
+## iOS 1.0 paid-upfront simplification — current release checklist
+
+This 2026-10-13 product decision supersedes every Mobile AI, RevenueCat, paywall, and subscription release requirement recorded below. Those older increments are implementation history, not iOS 1.0 acceptance gates. Web/server functionality stays unchanged.
+
+- [x] Audit Mobile AI and purchase paths before removal; record the clean baseline and preserve the current UI.
+- [x] Remove Mobile AI access/quota/status, live Plan my day, toothbrush verification, and all Mobile live-AI calls. Keep the existing manual planner.
+- [x] Remove Mobile RevenueCat startup/identity/entitlement/paywall/restore state and UI; no replacement payment or receipt logic.
+- [x] Remove AI-only image dependencies and permissions, and the production public RevenueCat key dependency.
+- [x] Preserve Guest, optional secure Auth/sync, Start fresh, deletion, legal links, points/inventory/rewards, and Cat interactions. Keep deletion worker/migrations unchanged.
+- [x] Preserve app name, bundle ID, scheme, version, approved icon, iPhone-only configuration, and production domain; prepare local build number 2.
+- [x] Add release regression coverage; verification results are recorded in the [release audit](docs/release/ios-1.0-paid-upfront-audit.md).
+- [x] Identify obsolete published legal passages without editing approved legal sources; audit the internal privacy checklist.
+- [ ] Separately approve and publish corrected Privacy/Terms/Support text.
+- [ ] Manually set USD $2.99 paid-app pricing in App Store Connect, remove the old subscription association from this submission, and reconcile listing/review information and privacy answers.
+- [ ] Complete true-device acceptance of the final native build: Guest, manual planner, Focus/Cat, secure auth restart/deep link, sync/offline/retry, Start fresh, account switching, deletion, links, and accessibility.
+- [ ] After separate authorization, build/upload Build 2 and validate that exact TestFlight build before submission. No production build or submission is performed in this task.
+
+No new features, Hearts/Bond work, remote migrations, production environment changes, deployment, commit, or push are part of this task.
+
 ## Current implementation status
 
 - [x] Mobile M0 auth/development foundation: Expo Router shell, Guest Mode, Supabase Auth magic links, secure session storage, owner separation, and initialized-account canonical hydration; callback/sign-in/restart persistence/hydration manually verified on iOS Simulator.
@@ -241,7 +260,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 **Cloud-sync status:** Frozen Web Sync v1 MVP checkpoint. All migrations are remotely applied; Phase B2 setup/import/hydration and core two-browser task/habit convergence are manually verified. Automated application/database suites, including RLS isolation, are recorded as passing. The three remaining manual smoke checks are tracked above and do not block the current Mobile v1 implementation, but Web Sync v1 is not production-perfect or fully QA-complete.
 
-## TASK-10: RevenueCat subscriptions and product access
+## TASK-10: Historical RevenueCat subscriptions — superseded for iOS 1.0
 
 - [x] Configure RevenueCat `pro` entitlement with Supabase Auth UUID as App User ID for the accepted Mobile Test Store flow.
 - [x] Verify the current `pro` entitlement from the trusted AI server using the Supabase Auth UUID and RevenueCat REST API; fail closed without treating an outage as Free.
@@ -343,7 +362,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 **M1E status:** Implemented in the current `/mobile` tree; automated Mobile checks pass. Manual same-account Mobile↔Web, offline/restart, and account-switch acceptance remains required before release. No backend or native dependency change was made.
 
-### AI Access R2 — Mobile Plan my day and toothbrush parity
+### Historical AI Access R2 — removed from iOS 1.0
 
 - [x] Add the public `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` boundary and call the existing status, day-planning, and toothbrush routes with the current Supabase bearer token only.
 - [x] Show Guest sign-in guidance, authenticated Free lifetime actions, and Pro day-plan/toothbrush daily remaining values from the server without using local RevenueCat state for AI authorization.
@@ -393,7 +412,7 @@ The implementation is complete for the checked items above. Recorded Mobile manu
 
 **Release choice:** This PWA remains an independent fallback. Native iOS release preparation has resumed under the App Store R1 checklist below; no EAS production build, TestFlight upload, App Review submission, or public release has occurred.
 
-## iOS App Store R1 — first public release preparation
+## Historical subscription-based iOS R1 preparation — superseded
 
 - [x] Align the public display name to **First Move: Start Small** while preserving `app.firstmove.mobile`, `first-move-mobile`, `firstmove`, and RevenueCat entitlement `pro`.
 - [x] Set App Store version/build `1.0.0` / `1` and add local EAS production build and submit profiles while preserving `development-simulator` unchanged.

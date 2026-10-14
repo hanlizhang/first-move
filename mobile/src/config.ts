@@ -11,7 +11,7 @@ export interface MobilePublicEnvironment {
   EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
 }
 
-export interface MobileAiPublicEnvironment {
+export interface MobileApiPublicEnvironment {
   EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL?: string;
 }
 
@@ -50,21 +50,21 @@ export function getMobilePublicConfig(): MobilePublicConfig {
 }
 
 export function validateFirstMoveApiBaseUrl(
-  environment: MobileAiPublicEnvironment,
+  environment: MobileApiPublicEnvironment,
 ): string {
   const configured = environment.EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL?.trim();
-  if (!configured) throw new Error("First Move AI server is not configured.");
+  if (!configured) throw new Error("First Move server is not configured.");
   let parsed: URL;
   try {
     parsed = new URL(configured);
   } catch {
-    throw new Error("First Move AI server is not configured.");
+    throw new Error("First Move server is not configured.");
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error("First Move AI server is not configured.");
+    throw new Error("First Move server is not configured.");
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error("First Move AI server is not configured.");
+    throw new Error("First Move server is not configured.");
   }
   return parsed.toString().replace(/\/$/, "");
 }

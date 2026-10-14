@@ -11,8 +11,8 @@ const reflectionSource = readFileSync(
   new URL("./components/reflection-editor.tsx", import.meta.url),
   "utf8",
 );
-const morningSource = readFileSync(
-  new URL("./components/morning-plan-flow.tsx", import.meta.url),
+const planningFlowSource = readFileSync(
+  new URL("./components/day-plan-flow.tsx", import.meta.url),
   "utf8",
 );
 const plannerSource = readFileSync(
@@ -51,7 +51,7 @@ test("Reflection uses the durable workspace mutation path and keeps authenticate
   assert.match(todaySource, /"server-authoritative"/);
   assert.match(todaySource, /"guest-local"/);
   assert.match(todaySource, /updateLocalWorkspace/);
-  assert.match(reflectionSource, /Never sent to AI/);
+  assert.match(reflectionSource, /Private on your workspace/);
   assert.doesNotMatch(`${todaySource}\n${reflectionSource}`, /console\.|analytics|\.rpc\(/i);
 });
 
@@ -71,13 +71,13 @@ test("Today shows simple sync language without developer-facing architecture cop
   );
 });
 
-test("Today puts core actions and daily content ahead of optional Morning Start", () => {
+test("Today puts core actions and daily content ahead of optional manual planning", () => {
   const hero = todaySource.indexOf("<TodaySummary");
   const stuck = todaySource.indexOf('title="I’m Stuck"');
   const tasks = todaySource.indexOf('title="Tasks"');
   const habits = todaySource.indexOf('title="Habits"');
   const focus = todaySource.indexOf('title="Focus today"');
-  const morning = todaySource.indexOf("<MorningPlanFlow");
+  const morning = todaySource.indexOf("<DayPlanFlow");
   const timeline = todaySource.indexOf('title="Activity timeline"');
   const reflection = todaySource.indexOf('title="Reflection"');
 
@@ -99,32 +99,15 @@ test("Today uses lightweight row lists instead of a bordered card for every sect
   assert.match(todaySource, /todayHeroValue: \{ color: colors\.text, fontSize: 24/);
 });
 
-test("Morning Start is collapsed until opened and keeps every verification and planning route", () => {
-  assert.match(morningSource, /const \[expanded, setExpanded\] = useState\(false\)/);
-  assert.match(morningSource, /accessibilityState=\{\{ expanded \}\}/);
-  assert.match(morningSource, /expanded && step === "verify"/);
-  assert.match(morningSource, /expanded && step === "plan"/);
-  for (const label of [
-    "Take photo",
-    "Choose image",
-    "Verify photo",
-    "Skip without reward · Plan my day",
-  ]) {
-    assert.match(morningSource, new RegExp(label));
-  }
+test("manual planning remains collapsed in Today and offers existing review and direct Task paths", () => {
+  assert.match(planningFlowSource, /const \[expanded, setExpanded\] = useState\(false\)/);
+  assert.match(planningFlowSource, /accessibilityState=\{\{ expanded \}\}/);
+  assert.match(planningFlowSource, /expanded \? <DayPlanner dateKey=\{dateKey\}/);
   assert.match(plannerSource, /Plan manually/);
   assert.match(plannerSource, /Create Tasks directly/);
-});
-
-test("Morning and planning show AI allowance only inside their entered flows", () => {
-  const expandedVerification = morningSource.indexOf("function MorningStart");
-  const morningQuota = morningSource.indexOf("quotaCopy");
-  assert.ok(expandedVerification > -1 && morningQuota > expandedVerification);
-  assert.match(morningSource, /Guest Mode never calls the live AI service/);
-  assert.match(morningSource, /Skip remains available without a reward/);
-  assert.match(plannerSource, /const signedIn = auth\.status === "authenticated"/);
-  assert.match(plannerSource, /Manual planning remains available/);
-  assert.match(plannerSource, /Organize with AI/);
+  assert.match(plannerSource, /Review or edit plan/);
+  assert.match(plannerSource, /confirmDailyPlan\(dateKey, items\)/);
+  assert.doesNotMatch(`${planningFlowSource}\n${plannerSource}`, /\bAI\b|photo|quota|organizeDay|aiAccess/);
 });
 
 test("Focus summary, chronological activity, and both Reflection states remain present", () => {
@@ -135,5 +118,5 @@ test("Focus summary, chronological activity, and both Reflection states remain p
   assert.match(reflectionSource, /Add reflection/);
   assert.match(reflectionSource, /Edit reflection/);
   assert.match(reflectionSource, /Saved today/);
-  assert.match(reflectionSource, /Private on your workspace\. Never sent to AI\./);
+  assert.match(reflectionSource, /Private on your workspace\./);
 });

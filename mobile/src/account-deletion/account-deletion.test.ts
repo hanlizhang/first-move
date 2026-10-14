@@ -5,13 +5,11 @@ import { GUEST_DAILY_PLANS_KEY } from "../local/daily-plans.ts";
 import { GUEST_WORKSPACE_KEY } from "../local/repository-core.ts";
 import { morningSkipStorageKey } from "../local/morning-skip.ts";
 import {
-  APPLE_SUBSCRIPTION_MANAGEMENT_URL,
   MOBILE_ACCOUNT_DELETION_CONFIRMATION,
   accountDeletionQuarantineKey,
   accountScopedMobileKeys,
   finalizeAcceptedMobileAccountDeletion,
   initiateMobileAccountDeletion,
-  openAppleSubscriptionManagement,
   purgeMobileAccountData,
 } from "./account-deletion.ts";
 
@@ -105,7 +103,7 @@ test("owner cleanup removes only the deleted UUID and preserves Guest and anothe
   }
 });
 
-test("accepted deletion stops account activity before cleanup and clears the local session", async () => {
+test("accepted deletion stops account activity and clears its session without a purchase SDK", async () => {
   const events: string[] = [];
   const values = new Map(
     accountScopedMobileKeys(USER_A).map((key) => [key, "account-a"]),
@@ -116,9 +114,6 @@ test("accepted deletion stops account activity before cleanup and clears the loc
     stopAccountActivity() {
       events.push("stop-sync-and-memory");
     },
-    async removeRevenueCatIdentity(userId) {
-      events.push(`revenuecat:${userId}`);
-    },
     auth: {
       async signOut(input) {
         events.push(`auth:${input.scope}`);
@@ -127,21 +122,9 @@ test("accepted deletion stops account activity before cleanup and clears the loc
     },
   });
   assert.equal(events[0], "stop-sync-and-memory");
-  assert.ok(events.includes(`revenuecat:${USER_A}`));
   assert.ok(events.includes("auth:local"));
   assert.equal(values.get(accountDeletionQuarantineKey(USER_A)), "1");
   assert.equal(values.has(accountScopedMobileKeys(USER_A)[2]!), false);
-});
-
-test("Apple subscription management opens Apple's supported account URL", async () => {
-  const opened: string[] = [];
-  assert.equal(
-    await openAppleSubscriptionManagement(async (url) => {
-      opened.push(url);
-    }),
-    true,
-  );
-  assert.deepEqual(opened, [APPLE_SUBSCRIPTION_MANAGEMENT_URL]);
 });
 
 function sessionSource(userId: string) {

@@ -8,8 +8,6 @@ import { mobileSyncQueueKey } from "../cloud/sync-queue.ts";
 
 export const MOBILE_ACCOUNT_DELETION_CONFIRMATION =
   "DELETE MY ACCOUNT" as const;
-export const APPLE_SUBSCRIPTION_MANAGEMENT_URL =
-  "https://apps.apple.com/account/subscriptions" as const;
 export const ACCOUNT_DELETION_QUARANTINE_KEY_PREFIX =
   "first-move:mobile:account-deletion-quarantine:v1:";
 
@@ -115,12 +113,10 @@ export async function finalizeAcceptedMobileAccountDeletion(input: {
   store: RemovableMobileStore;
   auth: LocalSessionCleaner;
   stopAccountActivity(): void;
-  removeRevenueCatIdentity(userId: string): Promise<void>;
 }): Promise<void> {
   input.stopAccountActivity();
   await Promise.allSettled([
     purgeMobileAccountData(input.store, input.userId),
-    input.removeRevenueCatIdentity(input.userId),
     input.auth.signOut({ scope: "local" }),
   ]);
 }
@@ -151,17 +147,6 @@ export function accountScopedMobileKeys(userId: string): string[] {
     morningSkipStorageKey(workspaceKey),
     recentFirstMoveTemplateKey({ kind: "account", userId }),
   ];
-}
-
-export async function openAppleSubscriptionManagement(
-  openUrl: (url: string) => Promise<unknown>,
-): Promise<boolean> {
-  try {
-    await openUrl(APPLE_SUBSCRIPTION_MANAGEMENT_URL);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function safeJson(response: Response): Promise<unknown> {

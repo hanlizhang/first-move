@@ -47,7 +47,7 @@ export function ReflectionEditor({
         {existing ? <ReflectionPreview reflection={existing} /> : (
           <Body muted>A few private words can help close the day gently.</Body>
         )}
-        <Text style={styles.privacy}>Private on your workspace. Never sent to AI.</Text>
+        <Text style={styles.privacy}>Private on your workspace.</Text>
         <SecondaryButton
           disabled={disabled}
           onPress={() => {
@@ -93,7 +93,7 @@ export function ReflectionEditor({
           />
         </View>
       ))}
-      <Text style={styles.privacy}>Private on your workspace. Never sent to AI.</Text>
+      <Text style={styles.privacy}>Private on your workspace.</Text>
       <View style={styles.actions}>
         <PrimaryButton
           disabled={disabled || saving || !hasReflectionContent(draft)}

@@ -24,9 +24,7 @@ test("deletion UX requires exact confirmation and a fresh email-link path", () =
   assert.match(panelSource, /Permanently delete account/);
 });
 
-test("deletion UX warns that Apple billing continues and offers management", () => {
-  assert.match(panelSource, /does not cancel an active Apple subscription/);
-  assert.match(panelSource, /Apple may continue billing/);
-  assert.match(panelSource, /Manage Apple subscription/);
-  assert.match(panelSource, /openAppleSubscriptionManagement/);
+test("deletion UX has no obsolete subscription warning or management action", () => {
+  assert.doesNotMatch(panelSource, /subscription|Apple billing|RevenueCat|manageSubscription/i);
+  assert.match(panelSource, /Permanently delete your First Move account and synced cloud data/);
 });

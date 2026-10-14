@@ -18,19 +18,6 @@ import {
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 
 import {
-  aiAccessForUser,
-  type MobileAiAccessState,
-} from "../ai/access.ts";
-import {
-  loadMobileAiAccessStatus,
-  requestMobileDayPlan,
-  requestMobileToothbrushVerification,
-  type DayPlanRequestResult,
-  type MobileAiSessionSource,
-  type ToothbrushRequestResult,
-} from "../ai/client.ts";
-
-import {
   initialAuthState,
   isDefinitivelyInvalidAuthSession,
   isDefinitivelyMissingAuthIdentity,
@@ -93,13 +80,6 @@ import {
 } from "../local/daily-plans.ts";
 import { getFirstMoveApiBaseUrl } from "../config.ts";
 import { getSupabaseClient } from "../supabase/client.ts";
-import { revenueCatSubscription } from "../subscriptions/revenuecat-native.ts";
-import type {
-  PurchaseFlowOutcome,
-  RevenueCatPresentationSnapshot,
-  RestoreFlowOutcome,
-  SubscriptionState,
-} from "../subscriptions/revenuecat.ts";
 import { localWorkspaceOwnerForAuth } from "./local-workspace-owner.ts";
 import {
   createWorkspaceStartupController,
@@ -113,8 +93,6 @@ interface AppContextValue {
   auth: AuthState;
   cloud: CloudHydrationState;
   sync: AppSyncState;
-  subscription: SubscriptionState;
-  aiAccess: MobileAiAccessState;
   localWorkspace: AppState;
   dailyPlans: DailyPlanRecord[];
   localWorkspaceStatus: LocalWorkspaceStatus;
@@ -129,15 +107,10 @@ interface AppContextValue {
   retryAuthRestore(): Promise<void>;
   refreshCloud(): Promise<void>;
   startFreshCloudWorkspace(): Promise<MobileStartFreshResult>;
-  refreshAiAccess(): Promise<void>;
-  organizeDay(brainDump: string): Promise<DayPlanRequestResult>;
-  verifyToothbrush(image: Blob): Promise<ToothbrushRequestResult>;
   confirmDailyPlan(
     dateKey: string,
     items: PlanningReviewItem[],
   ): Promise<AppState | undefined>;
-  presentProPaywall(): Promise<PurchaseFlowOutcome>;
-  restorePurchases(): Promise<RestoreFlowOutcome>;
   updateLocalWorkspace(
     recipe: (current: AppState) => AppState,
   ): Promise<AppState | undefined>;
@@ -178,13 +151,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     status: "local",
     pendingCount: 0,
   });
-  const [subscriptionSnapshot, setSubscriptionSnapshot] =
-    useState<RevenueCatPresentationSnapshot>(
-      revenueCatSubscription.getPresentationSnapshot,
-    );
-  const [aiAccess, setAiAccess] = useState<MobileAiAccessState>({
-    status: "guest",
-  });
   const [localWorkspace, setLocalWorkspace] = useState<AppState>(createEmptyState);
   const [dailyPlanSnapshot, setDailyPlanSnapshot] = useState<{
     ownerKey?: string;
@@ -206,7 +172,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncRuntimeRef = useRef<MobileSyncRuntime | undefined>(undefined);
   const hydrationRequestRef = useRef(0);
   const sessionValidationRef = useRef(0);
-  const aiAccessRequestRef = useRef(0);
   const accountBootstrapEnabledRef = useRef(false);
   const authenticatedUserId =
     auth.status === "authenticated" ? auth.user.id : undefined;
@@ -258,17 +223,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           queueSummary: summarizePendingMutations([]),
         };
   }, [auth, sync]);
-  const visibleSubscription = useMemo<SubscriptionState>(
-    () =>
-      authenticatedUserId && subscriptionSnapshot.userId === authenticatedUserId
-        ? subscriptionSnapshot.state
-        : { status: "unavailable" },
-    [authenticatedUserId, subscriptionSnapshot],
-  );
-  const visibleAiAccess = useMemo(
-    () => aiAccessForUser(aiAccess, authenticatedUserId),
-    [aiAccess, authenticatedUserId],
-  );
   const workspaceEditable =
     visibleLocalWorkspaceStatus === "ready" &&
     (auth.status === "guest" ||
@@ -286,12 +240,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authenticatedUserIdRef.current = undefined;
     activeLocalOwnerKeyRef.current = undefined;
     hydrationRequestRef.current += 1;
-    aiAccessRequestRef.current += 1;
     syncRuntimeRef.current?.dispose();
     syncRuntimeRef.current = undefined;
     setCloud({ status: "idle" });
     setSync({ status: "local", pendingCount: 0 });
-    setAiAccess({ status: "guest" });
     setLocalWorkspace(createEmptyState());
     setDailyPlanSnapshot({ plans: [] });
     setLoadedLocalOwnerKey(undefined);
@@ -306,10 +258,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         store: AsyncStorage,
         auth: client.auth,
         stopAccountActivity: clearAccountRuntimeState,
-        removeRevenueCatIdentity: (accountUserId) =>
-          revenueCatSubscription.removeIdentityForAccountDeletion(
-            accountUserId,
-          ),
       });
     },
     [clearAccountRuntimeState],
@@ -319,44 +267,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (client: SupabaseClient) => {
       clearAccountRuntimeState();
       await Promise.allSettled([
-        revenueCatSubscription.updateIdentity(undefined),
         client.auth.signOut({ scope: "local" }),
       ]);
     },
     [clearAccountRuntimeState],
   );
-
-  const refreshAiAccess = useCallback(async () => {
-    const userId = authenticatedUserIdRef.current;
-    if (!userId) {
-      aiAccessRequestRef.current += 1;
-      setAiAccess({ status: "guest" });
-      return;
-    }
-    const requestId = aiAccessRequestRef.current + 1;
-    aiAccessRequestRef.current = requestId;
-    setAiAccess({ status: "loading", userId });
-    try {
-      const result = await loadMobileAiAccessStatus({
-        apiBaseUrl: getFirstMoveApiBaseUrl(),
-        auth: resolveClient().auth as MobileAiSessionSource,
-        userId,
-      });
-      if (
-        aiAccessRequestRef.current === requestId &&
-        authenticatedUserIdRef.current === userId
-      ) {
-        setAiAccess(result);
-      }
-    } catch {
-      if (
-        aiAccessRequestRef.current === requestId &&
-        authenticatedUserIdRef.current === userId
-      ) {
-        setAiAccess({ status: "unavailable", userId });
-      }
-    }
-  }, [resolveClient]);
 
   const restoreAccountAuth = useCallback(async () => {
     try {
@@ -381,12 +296,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authenticatedUserIdRef.current = undefined;
     activeLocalOwnerKeyRef.current = guestWorkspaceKey;
     hydrationRequestRef.current += 1;
-    aiAccessRequestRef.current += 1;
     syncRuntimeRef.current?.dispose();
     syncRuntimeRef.current = undefined;
     setCloud({ status: "idle" });
     setSync({ status: "local", pendingCount: 0 });
-    setAiAccess({ status: "guest" });
   }, []);
 
   const applyGuestStartup = useCallback(
@@ -506,19 +419,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [authenticatedUserId]);
 
   useEffect(() => {
-    void refreshAiAccess();
-  }, [authenticatedUserId, refreshAiAccess]);
-
-  useEffect(
-    () => revenueCatSubscription.subscribe(setSubscriptionSnapshot),
-    [],
-  );
-
-  useEffect(() => {
-    void revenueCatSubscription.updateIdentity(authenticatedUserId);
-  }, [authenticatedUserId]);
-
-  useEffect(() => {
     let active = true;
     void workspaceStartup.start(restoreAccountAuth).then((result) => {
       if (!active || !result) return;
@@ -624,8 +524,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (state === "active") {
         client.auth.startAutoRefresh();
         void syncRuntimeRef.current?.refresh();
-        void revenueCatSubscription.refresh();
-        void refreshAiAccess();
       } else {
         client.auth.stopAutoRefresh();
       }
@@ -636,7 +534,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subscription.remove();
       client.auth.stopAutoRefresh();
     };
-  }, [accountBootstrapEnabled, refreshAiAccess, resolveClient]);
+  }, [accountBootstrapEnabled, resolveClient]);
 
   useEffect(() => {
     if (auth.status !== "authenticated") return;
@@ -794,10 +692,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         store: AsyncStorage,
         auth: client.auth,
         stopAccountActivity: clearAccountRuntimeState,
-        removeRevenueCatIdentity: (accountUserId) =>
-          revenueCatSubscription.removeIdentityForAccountDeletion(
-            accountUserId,
-          ),
       });
       dispatch({ type: "ACCOUNT_DELETION_ACCEPTED" });
       return "accepted";
@@ -853,72 +747,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return runtime.startFresh();
   }, [auth]);
 
-  const organizeDay = useCallback(
-    async (brainDump: string): Promise<DayPlanRequestResult> => {
-      if (auth.status !== "authenticated") {
-        return {
-          outcome: "failure",
-          kind: "sign-in-required",
-          message: "Sign in to use live AI planning. Manual planning remains available.",
-        };
-      }
-      let result: DayPlanRequestResult;
-      try {
-        result = await requestMobileDayPlan(brainDump, {
-          apiBaseUrl: getFirstMoveApiBaseUrl(),
-          auth: resolveClient().auth as MobileAiSessionSource,
-          userId: auth.user.id,
-        });
-      } catch {
-        result = {
-          outcome: "failure",
-          kind: "service-unavailable",
-          message: "AI planning is temporarily unavailable. Manual planning remains available.",
-        };
-      }
-      if (result.outcome === "failure" && result.kind === "sign-in-required") {
-        await restore();
-      } else {
-        void refreshAiAccess();
-      }
-      return result;
-    },
-    [auth, refreshAiAccess, resolveClient, restore],
-  );
-
-  const verifyToothbrush = useCallback(
-    async (image: Blob): Promise<ToothbrushRequestResult> => {
-      if (auth.status !== "authenticated") {
-        return {
-          outcome: "failure",
-          kind: "sign-in-required",
-          message: "Sign in to use live AI verification, or skip without a reward.",
-        };
-      }
-      let result: ToothbrushRequestResult;
-      try {
-        result = await requestMobileToothbrushVerification(image, {
-          apiBaseUrl: getFirstMoveApiBaseUrl(),
-          auth: resolveClient().auth as MobileAiSessionSource,
-          userId: auth.user.id,
-        });
-      } catch {
-        result = {
-          outcome: "failure",
-          kind: "service-unavailable",
-          message: "AI verification is temporarily unavailable. You can skip without a reward.",
-        };
-      }
-      if (result.outcome === "failure" && result.kind === "sign-in-required") {
-        await restore();
-      } else {
-        void refreshAiAccess();
-      }
-      return result;
-    },
-    [auth, refreshAiAccess, resolveClient, restore],
-  );
-
   const confirmDailyPlan = useCallback(
     async (
       dateKey: string,
@@ -963,16 +791,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     },
     [activeLocalOwnerKey, localOwner, visibleDailyPlans],
-  );
-
-  const presentProPaywall = useCallback(
-    () => revenueCatSubscription.presentProPaywall(),
-    [],
-  );
-
-  const restorePurchases = useCallback(
-    () => revenueCatSubscription.restorePurchases(),
-    [],
   );
 
   const updateLocalWorkspace = useCallback(
@@ -1089,8 +907,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => ({
       auth,
-      subscription: visibleSubscription,
-      aiAccess: visibleAiAccess,
       cloud: visibleCloud,
       sync: visibleSync,
       localWorkspace: visibleLocalWorkspace,
@@ -1107,20 +923,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       retryAuthRestore: restore,
       refreshCloud,
       startFreshCloudWorkspace,
-      refreshAiAccess,
-      organizeDay,
-      verifyToothbrush,
       confirmDailyPlan,
-      presentProPaywall,
-      restorePurchases,
       updateLocalWorkspace,
       buyCatItem,
       feedCatFood,
     }),
     [
       auth,
-      visibleSubscription,
-      visibleAiAccess,
       visibleCloud,
       visibleSync,
       visibleLocalWorkspace,
@@ -1137,12 +946,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restore,
       refreshCloud,
       startFreshCloudWorkspace,
-      refreshAiAccess,
-      organizeDay,
-      verifyToothbrush,
       confirmDailyPlan,
-      presentProPaywall,
-      restorePurchases,
       updateLocalWorkspace,
       buyCatItem,
       feedCatFood,

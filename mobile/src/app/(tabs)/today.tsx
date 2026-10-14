@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 import type { AuthState } from "../../auth/auth-state.ts";
 import { useFirstMoveApp, type AppSyncState } from "../../app-state/app-provider.tsx";
 import { ReflectionEditor } from "../../components/reflection-editor.tsx";
-import { MorningPlanFlow } from "../../components/morning-plan-flow.tsx";
+import { DayPlanFlow } from "../../components/day-plan-flow.tsx";
 import { PixelStepScene } from "../../components/pixel-scenes.tsx";
 import { useCurrentLocalDate } from "../../components/use-current-local-date.ts";
 import {
@@ -178,7 +178,7 @@ export default function TodayScreen() {
         </View>
       </View>
 
-      <MorningPlanFlow dateKey={today} />
+      <DayPlanFlow dateKey={today} />
 
       <View style={styles.section}>
         <StaticSectionHeader detail={`${view.timeline.length}`} title="Activity timeline" />

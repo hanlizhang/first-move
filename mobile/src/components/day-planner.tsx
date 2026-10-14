@@ -8,13 +8,11 @@ import {
   View,
 } from "react-native";
 
-import { featureRemaining } from "../ai/access.ts";
 import { useFirstMoveApp } from "../app-state/app-provider.tsx";
 import {
   blankPlanningReviewItem,
   canMoveReviewItemToGroup,
   nextAvailableReviewGroup,
-  planToReviewItems,
   validPlanningReview,
 } from "../domain/day-planning.ts";
 import {
@@ -38,26 +36,18 @@ import {
 export function DayPlanner({ dateKey }: { dateKey: string }) {
   const router = useRouter();
   const {
-    aiAccess,
-    auth,
     confirmDailyPlan,
     dailyPlans,
-    organizeDay,
     workspaceEditable,
   } = useFirstMoveApp();
   const existing = useMemo(
     () => dailyPlans.find((plan) => plan.dateKey === dateKey),
     [dailyPlans, dateKey],
   );
-  const [brainDump, setBrainDump] = useState("");
   const [items, setItems] = useState<PlanningReviewItem[]>();
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [reviewingExisting, setReviewingExisting] = useState(false);
-  const remaining = featureRemaining(aiAccess, "daily_plan");
-  const signedIn = auth.status === "authenticated";
-  const exhausted = remaining === 0;
 
   if (existing && !reviewingExisting && !items) {
     const firstMove = existing.items.find((item) => item.group === "first-move");
@@ -91,51 +81,18 @@ export function DayPlanner({ dateKey }: { dateKey: string }) {
 
   return (
     <Card tone="primary">
-      <Label>Optional planning · Manual path included</Label>
+      <Label>Optional planning</Label>
       <Heading>Plan my day</Heading>
       {!items ? (
         <>
           <Body muted>
-            Add only what you choose to share. Journal, habits, history, photos, and cat data are excluded.
+            Choose a First Move and a few Tasks for today. Review and edit before saving.
           </Body>
-          <TextInput
-            accessibilityLabel="Brain dump"
-            maxLength={2_000}
-            multiline
-            onChangeText={setBrainDump}
-            placeholder="What is on your mind today?"
-            placeholderTextColor={colors.textMuted}
-            style={styles.brainDump}
-            textAlignVertical="top"
-            value={brainDump}
-          />
-          <Text style={styles.counter}>{brainDump.length}/2,000</Text>
-          {!signedIn ? (
-            <Body muted>Sign in is required for live AI. Manual planning still works here.</Body>
-          ) : exhausted ? (
-            <Body muted>
-              {aiAccess.status === "ready" && aiAccess.access.accessBasis === "pro"
-                ? "Today’s Pro Plan my day action is used."
-                : "Your introductory AI actions are used."}{" "}
-              Manual planning remains available.
-            </Body>
-          ) : aiAccess.status === "ready" ? (
-            <Body muted>
-              {aiAccess.access.accessBasis === "introductory"
-                ? `${remaining} of 5 shared AI actions remaining`
-                : `${remaining} of 1 Plan my day action remaining today`}
-            </Body>
-          ) : null}
-          <PrimaryButton
-            disabled={loading || !brainDump.trim() || !signedIn || exhausted}
-            onPress={() => void organize()}
-            title={loading ? "Organizing…" : "Organize with AI"}
-          />
           <SecondaryButton
-            disabled={loading}
+            disabled={!workspaceEditable}
             onPress={() => {
               setItems([blankPlanningReviewItem()]);
-              setNotice("Manual review started. No AI request was made.");
+              setNotice("Review your plan. Nothing changes until you confirm.");
             }}
             title="Plan manually"
           />
@@ -188,20 +145,6 @@ export function DayPlanner({ dateKey }: { dateKey: string }) {
       ) : null}
     </Card>
   );
-
-  async function organize() {
-    if (loading || !brainDump.trim() || !signedIn || exhausted) return;
-    setLoading(true);
-    setNotice("");
-    const result = await organizeDay(brainDump);
-    setLoading(false);
-    if (result.outcome === "failure") {
-      setNotice(result.message);
-      return;
-    }
-    setItems(planToReviewItems(result.plan));
-    setNotice("AI suggestions are ready to review. Nothing is saved yet.");
-  }
 
   function updateItem(id: string, patch: Partial<PlanningReviewItem>) {
     setItems((current) =>
@@ -258,7 +201,6 @@ export function DayPlanner({ dateKey }: { dateKey: string }) {
     const hasFirstMove = Boolean(getPendingIntent(next));
     setItems(undefined);
     setReviewingExisting(false);
-    setBrainDump("");
     setNotice(
       hasFirstMove
         ? "Plan saved. Your reviewed First Move is ready in Focus."
@@ -396,17 +338,6 @@ function groupLabel(group: PlanningReviewItem["group"]): string {
 }
 
 const styles = StyleSheet.create({
-  brainDump: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    color: colors.text,
-    fontSize: typography.body,
-    minHeight: 130,
-    padding: spacing.md,
-  },
-  counter: { color: colors.textMuted, fontSize: typography.label, textAlign: "right" },
   notice: { color: colors.primary, fontSize: typography.small, lineHeight: 21 },
   reviewItem: {
     backgroundColor: colors.surface,

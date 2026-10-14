@@ -431,7 +431,7 @@ export default function FirstMovesScreen() {
 
   return (
     <Screen
-      eyebrow="I’m Stuck · No AI required"
+      eyebrow="I’m Stuck"
       title="Choose one small move"
       description="One decision at a time. Rest and intentional entertainment are both valid choices."
     >
