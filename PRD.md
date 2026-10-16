@@ -1,5 +1,15 @@
 # First Move — MVP Product Requirements
 
+## Approved iOS 1.0 release override — 2026-10-13
+
+The App Store application is **USD $2.99 paid upfront, once**. App Store purchase/download authorization happens before installation. All included functionality is available after installation without an additional purchase. iOS 1.0 contains no In-App Purchases, subscriptions, First Move Pro tier, RevenueCat client, receipt validation, purchase/restore controls, or user-facing AI. Do not implement a $2.99 non-consumable IAP or receipt gate.
+
+Keep First Moves, Today, Focus, Cat, the current points/inventory/rewards and Cat interactions, Guest Mode, optional Supabase account/cloud sync, Start fresh, account deletion, and Privacy/Terms/Support links. Keep the existing manual day planner and its review/save/Focus handoff. Remove live Plan my day, AI access/quota UI and refresh, toothbrush verification, and the AI-only photo modules/permissions. Make Smaller AI was not implemented on Mobile and is not included. Historical Morning records and rewards remain compatible; no replacement Morning check or reward is introduced.
+
+This release overrides the older Free/Pro, AI, toothbrush, and subscription rollout requirements below **for Mobile only**. Web Sync v1 and Web/server features remain unchanged. Legacy server-side RevenueCat cleanup remains required by the existing account-deletion workflow; Mobile no longer identifies an account to RevenueCat. No deletion migration change is required. Hearts/Bond, companionship changes, and new features are excluded.
+
+Identity stays `First Move: Start Small`, `app.firstmove.mobile`, `firstmove`, version `1.0.0`, iPhone-only, with the current icon and `https://firstmovestartsmall.com`. Build 2 is prepared locally. Legal sources were revised locally on 2026-10-14; privacy classifications were approved on 2026-10-16; publication remains pending. See the [current privacy/publication checklist](docs/release/app-store-privacy-checklist.md) and [historical implementation audit](docs/release/ios-1.0-paid-upfront-audit.md). App Store pricing is configured manually outside this repository.
+
 ## Product premise
 
 First Move is a gentle cross-platform product for Web and native Mobile, built for a specific moment: the user is trapped in passive scrolling or inactivity and has difficulty switching into an intentional state, even when the current behavior is causing distress.
@@ -231,9 +241,9 @@ This is a frozen Web Sync v1 MVP checkpoint with documented pending smoke tests,
 
 Mobile now reuses that frozen contract for initialized accounts and explicitly initializes an empty account with the existing `initialize_cloud_workspace_v2` Start fresh semantics. Web and Mobile restore the same Supabase Auth UUID; Mobile sends only `{}` for Start fresh, validates the returned canonical schema-v8 workspace, and then activates that UUID's existing sync runtime. Guest Mode stays local-only and is never read, uploaded, merged, or erased by Start fresh; Import this device remains deferred. Authenticated Task/Habit/ActivityIntent/ActivitySession mutations enter an ordered durable AsyncStorage queue before dispatch, pending writes flush before reads, and validated canonical responses remain authoritative. Running timers remain device-owned rather than realtime-synchronized. No SQL, RPC, RLS, Auth, reward-authority, or frozen Web Sync v1 behavior changed; manual Mobile↔Web/offline/restart/account-switch acceptance remains a release gate.
 
-## Free and Pro
+## Historical Free and Pro design — superseded for iOS 1.0
 
-The first public iOS storefront uses two single-seat auto-renewable products: `app.firstmove.mobile.pro.monthly` at $4.99 in the US storefront and `app.firstmove.mobile.pro.annual` at $39.99 in the US storefront. Both map to the existing RevenueCat `pro` entitlement. App Store storefront localization remains authoritative for the price displayed at purchase time.
+The previous, now superseded iOS proposal used two single-seat auto-renewable products: `app.firstmove.mobile.pro.monthly` at $4.99 in the US storefront and `app.firstmove.mobile.pro.annual` at $39.99 in the US storefront. Both map to the existing RevenueCat `pro` entitlement. App Store storefront localization remains authoritative for the price displayed at purchase time.
 
 | Capability | Free | Pro |
 | --- | --- | --- |

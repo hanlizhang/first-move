@@ -1,6 +1,10 @@
 # First Move Mobile v1 handoff
 
-Status: current Web Sync v1 and Mobile v1 implementation handoff, updated 2026-09-28 from the repository working tree. Web Sync v1 remains a frozen MVP checkpoint with pending smoke tests and is not a claim of production-perfect or fully QA-complete synchronization. AI Access R1 migration `20260915120000_ai_access_r1.sql` is remotely applied. Mobile empty-account Start fresh, AI Access R2 presentation, and account-deletion release work are implemented and automated-tested locally, but their required remote rollout/configuration and device acceptance are not complete.
+Current release status (2026-10-16): iOS 1.0 is the USD $2.99 one-time paid App Store app. Mobile no longer includes AI, Pro, subscriptions, RevenueCat SDKs, paywall/restore controls, or photo capture. Manual planning and all existing non-AI functionality remain. The local identity is version 1.0.0 / build 2, iPhone-only, with unchanged name, bundle ID, scheme, domain, and approved icon.
+
+The older milestone descriptions below are historical where they discuss Mobile AI, RevenueCat, subscriptions, or photo modules; they do not authorize reintroducing those features. See [current release gates](IOS_APPSTORE_R1_RELEASE.md) and [detailed removal/legal audit](release/ios-1.0-paid-upfront-audit.md). Web/server implementations and frozen cloud contracts remain unchanged. Server-side RevenueCat DELETE cleanup remains required by account-deletion constraints; preserve its private credential and worker. Mobile never identifies to RevenueCat or retrieves entitlement/purchase data.
+
+Guest startup, optional secure account/sync, Start fresh, exact-confirmation deletion/quarantine, and all three legal links remain. Account deletion's old billing warning/manage link and client SDK cleanup have been removed. Historical Morning check metadata still hydrates/syncs; the app offers no new photo check or substitute reward. No Hearts/Bond changes or new features are included. Public legal sources were revised locally on 2026-10-14; publication remains pending. See the [current privacy/publication audit](release/app-store-privacy-checklist.md) for sync-device, Cat/reward, mood/energy and provider-log classifications. No remote actions are performed here.
 
 Status vocabulary used here:
 
@@ -77,8 +81,8 @@ Web uses cookie-based sessions. Mobile must use the same Supabase Auth user UUID
 - Mobile Today includes editable private Reflection / Mini Journal. Guest entries remain in Guest-local persistence; authenticated Journal changes use the existing owner-scoped durable full-snapshot queue, while first-save rewards and the authenticated point balance remain server-authoritative.
 - Today selects historical activity through captured local-date and IANA-timezone facts rather than reassigning it with the viewer's current timezone.
 - Mobile Cat v1A is implemented with the Web-aligned 16-row catalog, symbolic active-day progression, existing Cat Room interactions, the five visible Food/Treats/Toys/Furniture/Tricks store categories, Guest-local purchasing/consumption, and authenticated server-authoritative purchase/consumption plus selected-furniture persistence through the existing sync RPC. Purchase unlocks are milk day 1, yarn day 3, wand day 7, mouse day 14, wet food and scratching post day 21, kibble day 35, treats/high-five/bed day 50, perch day 70, tree day 75, and paw shake/garden/butterfly day 100; ownership, not the current purchase threshold, controls use of durable items.
-- Mobile AI Access R2 is integrated into Today/Morning and Settings without a new tab. Guest never calls live AI; authenticated status, day planning, and toothbrush verification use the current Supabase bearer against the existing Web server routes, while Free/Pro and remaining counts stay server-authoritative.
-- Mobile Plan my day supports the bounded brain dump, AI/manual structured review, canonical DailyPlan persistence, and safe replacement of the single pending First Move visible in Focus. Morning Start uses transient maximum-768-pixel JPEG files, never persists image bytes, and preserves server-derived reward semantics; Skip advances to planning without a check, reward, or AI request.
+- iOS 1.0 removes Mobile AI Access R2 entirely, including its status/plan/verification clients and Settings panel.
+- Mobile Plan my day retains manual structured review, canonical DailyPlan persistence, and safe replacement of the pending First Move visible in Focus. The photo-verification entry has been removed; existing historical Morning data remains compatible.
 
 ### Manually verified where known
 
@@ -259,17 +263,17 @@ Other remaining M1 work includes post-session choices, Mobile Trends/Calendar hi
 
 ### M2 — Native capabilities
 
-Status: **partially implemented**. AI Access R2 adds the narrow toothbrush camera/photo-picker permission flow and transient maximum-768-pixel image preparation with `expo-image-picker` and `expo-image-manipulator`; image bytes are not written to AsyncStorage, Supabase, object storage, logs, or the sync queue. The development client must be rebuilt for these native modules. Haptics, optional local notifications where platform rules permit, broader background/foreground lifecycle hardening, secure-storage recovery, deep-link hardening, and true-device lifecycle tests remain. Do not promise guaranteed background alarms or app blocking.
+For paid iOS 1.0, the AI-only photo picker/manipulator and direct file-system dependency have been removed. No photo/camera/microphone permissions remain in generated iOS configuration. SecureStore, existing local storage, routing, network-state handling, current visuals, and device-owned timers remain. No new native capability is added.
 
-### M3 — RevenueCat and AI access
+### M3 — Historical RevenueCat and AI access, removed from Mobile
 
-Status: **partially implemented**. Existing Mobile R1/R2 identifies RevenueCat with the Supabase Auth UUID and implements manually accepted Test Store presentation/purchase/restore behavior. The confirmed Apple monthly and annual products are imported into the existing RevenueCat project and associated with `pro`; this repository did not remotely inspect or modify them, and neither Apple approval nor production purchase acceptance is claimed. AI Access R1 validates Supabase bearer tokens in the Web server routes, verifies authoritative `pro` Customer Info through RevenueCat REST API v1, and atomically enforces authenticated Free lifetime and Pro feature/day quotas before one `gpt-5.6-luna` dispatch. Mobile AI Access R2 reads the server status and calls Plan my day and toothbrush verification with the current Supabase access token; it never sends `user_id`, `isPro`, or local RevenueCat authorization. Manual planning and Skip remain available through quota/service/provider denials. Make Smaller AI, Web Billing, supported-region gating, server abuse/rate limits, webhooks/read models, production Offering/paywall verification, deployment, and device acceptance remain unresolved TASK-10/TASK-11/TASK-12 work.
+The old Mobile R1/R2 SDK/identity/paywall/restore implementation and AI Access R2 status/plan/toothbrush clients are removed. No Mobile Make Smaller AI implementation existed. Manual planning remains. Shared Web/server AI and the server deletion worker are unchanged; RevenueCat cleanup is retained only server-side for deletion compatibility, and shared Web entitlement checks remain outside this Mobile change.
 
 ### M4 — Store release
 
-Status: **final local iOS 1.0 preparation continues; no EAS production build or submission**. The Expo display name is `First Move: Start Small`, bundle ID remains `app.firstmove.mobile`, version/build is `1.0.0` / `1`, and R1 is iPhone-only with `ios.supportsTablet: false`. The final icon configuration is integrated. EAS has a store-distribution `production` build profile plus matching submit profile while `development-simulator` is unchanged. Mobile Settings supplies the authenticated deletion path and Guest/authenticated legal links; production disposable-account deletion acceptance and verified Resend Custom SMTP are complete. Public `/privacy`, `/terms`, and `/support` routes are implemented locally at `firstmovestartsmall.com`. The R1 storefronts are US, CA, CH, AU, NZ, and SG; the UK and Japan are deferred. Deployment, production paywall acceptance, screenshots/metadata, signed EAS build, TestFlight, App Review, and public release remain open. See `docs/IOS_APPSTORE_R1_RELEASE.md`.
+Current local candidate: paid-upfront iOS 1.0.0 / build 2, `First Move: Start Small`, bundle `app.firstmove.mobile`, scheme `firstmove`, `supportsTablet: false`, and the approved icon unchanged. The live public legal pages still describe the old release until separately authorized deployment. The corrected sources are now prepared locally; approved privacy classifications and remaining publication checks are recorded in the internal checklist. No EAS production build/submission is run here. Store metadata, manual USD $2.99 pricing, privacy answers, true-device acceptance, and a later authorized Build 2 delivery remain gates. See [current release checklist](IOS_APPSTORE_R1_RELEASE.md).
 
-## 15. Monetization decisions already made
+## 15. Historical monetization decisions already made
 
 - Core non-AI productivity, manual planning, local templates, tasks, habits, timers, Mini Journal, core cat content, and cross-device sync remain Free.
 - Authenticated Free users receive five lifetime introductory paid AI actions shared across AI features.
@@ -281,7 +285,7 @@ Status: **final local iOS 1.0 preparation continues; no EAS production build or 
 - Client entitlement/counter claims are never authoritative. AI Access R1 checks bearer identity, RevenueCat entitlement, and feature quota on the server before dispatch; Mobile renders the returned remaining values and never resets or computes quota locally. Production region allowlisting and server abuse/rate limits remain required later controls.
 - OpenAI-backed features launch only in supported international markets; Mainland China is excluded initially.
 
-## 16. Monetization decisions still open
+## 16. Historical monetization decisions — not iOS 1.0 work
 
 - Storefront localizations, any introductory/trial offers, and final production paywall copy; the first iOS product IDs, billing periods, US prices, and launch markets are decided.
 - Exact advanced-history and premium-cat feature scope.

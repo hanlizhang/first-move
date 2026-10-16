@@ -10,7 +10,7 @@
       "icon": "./assets/images/icon.png",
       "supportsTablet": false,
       "bundleIdentifier": "app.firstmove.mobile",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -24,14 +24,6 @@
         "expo-secure-store",
         {
           "configureAndroidBackup": true
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow First Move: Start Small to select one toothbrush photo for a check. The app does not keep the photo.",
-          "cameraPermission": "Allow First Move: Start Small to take one toothbrush photo for a check. The app does not keep the photo.",
-          "microphonePermission": false
         }
       ],
       "expo-status-bar"

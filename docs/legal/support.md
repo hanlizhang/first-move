@@ -2,68 +2,45 @@
 
 Need help with **First Move: Start Small**?
 
-Contact:
+Contact **support@firstmovestartsmall.com** for app help, privacy requests, data-rights requests, or complaints.
 
-**support@firstmovestartsmall.com**
+**Operator:** Hanli Zhang, individual operator based in Switzerland
 
-This address is used for customer support, privacy requests, data-rights requests, and complaints.
+## Purchase and download
 
-**Operator:** Hanli Zhang, individual operator based in Switzerland  
-**Postal address:** Available upon request by contacting support@firstmovestartsmall.com.
+First Move iOS 1.0 is a one-time paid App Store download, priced at **US$2.99 upfront** in the United States. Apple shows local prices in other storefronts. All included functionality is available after purchase and installation without another payment. There are no In-App Purchases, subscriptions, or paid upgrades in the app.
 
-## Sign-in and account help
+Apple handles App Store payments, downloads, and refund requests. For a billing or refund issue, use Apple's support and refund processes. For a problem using First Move after installation, contact us at the email above.
 
-First Move accounts use email magic links.
+## Guest Mode and Start fresh
 
-If a sign-in link does not arrive, check that you entered the correct email address and check your spam or junk folder before requesting another link.
+Guest Mode works without an account and keeps your workspace on your device. Signing in does not automatically upload or merge Guest data.
 
-Never send your sign-in magic link, authentication token, password, or other account credential to support.
+When setting up a new cloud account, **Start fresh** creates an empty account workspace and preserves your separate Guest progress. It is not a reset of an existing cloud account. Importing Guest progress is not available in iOS 1.0.
 
-Guest Mode does not require an account and its data remains local to the device or browser.
+Uninstalling the app, clearing local storage, or losing access to your device can result in loss of Guest data. Do not uninstall the app as a troubleshooting step if it contains Guest data or unsynced changes you want to keep.
 
-Signing in does not automatically upload or merge Guest data.
+## Sign-in and cloud sync
 
-## First Move Pro and Apple subscriptions
+Accounts use passwordless email magic links. If a link does not arrive, check the address you entered and your spam or junk folder before requesting another link. Open the link on the device where you want to sign in.
 
-First Move Pro subscriptions are purchased and billed through Apple's App Store.
+For sync problems, confirm that you are signed into the intended account, check your internet connection, and review the sync status in Settings. Pending changes may need time and a working connection to reach the cloud. Signing out does not delete your cloud account or all account-scoped local data.
 
-The app includes **Restore purchases** for eligible purchases and a **Manage Apple subscription** control for managing an active Apple subscription.
-
-Deleting First Move or deleting your First Move account does not cancel an Apple subscription. Cancel or manage the subscription separately through Apple if you want future renewal to stop.
-
-For billing or refund issues controlled by the App Store, Apple's billing and refund processes apply.
+Never send support a magic link, authentication token, password, or other credential. Describe the issue, the app version, and what you were doing when it occurred. Avoid including private Journal text or other information that is not needed to resolve the problem.
 
 ## Delete your First Move account
 
-Authenticated iOS users can initiate deletion directly in:
+In the iOS app, go to **Settings → Delete account**.
 
-**First Move → Settings → Delete account**
+The process requires a fresh email magic link and the exact confirmation phrase **DELETE MY ACCOUNT**. After the request is accepted, further account cloud writes are blocked, the current app clears that account's local workspace and pending sync state, and the server deletion workflow begins. Guest data remains separate.
 
-For security, the process requires a fresh email magic link and the exact confirmation phrase **DELETE MY ACCOUNT**.
-
-After a deletion request is accepted, further account cloud writes are blocked and First Move begins its server-side deletion workflow.
-
-Deleting a First Move account does not cancel Apple billing.
+Provider cleanup and retries may take additional time. Account deletion is separate from an App Store refund request.
 
 If you cannot access the in-app deletion flow, contact support@firstmovestartsmall.com for assistance.
 
 ## Privacy and data-rights requests
 
-For questions about your personal information, or to request access, correction, deletion, or another privacy right available under applicable law, contact:
-
-**support@firstmovestartsmall.com**
-
-First Move may need to verify your identity before acting on a request.
-
-## AI and toothbrush-photo questions
-
-Live AI is optional and requires an authenticated account.
-
-First Move does not automatically send Journal content to AI.
-
-A toothbrush photo is uploaded only after you expressly request verification. First Move does not save the photo in your account database, Journal, cloud sync, or Supabase Storage.
-
-For privacy or processing questions relating to these features, contact support@firstmovestartsmall.com.
+Contact **support@firstmovestartsmall.com** to ask about your personal information or request access, correction, deletion, or another right available under applicable law. First Move may need to verify your identity before acting on your request.
 
 ## Legal documents
 

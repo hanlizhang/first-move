@@ -16,7 +16,7 @@ test("the first public iOS identity keeps the established application identifier
   assert.equal(app.expo.ios.bundleIdentifier, "app.firstmove.mobile");
   assert.equal(app.expo.android.package, "app.firstmove.mobile");
   assert.equal(app.expo.version, "1.0.0");
-  assert.equal(app.expo.ios.buildNumber, "1");
+  assert.equal(app.expo.ios.buildNumber, "2");
 });
 
 test("the first public iOS release is iPhone-only", () => {

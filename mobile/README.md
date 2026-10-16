@@ -1,10 +1,10 @@
-# First Move Mobile — M0 through AI Access R2
+# First Move Mobile — paid-upfront iOS 1.0
 
-This is an independent Expo React Native project. The Next.js Web app remains at the repository root and is not a package workspace dependency.
+Independent Expo React Native project; the Next.js Web app remains at the repository root. iOS 1.0 is purchased once for USD $2.99 before download. All included app functionality is available after installation. No IAP, subscription, Pro tier, receipt validation, RevenueCat client, or user-facing AI is included.
 
-Current status: M0 through M1E, RevenueCat R1/R2, and Mobile AI Access R2 are implemented in the working tree. The deep-link callback, magic-link sign-in, authenticated session persistence across restart, canonical initialized-workspace hydration, and RevenueCat Test Store purchase/restore are manually verified on iOS Simulator. The first public iOS release identity and local EAS production/submit profiles are prepared, but no production build has been run or submitted. Mobile Plan my day, server-derived AI allowance presentation, transient toothbrush verification, Apple sandbox purchases, and the remaining App Review paths still require true-device acceptance. See `../docs/IOS_APPSTORE_R1_RELEASE.md` for the release audit and blockers.
+The current UI, First Moves, Today, Focus, Cat interactions/economy, Guest Mode, optional secure account/cloud sync, Start fresh, deletion, and legal links are preserved. Plan my day retains its existing manual editor and Focus handoff. The photo-verification flow is removed with its native image modules. Historical Morning records remain compatible with the unchanged Web/cloud contracts. No Hearts/Bond or new product features are added.
 
-The M0–M1D sections below preserve each increment’s historical boundary. M1E supersedes their authenticated read-only/no-business-write constraints for the current app.
+See [release gates](../docs/IOS_APPSTORE_R1_RELEASE.md) and [removal/legal/privacy audit](../docs/release/ios-1.0-paid-upfront-audit.md). The M0–M1E sections below preserve historical increment boundaries; they do not limit later implemented sync/Start fresh/Cat functionality.
 
 ## M0 boundary
 
@@ -73,28 +73,13 @@ At their original milestone boundaries, M1A/M1B/M1C/M1D did not implement authen
 - Mobile reuses `sync_cloud_workspace_v1` with schema-v8 state, unchanged canonical daily-plan passthrough, empty economic-command arrays, current IANA timezone, and stable relationship UUIDs. Retained local consumed Intent history is filtered from the wire so the RPC receives only the active pending Intent view.
 - Task/Habit completion and Session rewards remain server-derived. Mobile never calculates or submits a point balance, reward ledger mutation, purchase, or inventory consumption command.
 - Running timers remain device-owned and non-realtime; only persisted Session state converges through this sync runtime.
-- Deliberately still local or unavailable at the M1E boundary: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, notifications, and background services. The later RevenueCat R1/R2 work is described below.
+- Deliberately still local or unavailable at the M1E boundary: Guest data, offline templates, transient form state, empty-account setup/import, Today/history presentation, post-session choices, Cat/Morning Start, AI, notifications, and background services. Those later capabilities are governed by the paid iOS release boundary below.
 
-## RevenueCat R1 identity and R2 purchase/restore
+## iOS 1.0 release boundary
 
-- The core `react-native-purchases` SDK is configured only after a valid authenticated Supabase session exists, using that session's UUID as the RevenueCat App User ID. Email is never passed as identity.
-- Guest Mode never configures RevenueCat. Sign-out and Guest transitions clear the app-visible subscription state without calling RevenueCat `logOut()`, so no anonymous RevenueCat identity is created by that transition.
-- A later account switch uses `logIn(newSupabaseUuid)`. Identity changes immediately mask the previous account's state while the new CustomerInfo loads.
-- The provider exposes only `unavailable`, `loading`, `free`, `pro`, or `error`. `pro` requires the exact active entitlement identifier `pro`; CustomerInfo refresh and update-listener paths feed the same mapping.
-- Settings shows the current Free/Pro plan for authenticated users. Free users can open the published dashboard paywall for the current/default Offering; the app does not hardcode products or prices.
-- Authenticated users can restore through `Purchases.restorePurchases()`. Purchase, dismissal, and restore paths refresh CustomerInfo, and only the exact active `pro` entitlement changes Settings to Pro.
-- Guest and signed-out users cannot launch purchase or restore calls. They receive sign-in guidance while Guest Mode and every current core feature remain fully functional.
-- Purchase/restore state is presentation-only. It does not authorize AI or other paid behavior, gate any current feature, add production products, or change Guest/core feature behavior.
-- The confirmed first iOS products are the single-seat monthly `app.firstmove.mobile.pro.monthly` ($4.99 US) and annual `app.firstmove.mobile.pro.annual` ($39.99 US). Both are associated with the existing `pro` entitlement. This repository records that supplied state but does not modify or re-verify Apple or RevenueCat remotely.
+Mobile makes no AI status, quota, planning, verification, or provider requests. It contains no RevenueCat SDK, identity, entitlement check, paywall, restore action, or public SDK key dependency. The only direct First Move HTTP endpoint is `/api/account-deletion/initiate`; Auth and cloud workspace operations use the existing Supabase client.
 
-## Mobile AI Access R2
-
-- Settings renders only server-returned authenticated Free lifetime or Pro daily Plan my day/toothbrush allowance. Local RevenueCat state remains purchase presentation only and never authorizes AI.
-- Every status, plan, and verification request resolves the current Supabase session and sends its access token as a bearer. Mobile never sends `user_id`, `isPro`, a RevenueCat secret, a Supabase secret/service-role key, or an OpenAI key.
-- Today starts with optional Morning Start and then Plan my day. Guest never calls live AI and can skip directly to the complete manual planner; authenticated quota, service, and provider denials keep manual planning and Skip available.
-- Plan my day accepts at most 2,000 characters, supports AI or manual structured one/three/three review, and saves through Guest-local or the existing account canonical sync path. Confirmation safely replaces the pending First Move and makes it immediately available in Focus.
-- Toothbrush capture/selection prepares a temporary JPEG with maximum dimension 768 pixels and uploads it once as the existing raw-image API body. Temporary picker/manipulator files are explicitly deleted and image bytes never enter AsyncStorage, Supabase, object storage, logs, or the sync queue.
-- A passing authenticated verification saves the existing Morning check; the server derives its reward in the canonical response. Skip saves no check, reward, attempt, or AI request. Make Smaller AI is not implemented.
+The server deletion worker retains its legacy RevenueCat DELETE step for compatibility with historical/test customers and existing database completion constraints. Keep its private server configuration intact. Web/server AI and entitlement paths remain outside this Mobile release change.
 
 ## Local setup
 
@@ -105,50 +90,24 @@ npm install
 npm start
 ```
 
-Fill `.env.local` with the Supabase values and the RevenueCat keys needed by the build:
+Fill `.env.local` with the public Supabase values and the deletion-server origin:
 
 ```text
 EXPO_PUBLIC_SUPABASE_URL=...
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
-EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL=https://your-first-move-server.example
-EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=...
-EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=...
-EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=...
+EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL=https://firstmovestartsmall.com
 ```
 
-`EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` is the public absolute origin of the deployed First Move Web/server application and contains no secret; there is intentionally no localhost or production-hostname fallback. Development builds use only `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`. Release builds ignore the Test Store key and require the platform-specific iOS or Android key. Missing RevenueCat configuration leaves subscriptions unavailable without blocking Guest Mode or core features. These public SDK keys may be embedded in the app; never place a RevenueCat secret key, service-role key, database password, JWT signing secret, or OpenAI key in the mobile project.
+`EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` is the public origin used for account deletion. It is not needed for Guest startup and contains no secret. No RevenueCat public variable is read. Keep all server secrets out of the Mobile environment.
 
 ## First public iOS release
 
-- Public display name: `First Move: Start Small`.
-- Bundle identifier: `app.firstmove.mobile` (unchanged).
-- App Store version/build: `1.0.0` / `1`, controlled locally in `app.json`.
-- `development-simulator` remains unchanged. `production` creates a non-simulator store build using the named EAS `production` environment, and the matching submit profile intentionally contains no Apple account identifiers or credentials.
-- The EAS `production` environment must provide `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL`, and the production Apple public SDK key as `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`. Do not set `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` for the production profile.
-- `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `REVENUECAT_SECRET_API_KEY` remain protected variables on the First Move server deployment and must never be added to EAS Mobile environments.
-
-After every App Review blocker in `../docs/IOS_APPSTORE_R1_RELEASE.md` is resolved and the EAS production variables are verified, build and upload in two reviewable steps:
-
-```sh
-cd mobile
-npx eas-cli@latest build --platform ios --profile production
-npx eas-cli@latest submit --platform ios --profile production --id BUILD_ID_FROM_THE_PREVIOUS_COMMAND
-```
-
-The upload reaches App Store Connect/TestFlight; it does not submit the app for public App Review. For this first subscription release, select the processed build and both subscriptions on the app version before submitting that version for review.
-
-Press `i` for iOS or `a` for Android from the Expo CLI. Guest navigation can be inspected in Expo Go. The custom `firstmove://` callback needs a native development build:
-
-```sh
-cd mobile
-npx expo run:ios
-# or
-npx expo run:android
-```
-
-The generated `/mobile/ios` and `/mobile/android` directories are ignored. The simulator development profile does not require committing generated native projects.
-
-`react-native-purchases`, `react-native-purchases-ui`, `expo-image-picker` 57.0.18, `expo-image-manipulator` 57.0.18, and direct `expo-file-system` 57.0.7 contain native code. After adding or upgrading them, rebuild the Expo development client with `npx expo run:ios`, `npx expo run:android`, or the corresponding approved EAS development build before runtime acceptance; an existing client binary cannot load the new modules.
+- Name `First Move: Start Small`; bundle `app.firstmove.mobile`; scheme `firstmove`; version/build `1.0.0` / `2`; `ios.supportsTablet=false`; approved icon unchanged.
+- The named EAS production environment needs only the public Supabase URL/key and `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL` for account deletion. No environment is changed by this task.
+- `development-simulator` remains unchanged. Production profile remains a non-simulator store build with local versioning.
+- The generated `/mobile/ios` and `/mobile/android` directories are ignored and are absent from this checkout. A later authorized native build must generate from the updated dependency/config state; an old installed binary still contains its old native modules.
+- Do not run production EAS build/submit or change App Store Connect during release simplification. The owner sets USD $2.99 paid-app pricing manually, removes obsolete subscription associations from the version, and approves the later Build 2 upload.
+- Review and separately publish the legal sources revised locally on 2026-10-14 before App Review. See the [current privacy/publication checklist](../docs/release/app-store-privacy-checklist.md) for data classifications and remaining provider checks. The earlier removal audit remains a historical record; no deployment is performed here.
 
 ## Supabase redirect URL
 
@@ -280,27 +239,11 @@ Prerequisite: use a Web-initialized Supabase account and the same account on Mob
 - [ ] Continue as Guest, make Task/Habit/Intent/Session changes offline, and confirm no cloud status/read/write RPC is issued and no account namespace changes.
 - [ ] Sign into an uninitialized account and confirm **Cloud writes disabled**, no editing controls, and no initialization/import/write RPC. **Check cloud setup again** may only re-run the existing status boundary.
 
-## Manual RevenueCat R2 acceptance
+## Paid-upfront Build 2 manual acceptance
 
-Prerequisite: rebuild the development client after installing `react-native-purchases-ui`, then use an authenticated Supabase account with the RevenueCat Test Store key.
-
-- [x] Authenticated Free Settings shows **Current plan: Free**, **Upgrade to Pro**, and **Restore purchases** without app-authored prices.
-- [x] **Upgrade to Pro** opens the published **First Move Pro** paywall from the current/default Offering and exposes its configured Monthly and Annual Test Store packages.
-- [x] Complete a Test Store purchase and confirm Settings immediately changes to **Current plan: Pro** without an upgrade CTA.
-- [x] Dismiss or cancel the paywall and confirm Settings remains Free with neutral feedback and all features usable.
-- [x] Restore an active `pro` purchase and confirm Settings changes to Pro; restore with no active entitlement remains Free with neutral feedback.
-- [ ] Continue as Guest and confirm purchase/restore controls are unavailable, sign-in guidance is shown, and Guest Mode remains fully functional.
-- [ ] Switch from Pro account A to Free account B and confirm A’s Pro state never appears for B, including while B loads.
-- [ ] Simulate purchase/restore failures and confirm Settings remains usable with the last verified plan and no feature gate.
-
-## Manual Mobile AI Access R2 acceptance
-
-Prerequisites: set `EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL`, rebuild the development client for the new Expo image modules, and use Web-initialized Free and Pro accounts against the intended server environment.
-
-- [ ] In Guest Mode, confirm AI status performs no request, Morning Start offers no camera/library action, and Skip opens the usable manual Plan my day review without a check or reward.
-- [ ] With authenticated Free, confirm Settings and Today show the same server-derived remaining lifetime actions as Web; consume one action on either client and confirm foreground/refresh reflects it on the other.
-- [ ] With Pro, consume today’s Web daily-plan allowance, foreground Mobile, and confirm Mobile shows zero and keeps manual planning available; repeat for the three toothbrush actions.
-- [ ] Confirm the plan brain dump limit, one/three/three editable review, title/first-step/direction/duration edits, and Confirm plan. Replace an older pending First Move and verify Focus immediately shows only the reviewed replacement.
-- [ ] Capture and select toothbrush images on true-device iOS and Android. Confirm permission copy, maximum-768-pixel preview, one request per tap, pass/fail behavior, temporary-file cleanup, and no image bytes in device persistence, cloud rows/storage, or logs.
-- [ ] On toothbrush success, confirm the canonical Morning check and one existing Morning reward appear. On failure, quota denial, unavailable service, or provider failure, confirm Skip stays available and creates no reward/check/AI request.
-- [ ] Switch account A to B while status is loading and confirm A’s allowance never appears for B. Expire the session and confirm the existing auth lifecycle handles the missing/expired token without exposing server details.
+- [ ] Install the newly generated native iPhone build; verify no purchase/paywall/restore/AI status or photo-permission flow exists in Guest or account mode.
+- [ ] Exercise Guest restart/offline, First Moves, manual daily planning, Task/Habit changes, Focus, Journal, and existing Cat interactions/rewards.
+- [ ] Verify secure email callback, optional account restart, account switching, sync/offline queue/retry, and Start fresh without Guest data loss.
+- [ ] With an explicitly disposable account, confirm fresh-auth deletion and eventual worker completion, preserving Guest/other-account data. Do not disable legacy worker credentials.
+- [ ] Open Privacy, Terms, and Support in Guest and account Settings and confirm the separately approved published text describes this paid release.
+- [ ] Confirm listing/screenshots, App Privacy answers, USD $2.99 upfront pricing, and no attached IAP/subscriptions before the separately authorized submission.
