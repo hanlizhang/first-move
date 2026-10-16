@@ -107,7 +107,7 @@ EXPO_PUBLIC_FIRST_MOVE_API_BASE_URL=https://firstmovestartsmall.com
 - `development-simulator` remains unchanged. Production profile remains a non-simulator store build with local versioning.
 - The generated `/mobile/ios` and `/mobile/android` directories are ignored and are absent from this checkout. A later authorized native build must generate from the updated dependency/config state; an old installed binary still contains its old native modules.
 - Do not run production EAS build/submit or change App Store Connect during release simplification. The owner sets USD $2.99 paid-app pricing manually, removes obsolete subscription associations from the version, and approves the later Build 2 upload.
-- Separately review and publish the legal corrections listed in the audit before App Review. No approved public legal text is changed here.
+- Review and separately publish the legal sources revised locally on 2026-10-14 before App Review. See the [current privacy/publication checklist](../docs/release/app-store-privacy-checklist.md) for data classifications and remaining provider checks. The earlier removal audit remains a historical record; no deployment is performed here.
 
 ## Supabase redirect URL
 

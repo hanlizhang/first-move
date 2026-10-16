@@ -1,6 +1,6 @@
 # First public iOS release — paid-upfront 1.0 / Build 2
 
-Updated 2026-10-13 after the release-simplification decision. This is a local release candidate, not a signed archive or an Apple acceptance claim. The previous subscription release plan is superseded.
+Updated 2026-10-14 after the local legal/publication audit. Build 1 was submitted/reviewed under the prior subscription model; its historical records remain intact. Build 2 is the new paid-upfront candidate, not a signed archive or an Apple acceptance claim.
 
 ## Product and identity
 
@@ -42,19 +42,19 @@ No RevenueCat public key is read by the app. Guest startup requires none of thes
 
 ## Legal and App Privacy gates
 
-The public Privacy, Terms, and Support pages were fetched successfully on 2026-10-13 and match the checked-in approved sources after HTML formatting. They still promise iOS AI, Pro subscriptions, recurring prices, restore/management controls, and photo processing. They require a separately approved update and publication before this release is presented to App Review. Their source text is intentionally unchanged.
+The Privacy, Terms, and Support sources were updated locally on 2026-10-14 for the paid-upfront release. They describe Guest Mode, optional accounts/sync, current deletion, the upfront Apple transaction, and actual functional data. Public AI/subscription claims for iOS are removed. Privacy separately scopes retained Web AI/access processing and legacy RevenueCat deletion; neither is an iOS purchase or AI feature. The live pages have not been updated by this task.
 
-See the [exact passage audit](release/ios-1.0-paid-upfront-audit.md) and [internal privacy checklist](release/app-store-privacy-checklist.md). Code supports Photos or Videos = No, real-money Purchase History = No, and Tracking = No. Account/cloud content and functional activity still require disclosure. Legacy deletion-provider processing must still be described accurately. App Store Connect itself is untouched.
+See the [historical passage audit](release/ios-1.0-paid-upfront-audit.md) and [current internal privacy checklist](release/app-store-privacy-checklist.md). Final owner-approved classifications (2026-10-16): Email Address, User ID, Device ID, Other User Content, Health, Product Interaction and Other Diagnostic Data = Yes, linked, App Functionality. Gameplay Content, Customer Support, Purchase History, Photos or Videos, Crash Data, Performance Data and Tracking = No. The account-scoped installation UUID supports sync origin/deduplication; structured Mood/Energy remains in Build 2. Cat/reward/earned-point spending is Product Interaction. Other Diagnostic Data covers provider request/error/observability logs, without asserting exact retained fields or client crash/performance telemetry. App Store Connect is untouched.
 
 ## Local verification
 
-Commands run from `/mobile`: focused release/retained-feature tests, full `npm test`, `npm run type-check`, `npm run lint`, `npm run validate:release-config`, and local iOS production export. The config validator checks Expo public config and iOS introspection with dotenv disabled, including identity, build 2, iPhone-only, and no photo/purchase permissions or plugins. Native autolinking and the exported dependency graph are also audited.
+Implementation validation on 2026-10-13 ran from `/mobile`: focused release/retained-feature tests, full `npm test`, `npm run type-check`, `npm run lint`, `npm run validate:release-config`, and local iOS production export. The config validator checks Expo public config and iOS introspection with dotenv disabled, including identity, build 2, iPhone-only, and no photo/purchase permissions or plugins. Native autolinking and the exported dependency graph are also audited.
 
-Exact counts, export evidence, limitations, and changed files are recorded in the [release audit](release/ios-1.0-paid-upfront-audit.md). No Web/shared implementation or legal source was changed, so a full Web suite/Next build is not required for this Mobile change; server deletion regression tests are still run because that boundary is retained.
+The 2026-10-13 implementation counts, export evidence and limitations remain in the [release audit](release/ios-1.0-paid-upfront-audit.md). The separate 2026-10-14 documentation validation is recorded in the [privacy checklist](release/app-store-privacy-checklist.md#validation-for-this-local-documentation-update). No Mobile/shared implementation or deletion backend is changed by that update.
 
 ## Remaining steps before Build 2 delivery
 
-1. Review/approve the separate legal corrections and publish the three accurate public pages. This task does not rewrite approved legal copy or deploy Vercel.
+1. Review the locally revised legal sources and privacy classifications, reconfirm documented production-provider facts, and separately authorize publication of all three pages. Local revision does not mean deployment has occurred.
 2. Manually configure paid-app USD $2.99 pricing in App Store Connect; detach the old subscription products from this version's submission and reconcile any existing test/legacy product state. No IAP replaces them. Update screenshots, description, review notes, privacy answers, support URLs, and review access for the shipping features.
 3. Read-only verify the existing production public Supabase/server-origin settings and the functioning deletion worker/retry configuration. Do not disable the server's legacy RevenueCat cleanup credential. No EAS RevenueCat key is required.
 4. Separately authorize a fresh native production Build 2 from the final reviewed source. This checkout has no generated native directories; generate them from the reduced dependency/config state. Local Expo export does not produce a signed `.ipa`.

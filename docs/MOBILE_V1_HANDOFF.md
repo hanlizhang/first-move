@@ -1,10 +1,10 @@
 # First Move Mobile v1 handoff
 
-Current release status (2026-10-13): iOS 1.0 is the USD $2.99 one-time paid App Store app. Mobile no longer includes AI, Pro, subscriptions, RevenueCat SDKs, paywall/restore controls, or photo capture. Manual planning and all existing non-AI functionality remain. The local identity is version 1.0.0 / build 2, iPhone-only, with unchanged name, bundle ID, scheme, domain, and approved icon.
+Current release status (2026-10-16): iOS 1.0 is the USD $2.99 one-time paid App Store app. Mobile no longer includes AI, Pro, subscriptions, RevenueCat SDKs, paywall/restore controls, or photo capture. Manual planning and all existing non-AI functionality remain. The local identity is version 1.0.0 / build 2, iPhone-only, with unchanged name, bundle ID, scheme, domain, and approved icon.
 
 The older milestone descriptions below are historical where they discuss Mobile AI, RevenueCat, subscriptions, or photo modules; they do not authorize reintroducing those features. See [current release gates](IOS_APPSTORE_R1_RELEASE.md) and [detailed removal/legal audit](release/ios-1.0-paid-upfront-audit.md). Web/server implementations and frozen cloud contracts remain unchanged. Server-side RevenueCat DELETE cleanup remains required by account-deletion constraints; preserve its private credential and worker. Mobile never identifies to RevenueCat or retrieves entitlement/purchase data.
 
-Guest startup, optional secure account/sync, Start fresh, exact-confirmation deletion/quarantine, and all three legal links remain. Account deletion's old billing warning/manage link and client SDK cleanup have been removed. Historical Morning check metadata still hydrates/syncs; the app offers no new photo check or substitute reward. No Hearts/Bond changes or new features are included. Public legal text needs separate approval and publication; no remote actions are performed here.
+Guest startup, optional secure account/sync, Start fresh, exact-confirmation deletion/quarantine, and all three legal links remain. Account deletion's old billing warning/manage link and client SDK cleanup have been removed. Historical Morning check metadata still hydrates/syncs; the app offers no new photo check or substitute reward. No Hearts/Bond changes or new features are included. Public legal sources were revised locally on 2026-10-14; publication remains pending. See the [current privacy/publication audit](release/app-store-privacy-checklist.md) for sync-device, Cat/reward, mood/energy and provider-log classifications. No remote actions are performed here.
 
 Status vocabulary used here:
 
@@ -271,7 +271,7 @@ The old Mobile R1/R2 SDK/identity/paywall/restore implementation and AI Access R
 
 ### M4 — Store release
 
-Current local candidate: paid-upfront iOS 1.0.0 / build 2, `First Move: Start Small`, bundle `app.firstmove.mobile`, scheme `firstmove`, `supportsTablet: false`, and the approved icon unchanged. The public legal pages are live but still describe the old release and need a separate approved correction. No EAS production build/submission is run here. Store metadata, manual USD $2.99 pricing, privacy answers, true-device acceptance, and a later authorized Build 2 delivery remain gates. See [current release checklist](IOS_APPSTORE_R1_RELEASE.md).
+Current local candidate: paid-upfront iOS 1.0.0 / build 2, `First Move: Start Small`, bundle `app.firstmove.mobile`, scheme `firstmove`, `supportsTablet: false`, and the approved icon unchanged. The live public legal pages still describe the old release until separately authorized deployment. The corrected sources are now prepared locally; approved privacy classifications and remaining publication checks are recorded in the internal checklist. No EAS production build/submission is run here. Store metadata, manual USD $2.99 pricing, privacy answers, true-device acceptance, and a later authorized Build 2 delivery remain gates. See [current release checklist](IOS_APPSTORE_R1_RELEASE.md).
 
 ## 15. Historical monetization decisions already made
 

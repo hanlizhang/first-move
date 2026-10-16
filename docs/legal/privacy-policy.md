@@ -1,275 +1,142 @@
 # Privacy Policy — First Move: Start Small
 
-**Effective date: September 28, 2026**
+**Effective date: October 14, 2026**
 
 First Move: Start Small (“First Move”) is operated by **Hanli Zhang**, an individual operator based in Switzerland.
 
-**Privacy and support contact:** support@firstmovestartsmall.com  
-**Postal address:** Available upon request by contacting support@firstmovestartsmall.com.
+**Privacy and support contact:** support@firstmovestartsmall.com
 
-This Privacy Policy explains how First Move handles personal information when you use the First Move iOS app, website, account features, cloud synchronization, subscriptions, and optional AI features.
+This Policy explains how First Move handles personal information in the iOS app, on the website, and through optional accounts and cloud synchronization.
+
+The iOS 1.0 app is a one-time paid App Store download. It has no In-App Purchases, subscriptions, or user-facing AI features. It does not capture or upload your photos. The separate Web app has different optional features, described in section 6.
 
 ## 1. Guest Mode
 
-You can use First Move in **Guest Mode without creating an account**.
+You can use the iOS app in **Guest Mode without creating an account**. Your Guest workspace stays in local storage on your device and is not uploaded to First Move's cloud service.
 
-Guest Mode is local-only. Data you create in Guest Mode stays in local storage on the device or browser you use and is not automatically uploaded to a First Move account or cloud workspace.
+Guest data can include tasks, habits, First Moves, daily plans, Focus sessions, Journal entries, points, rewards, and Cat progress and inventory.
 
-Guest data may include tasks, habits, First Moves, daily plans, Focus sessions and history, Journal content, rewards, and cat progress.
+Signing in does not automatically upload or merge Guest data. A new account can choose **Start fresh** to create an empty cloud workspace while preserving the separate Guest workspace on that device.
 
-Signing in does not automatically upload, merge, or replace your Guest data. A newly authenticated mobile account can choose **Start fresh** without sending Guest data to the cloud.
-
-Local data may be lost if you uninstall the app, clear browser or device storage, reset the device, or otherwise remove local application data. Device or system backups may operate independently of First Move.
+Local data may be lost if you uninstall the app, clear local storage, reset your device, or lose access to it. Device and system backups operate independently of First Move. Opening website links or contacting support involves the separate website or support processing described below.
 
 ## 2. Accounts and authentication
 
-If you choose to create an account, First Move uses **Supabase Auth** for email-based authentication.
+Accounts are optional. First Move uses **Supabase Auth** for passwordless email magic-link authentication.
 
-For an authenticated account, First Move processes information such as:
+For an account, First Move processes your email address, account identifier, authentication and session information, time-zone settings, and operational information needed to secure and manage access.
 
-- your email address;
-- your Supabase account identifier;
-- authentication and session information;
-- account preferences such as your configured time zone; and
-- information necessary to secure and operate the account.
+**Resend** delivers authentication emails through First Move's SMTP configuration. It processes the recipient address, authentication email, and related delivery information for that purpose.
 
-Production authentication email is delivered through **Resend** using First Move's verified SMTP configuration. Resend therefore processes the recipient email address and the transactional authentication email and related delivery information as needed to send the message.
+The iOS app stores authentication sessions using platform-protected storage. Do not share magic links or authentication tokens with anyone, including support.
 
-Do not share authentication links, passwords, tokens, or other account credentials with anyone.
+## 3. Cloud content and activity
 
-## 3. Cloud-synced First Move data
+When you use an authenticated cloud workspace, supported account data is sent to First Move's Supabase-backed service and linked to your account. This includes:
 
-Authenticated users can choose to use First Move's cloud synchronization features.
+- task and habit text, schedules, and completion records;
+- First Moves, manual daily plans, and Focus session labels, durations, dates, and linked tasks or habits;
+- Journal and reflection text, including optional mood and energy ratings from 1 to 5;
+- activity history, points, reward records, active-day progress, and milestones;
+- Cat inventory, item spending and consumption records, and selected furniture; and
+- account settings and technical synchronization records.
 
-Depending on the features you use, supported account data may include:
+Cat items use earned virtual points, not money. Saved inventory and progress allow the app to restore your Cat and rewards across devices. Temporary Cat animation positions and individual play gestures are not uploaded as an interaction recording.
 
-- tasks and habits;
-- First Moves and daily plans;
-- Focus sessions and history;
-- Journal or reflection content;
-- completion and activity records;
-- rewards and point-related records;
-- cat progress, interactions, and inventory;
-- Morning Start or toothbrush-check completion records;
-- settings and time-zone information; and
-- technical synchronization state needed to keep the account consistent.
+Mood and energy ratings let you record and revisit your own reflections. They are not used for diagnosis, medical treatment, or mental-health assessment.
 
-This information is associated with your authenticated account and is stored through First Move's Supabase-backed cloud service.
+Your Journal is private account content. First Move does not automatically send Journal entries to AI, analytics, or notifications. Avoid entering information you do not want stored in your account.
 
-Your **Journal is private cloud content**. First Move does not automatically send Journal entries to its live AI features.
+Existing accounts may also contain records created through earlier versions or the Web app, such as Morning Start completion and reward records. These can continue to synchronize; they do not contain the original verification photo.
 
-You control the text that you enter into tasks, plans, Journal entries, and similar free-form fields. Because these fields are open-ended, you should avoid entering information that you do not want stored in your account.
+Removing content from the active view may mark it as deleted while retaining records needed for synchronization or activity and reward history. Full account deletion is described in section 10.
 
-## 4. Optional live AI
+## 4. Synchronization identifiers and operational information
 
-Live AI is optional. It is available only to authenticated users and runs only after you explicitly request an AI action.
+For each account used on an app installation, First Move generates and stores a random synchronization identifier. It is sent with account setup and synchronization requests and stored with your account to distinguish installations, associate sessions, and prevent duplicate processing. It is not a hardware serial number or advertising identifier.
 
-The iOS 1.0 live AI features are:
+First Move also processes request and mutation identifiers, dates, time zones, synchronization status, and account-deletion status and retry records to operate the service reliably.
 
-- **Plan my day**; and
-- **toothbrush verification**.
+Authentication, email, and hosting providers process and may retain technical connection, delivery, request, and error logs, which may include IP addresses, request times, response status, and error information, for service delivery, security, and troubleshooting. First Move does not include a separate advertising, behavioral analytics, or crash-reporting SDK in the iOS app, and does not upload client app-performance telemetry. Functional activity records are still collected when you synchronize an account.
 
-**Make Smaller AI is not part of iOS 1.0.**
+## 5. App Store purchase
 
-First Move uses the **OpenAI API** to process these explicit AI requests.
+Apple distributes the iOS app and handles its one-time upfront purchase. After purchase and installation, all included functionality is available without another payment.
 
-### Plan my day
+The iOS app does not read App Store receipts, collect App Store purchase history, or request payment-card information. Apple handles App Store transaction and refund requests under its own terms and privacy practices.
 
-When you choose to use Plan my day, First Move sends the brain-dump text that you explicitly submit to the OpenAI API so that a suggested plan can be generated.
+## 6. Separate Web features and legacy records
 
-First Move does not automatically include your Journal, complete task history, cat data, rewards, or unrelated cloud workspace information in the AI request.
+The Web app can offer optional day-planning and toothbrush-verification requests. These are not features of the iOS 1.0 app.
 
-You can review and edit the proposed plan before saving it.
+If you expressly submit a Web planning request, the submitted brain-dump text is sent to First Move's server. If you expressly request Web toothbrush verification, the selected image is sent to that server. When live processing is enabled, the submitted text or image is passed to **OpenAI** for that request. Selecting a photo alone does not upload it. Journal entries and unrelated workspace content are not automatically included.
 
-### Toothbrush verification
+Verification images are not saved in First Move's account database, Journal, synchronization queue, or file storage. Providers still process the request and may retain operational information under their own practices; this is not a promise of zero provider retention.
 
-When you choose the optional toothbrush verification feature, you can take or select a photo. Selecting or taking a photo by itself does not upload the image.
+For Web access checks, First Move's server can send the account identifier to **RevenueCat** and read existing entitlement information. Web AI authorization records can include the account and request identifiers, feature, a fingerprint of the submitted request, access decision, provider and model metadata, dates, time zone, region, and dispatch timestamps. These records support access limits, security, and duplicate-request prevention; they do not contain the original submitted text, image, or generated response.
 
-The image is processed only after you explicitly request verification.
+Separately, the account-deletion service sends an account identifier to RevenueCat to request removal of any legacy customer record, including records created during testing. It does this even if no matching customer exists. It checks the deletion response status without reading purchase history. The iOS app does not initialize RevenueCat, identify users to its SDK, or use it for purchases or feature access.
 
-First Move prepares a temporary image for the request and sends it through First Move's server to OpenAI for verification.
+## 7. Service providers and purposes
 
-First Move does **not** store the toothbrush image in:
+First Move uses:
 
-- your First Move cloud workspace;
-- the First Move account database;
-- your Journal;
-- Supabase Storage; or
-- the First Move synchronization queue.
+- **Supabase** for authentication, account data, and cloud synchronization;
+- **Resend** for transactional authentication email;
+- **Vercel** for website and server API hosting;
+- **Apple** for iOS distribution and the upfront App Store transaction; and
+- **OpenAI and RevenueCat** only for the separate Web or legacy processing described in section 6, not for iOS purchase or AI features.
 
-First Move's production Supabase Storage currently contains no First Move user-file buckets.
+First Move processes information to provide requested features, authenticate accounts, synchronize content and progress, prevent duplicate or unauthorized activity, secure and troubleshoot the service, respond to support and privacy requests, complete account deletion, and meet applicable legal obligations.
 
-Temporary application copies of a toothbrush image are removed through the app's image-clear and screen-exit handling. If you selected an existing photo from your photo library, First Move does not delete the original photo from your device.
+If you contact support, First Move receives your contact details and the message and other information you choose to provide. Include only what is needed to address your request.
 
-“Not stored by First Move” does not mean that no technical processing occurs outside First Move. OpenAI and infrastructure providers necessarily process data involved in delivering the requested AI operation and may apply their own service-side retention or operational practices. First Move does not represent that OpenAI or another provider has zero retention merely because First Move uses an API configuration requesting that the generated interaction not be stored as application content.
+First Move does not sell account or workspace data, operate an advertising network, or use this information for cross-context behavioral advertising. The iOS app does not use information for advertising tracking.
 
-## 5. AI usage records and limits
+Where applicable law requires a legal basis, processing may rely on performing the service or contract you request, consent where required, legitimate interests in securely operating and protecting the service where those interests are not overridden by your rights, or compliance with legal obligations.
 
-First Move maintains limited account-linked records needed to enforce AI allowances and prevent duplicate or unauthorized requests.
+## 8. International processing
 
-These records may include:
+First Move is operated from Switzerland and uses providers that operate across borders. Personal information may be processed outside Switzerland and the country where you live.
 
-- your First Move account identifier;
-- the AI feature used;
-- whether the request was authorized under introductory or Pro access;
-- a request identifier;
-- a cryptographic request fingerprint rather than the original submitted content;
-- the AI provider and model metadata;
-- local date and configured time zone;
-- server-region metadata; and
-- request authorization and dispatch timestamps.
+The production Supabase database is located in Stockholm, Sweden. Website, server, authentication email, and other provider processing may occur in other countries, including the United States. First Move does not promise that all processing remains in the database's region.
 
-These usage records do not contain the original Plan my day brain dump, toothbrush image, or generated AI response.
+Contact support@firstmovestartsmall.com for information about international processing arrangements.
 
-Free authenticated accounts receive **five lifetime introductory live AI requests**, shared across the live AI features available to that account.
+## 9. Retention
 
-For iOS 1.0, Pro includes:
+There is no single retention period for every category of information. Account and cloud records are kept as needed to provide the features you use and support synchronization, security, and account operations, subject to deletion requests and applicable law.
 
-- one Plan my day AI action per day; and
-- three toothbrush-verification attempts per day.
+Support correspondence, authentication and delivery records, historical Web access records, and limited deletion status and retry information may be retained as needed to resolve requests, prevent abuse, complete deletion, handle disputes, or meet legal obligations.
 
-An AI allowance is reserved before the provider request is dispatched. A provider failure occurring after that reservation may therefore consume the applicable allowance.
+Providers may retain information under their own service, security, legal, or backup requirements. First Move does not promise a provider retention period or deletion completion time it does not control.
 
-## 6. Subscriptions and purchases
+## 10. Account deletion
 
-First Move Pro is offered through Apple's App Store as an auto-renewing subscription.
+Authenticated iOS users can request full account deletion from **Settings → Delete account**. First Move requires fresh email magic-link authentication and the exact confirmation phrase **DELETE MY ACCOUNT**.
 
-Apple handles App Store payment processing. First Move does not receive your complete payment-card details from Apple.
+After the request is accepted:
 
-First Move uses **RevenueCat** to manage subscription entitlement and customer state. For an authenticated account, the First Move Supabase account UUID is used as the RevenueCat App User ID. First Move does not use your email address as the RevenueCat App User ID.
-
-RevenueCat may process information including the First Move account identifier, purchase or subscription history, product information, entitlement status, and technical information involved in operating subscription services.
-
-The U.S. launch prices are US$4.99 per month and US$39.99 per year. Apple displays localized prices in the other supported launch storefronts.
-
-Deleting your First Move account does **not** cancel an Apple subscription. Apple may continue billing an active subscription until you cancel it through your Apple Account.
-
-## 7. Service providers
-
-First Move uses third-party service providers for limited functions needed to operate the service:
-
-**Supabase** provides authentication and cloud database/synchronization infrastructure.
-
-**Resend** delivers transactional authentication email and processes recipient email addresses and related email content and delivery information for that purpose.
-
-**Vercel** hosts First Move's website and server-side API functions.
-
-**OpenAI** processes content submitted through optional, explicit live AI requests.
-
-**RevenueCat** manages App Store subscription entitlement and customer state.
-
-**Apple** distributes the iOS app, processes App Store purchases and subscriptions, provides device permission frameworks, and operates Apple subscription management.
-
-First Move uses these providers for the functions described in this Policy. First Move does not sell First Move account or workspace data, does not operate an advertising network, and does not use First Move data for cross-context behavioral advertising.
-
-First Move iOS 1.0 does not use personal information for advertising tracking.
-
-Providers may have their own independent obligations and processing practices. First Move does not make unsupported promises about a provider's retention periods, certifications, physical processing locations, or deletion completion times.
-
-## 8. Purposes of processing
-
-First Move processes personal information as necessary to:
-
-- create, authenticate, and secure accounts;
-- provide optional cloud synchronization;
-- save and display the content and progress you choose to store;
-- provide First Move functionality;
-- process optional AI requests that you initiate;
-- enforce Free and Pro AI allowances;
-- operate subscriptions and restore purchased entitlements;
-- prevent abuse, duplicate requests, or unauthorized access;
-- operate, secure, troubleshoot, and maintain the service;
-- process account deletion and privacy requests; and
-- comply with applicable legal obligations.
-
-Where applicable data-protection law requires a legal basis, processing may be based on performing the service you request or a contract with you, your consent where consent is required, First Move's legitimate interests in securely operating and protecting the service where those interests are not overridden by your rights, or compliance with legal obligations.
-
-## 9. International processing
-
-First Move is operated from Switzerland, but its infrastructure and service providers operate across borders.
-
-The production Supabase project's primary database region is **North EU (Stockholm, Sweden), AWS eu-north-1**.
-
-First Move's server-side Vercel Functions are configured in **iad1, United States (Washington, D.C./US East)**.
-
-OpenAI, RevenueCat, Resend, and Vercel are used under their standard commercial configurations. First Move has not configured custom data residency for these services and has not negotiated a custom data-residency or transfer arrangement with them.
-
-As a result, personal information may be processed outside Switzerland and outside the country where you live. Provider processing locations can depend on the provider's infrastructure and standard service arrangements.
-
-You may contact support@firstmovestartsmall.com for current information about First Move's international processing arrangements.
-
-## 10. Retention
-
-First Move does not apply one universal retention period to every category of information.
-
-Account and cloud data are retained while needed to provide the account and features you use, unless you delete particular content or request account deletion.
-
-AI usage records are retained as needed to operate account allowances, duplicate-request protection, security, and service integrity.
-
-Authentication, subscription, infrastructure, and transactional records may also be retained where necessary for service operation, security, legal compliance, dispute handling, or completion of a requested deletion process.
-
-Third-party providers may maintain information under their own applicable service, security, legal, backup, or retention requirements. First Move does not promise a provider retention period that First Move does not control.
-
-## 11. Account deletion
-
-Authenticated iOS users can initiate full account deletion from the **Delete account** control in First Move Settings.
-
-To protect against unauthorized deletion:
-
-1. First Move requires a fresh email magic-link authentication.
-2. The server accepts only recent interactive authentication.
-3. You must explicitly enter **DELETE MY ACCOUNT** before the request is accepted.
-
-Once the deletion request is accepted:
-
-- further owner-scoped cloud writes for the account are blocked;
-- First Move's trusted server deletion workflow begins;
-- associated First Move owner-scoped cloud records are deleted through the tested Supabase account cascade;
-- the Supabase Auth account is hard-deleted;
-- deletion of the associated RevenueCat customer record is requested;
+- further account cloud writes are blocked;
+- the server workflow requests removal of any legacy RevenueCat customer record, then deletes the Supabase Auth account and its associated owner-scoped cloud records;
 - temporary provider failures are retried; and
-- the current iOS app removes the deleted account's local workspace, cloud cache, pending synchronization state, and related account-scoped queues after the deletion request is accepted.
+- the current iOS app clears that account's local workspace, cloud cache, pending synchronization state, and related account queues, then signs out locally.
 
-Some deletion steps may require additional processing time. First Move does not represent that every third-party system physically completes deletion at the same instant.
+Guest data and other accounts' local data remain separate. Signing out alone is not account deletion. Deletion cannot automatically remove independent device backups or copies stored solely on another device outside First Move's control.
 
-Deleting your First Move account does not cancel an active Apple subscription. Use First Move's **Manage Apple subscription** control or Apple's subscription management to stop future renewal.
+Some steps take additional processing time. Limited operational records may remain to complete or retry deletion or meet legal requirements. Account deletion is separate from an App Store refund request, which is handled by Apple.
 
-Account deletion also cannot automatically remove copies that exist solely in independent device backups, system backups, or local data on another device outside First Move's control.
+## 11. Your rights and security
 
-Limited operational information may be retained where necessary to complete or retry the deletion process or where retention is legally required.
+Depending on applicable law, you may have rights to information, access, correction, deletion, portability, restriction, objection, or withdrawal of consent where processing relies on consent. Contact **support@firstmovestartsmall.com** to make a request. First Move may need to verify your identity. You may also have a right to complain to the relevant data-protection authority.
 
-## 12. Your privacy rights
+First Move uses authenticated account access, owner-scoped cloud controls, platform-protected session storage, and server-side deletion controls to protect information. No internet-connected system can be guaranteed completely secure.
 
-Depending on the law that applies to you, you may have rights to request information about personal data First Move processes about you, request access or a copy, request correction, request deletion, object to or restrict certain processing, request portability where applicable, or withdraw consent where processing depends on consent.
+## 12. Changes and contact
 
-You can delete an authenticated First Move account directly in the iOS app.
+First Move may update this Policy when the service, providers, or legal requirements change. The effective date will change, and additional notice will be given where applicable law requires it.
 
-For other privacy or data-rights requests, contact:
-
-**support@firstmovestartsmall.com**
-
-First Move may need to verify your identity before acting on a request.
-
-You may also have a right to complain to the relevant data-protection authority in your jurisdiction.
-
-## 13. Security
-
-First Move uses technical and organizational measures intended to protect account information and cloud data against unauthorized access, loss, alteration, or disclosure.
-
-For example, authentication credentials and server secrets are not embedded as private credentials in the public mobile application, account access is authenticated through Supabase, and account-deletion operations use authenticated server-side controls.
-
-No internet-connected system can be guaranteed to be completely secure.
-
-## 14. Changes to this Policy
-
-First Move may update this Privacy Policy when the service, providers, or legal requirements change.
-
-When the Policy is updated, the effective date at the top will be changed and additional notice will be provided where required by applicable law.
-
-## 15. Contact
-
-**Operator / data controller:** Hanli Zhang  
-**Operator type:** Individual operator  
-**Country:** Switzerland  
-**Email for privacy, support, data-rights requests, and complaints:** support@firstmovestartsmall.com  
-**Postal address:** Available upon request by contacting support@firstmovestartsmall.com.
+**Operator / data controller:** Hanli Zhang
+**Operator type:** Individual
+**Country:** Switzerland
+**Privacy, support, data-rights requests, and complaints:** support@firstmovestartsmall.com

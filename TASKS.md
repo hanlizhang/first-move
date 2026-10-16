@@ -14,7 +14,9 @@ This 2026-10-13 product decision supersedes every Mobile AI, RevenueCat, paywall
 - [x] Preserve app name, bundle ID, scheme, version, approved icon, iPhone-only configuration, and production domain; prepare local build number 2.
 - [x] Add release regression coverage; verification results are recorded in the [release audit](docs/release/ios-1.0-paid-upfront-audit.md).
 - [x] Identify obsolete published legal passages without editing approved legal sources; audit the internal privacy checklist.
-- [ ] Separately approve and publish corrected Privacy/Terms/Support text.
+- [x] Apply final owner-approved Build 2 privacy classifications on 2026-10-16 in the current checklist; retain structured Mood/Energy, classify Cat/reward spending as Product Interaction and provider observability as Other Diagnostic Data.
+- [x] Revise local Privacy/Terms/Support sources for paid-upfront Build 2; separately scope retained Web/legacy processing and re-audit Device ID, Cat/reward, structured mood/energy, diagnostics and providers in the [privacy checklist](docs/release/app-store-privacy-checklist.md).
+- [ ] Resolve the checklist’s owner/provider-review items and separately authorize publication of the revised legal pages. Local edits are not deployed.
 - [ ] Manually set USD $2.99 paid-app pricing in App Store Connect, remove the old subscription association from this submission, and reconcile listing/review information and privacy answers.
 - [ ] Complete true-device acceptance of the final native build: Guest, manual planner, Focus/Cat, secure auth restart/deep link, sync/offline/retry, Start fresh, account switching, deletion, links, and accessibility.
 - [ ] After separate authorization, build/upload Build 2 and validate that exact TestFlight build before submission. No production build or submission is performed in this task.

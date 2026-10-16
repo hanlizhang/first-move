@@ -1,5 +1,7 @@
 # iOS 1.0 paid-upfront release audit
 
+**Historical implementation audit — 2026-10-13.** The passages, line numbers, baseline and verification below record that task as performed; they are not current publication status. On 2026-10-14 the public legal sources were revised locally for Build 2. See the [current privacy/publication audit](app-store-privacy-checklist.md) and [release gates](../IOS_APPSTORE_R1_RELEASE.md). Final owner-approved privacy classifications were applied to the current checklist on 2026-10-16; the historical classification questions below are superseded by that checklist. No deployment was performed. Build 1 remains the submitted/reviewed predecessor; Build 2 is the paid-upfront candidate.
+
 ## Baseline and authorized scope
 
 Inspected 2026-10-13 before editing: branch `fix/focus-layout-regression`, HEAD `12cfe9d79e93010b74995cec063556d623492b61`, clean index and working tree. Preserve current UI work. The approved iPhone release costs USD $2.99 before download. No IAP, subscriptions, Pro tier, receipt gating, or user-facing AI. No Hearts/Bond work. No remote migration, deployment, environment change, EAS production build, Apple submission, commit, or push is authorized in this task.

@@ -8,7 +8,7 @@ Keep First Moves, Today, Focus, Cat, the current points/inventory/rewards and Ca
 
 This release overrides the older Free/Pro, AI, toothbrush, and subscription rollout requirements below **for Mobile only**. Web Sync v1 and Web/server features remain unchanged. Legacy server-side RevenueCat cleanup remains required by the existing account-deletion workflow; Mobile no longer identifies an account to RevenueCat. No deletion migration change is required. Hearts/Bond, companionship changes, and new features are excluded.
 
-Identity stays `First Move: Start Small`, `app.firstmove.mobile`, `firstmove`, version `1.0.0`, iPhone-only, with the current icon and `https://firstmovestartsmall.com`. Build 2 is prepared locally. Approved legal documents require a separate review/update; see [release audit](docs/release/ios-1.0-paid-upfront-audit.md). App Store pricing is configured manually outside this repository.
+Identity stays `First Move: Start Small`, `app.firstmove.mobile`, `firstmove`, version `1.0.0`, iPhone-only, with the current icon and `https://firstmovestartsmall.com`. Build 2 is prepared locally. Legal sources were revised locally on 2026-10-14; privacy classifications were approved on 2026-10-16; publication remains pending. See the [current privacy/publication checklist](docs/release/app-store-privacy-checklist.md) and [historical implementation audit](docs/release/ios-1.0-paid-upfront-audit.md). App Store pricing is configured manually outside this repository.
 
 ## Product premise
 
